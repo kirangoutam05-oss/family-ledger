@@ -1,0 +1,6 @@
+{
+  "name": "Family Ledger",
+  "description": "An Apple-designed family expense ledger tracking husband and wife finances with automatic UPI and SMS categorization, cross-device sync, shared savings goals, budget alerts, and intelligent context prompts for grey areas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
