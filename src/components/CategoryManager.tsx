@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, Pencil, X, Check, ShieldAlert, Tags } from 'lucide-react';
 import { LedgerState, Category, CATEGORY_ICON_OPTIONS } from '../types';
 import { formatCurrency, getCategoryIcon } from '../utils/helpers';
@@ -116,7 +117,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
         </div>
         <button
           onClick={openAddForm}
-          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs shrink-0"
+          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Category</span>
@@ -124,8 +125,8 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       </div>
 
       <div className="rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs divide-y divide-black/[0.04] dark:divide-white/[0.04] overflow-hidden">
-        {manageableCategories.map((cat) => (
-          <div key={cat.id}>
+        {manageableCategories.map((cat, index) => (
+          <div key={cat.id} className="animate-fade-slide-up" style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}>
             <div className="p-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div
@@ -162,33 +163,41 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
               </div>
             </div>
 
-            {deleteConfirmId === cat.id && (
-              <div className="px-4 pb-4">
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 space-y-2">
-                  <div className="flex items-start gap-2 text-red-700 dark:text-red-400 text-xs font-semibold">
-                    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>
-                      Delete "{cat.name}"? Any expenses currently in this category will move to Utilities & Rent.
-                    </span>
+            <AnimatePresence>
+              {deleteConfirmId === cat.id && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="px-4 pb-4 overflow-hidden"
+                >
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 space-y-2">
+                    <div className="flex items-start gap-2 text-red-700 dark:text-red-400 text-xs font-semibold">
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>
+                        Delete "{cat.name}"? Any expenses currently in this category will move to Utilities & Rent.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleConfirmDelete(cat.id)}
+                        disabled={isDeleting}
+                        className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold transition-transform active:scale-95"
+                      >
+                        {isDeleting ? 'Deleting...' : 'Yes, delete it'}
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="px-3 py-1.5 rounded-lg border border-black/10 dark:border-white/10 text-xs text-neutral-600 dark:text-neutral-300 transition-transform active:scale-95"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleConfirmDelete(cat.id)}
-                      disabled={isDeleting}
-                      className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold"
-                    >
-                      {isDeleting ? 'Deleting...' : 'Yes, delete it'}
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirmId(null)}
-                      className="px-3 py-1.5 rounded-lg border border-black/10 dark:border-white/10 text-xs text-neutral-600 dark:text-neutral-300"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ))}
 
@@ -201,9 +210,21 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       </div>
 
       {/* Add / Edit Category Modal */}
-      {formMode && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
-          <form
+      <AnimatePresence>
+        {formMode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={(e) => e.target === e.currentTarget && closeForm()}
+          >
+          <motion.form
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             onSubmit={handleSubmit}
             className="bg-white dark:bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xl space-y-4 max-h-[88vh] overflow-y-auto"
           >
@@ -292,14 +313,15 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-medium shadow-xs transition-colors flex items-center justify-center gap-1.5"
+              className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
             >
               <Check className="w-3.5 h-3.5" />
               <span>{isSubmitting ? 'Saving...' : formMode === 'edit' ? 'Save Changes' : 'Create Category'}</span>
             </button>
-          </form>
-        </div>
-      )}
+          </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

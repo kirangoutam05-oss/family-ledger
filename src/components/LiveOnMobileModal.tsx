@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import QRCode from 'qrcode';
 import {
   Smartphone,
@@ -49,8 +50,21 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-lg w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 relative">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+        className="bg-white dark:bg-neutral-900 rounded-3xl max-w-lg w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-2xl space-y-5 relative"
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -165,7 +179,7 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

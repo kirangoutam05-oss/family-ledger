@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import {
   X,
   Lock,
@@ -124,8 +125,21 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const currentCategory = categories.find((c) => c.id === (isOwner ? category : transaction.category)) || categories[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-lg w-full p-6 border border-black/[0.08] dark:border-white/[0.08] shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+        className="bg-white dark:bg-neutral-900 rounded-3xl max-w-lg w-full p-6 border border-black/[0.08] dark:border-white/[0.08] shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-black/[0.05] dark:border-white/[0.08]">
           <div className="flex items-center gap-2.5">
@@ -408,7 +422,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

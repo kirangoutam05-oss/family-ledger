@@ -95,17 +95,18 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
             </h3>
 
             <div className="space-y-2">
-              {greyAreaTransactions.map((tx) => {
+              {greyAreaTransactions.map((tx, index) => {
                 const isSelected = tx.id === activeTxId;
                 return (
                   <button
                     key={tx.id}
                     onClick={() => handleOpenResolve(tx)}
-                    className={`w-full p-4 rounded-2xl border text-left transition-all ${
+                    className={`animate-fade-slide-up w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.98] ${
                       isSelected
                         ? 'border-[#007AFF] bg-blue-50/20 dark:bg-blue-950/20 ring-1 ring-[#007AFF]'
                         : 'border-black/[0.04] dark:border-white/[0.06] bg-white dark:bg-neutral-900 hover:border-black/[0.1] dark:hover:border-white/[0.1]'
                     }`}
+                    style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-medium text-neutral-900 dark:text-white truncate min-w-0">
@@ -225,7 +226,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                     <button
                       onClick={handleConfirmResolve}
                       disabled={isSubmitting}
-                      className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+                      className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Save Context & Rebalance</span>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import {
   Bell,
   Users,
@@ -42,40 +43,59 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
   onLockLedger,
   onSwitchUser,
 }) => {
-  const spenderSwitcher = (
+  // A shared-layout pill slides between whichever button is active, instead of the
+  // background instantly swapping. Rendered twice (desktop row + mobile row), so
+  // each instance gets its own layoutId — they're separate DOM trees and shouldn't
+  // try to animate a single pill between breakpoints.
+  const renderSpenderSwitcher = (layoutScope: string) => (
     <div className="bg-black/[0.06] dark:bg-white/[0.08] p-1 rounded-xl flex items-center text-xs font-medium">
       <button
         onClick={() => onSelectSpender('shared')}
-        className={`flex-1 sm:flex-none justify-center px-3 py-1.5 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-          activeSpender === 'shared'
-            ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-            : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-        }`}
+        className="relative flex-1 sm:flex-none justify-center px-3 py-1.5 sm:py-1 rounded-lg flex items-center gap-1.5"
       >
-        <Users className="w-3.5 h-3.5 opacity-70" />
-        <span>Shared</span>
+        {activeSpender === 'shared' && (
+          <motion.div
+            layoutId={`spender-pill-${layoutScope}`}
+            className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-lg shadow-xs"
+            transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+          />
+        )}
+        <Users className={`relative w-3.5 h-3.5 ${activeSpender === 'shared' ? 'opacity-100' : 'opacity-70'}`} />
+        <span className={`relative ${activeSpender === 'shared' ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-600 dark:text-neutral-400'}`}>
+          Shared
+        </span>
       </button>
       <button
         onClick={() => onSelectSpender('husband')}
-        className={`flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-          activeSpender === 'husband'
-            ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-            : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-        }`}
+        className="relative flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg flex items-center gap-1.5"
       >
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-        <span className="truncate min-w-0">{husbandName}</span>
+        {activeSpender === 'husband' && (
+          <motion.div
+            layoutId={`spender-pill-${layoutScope}`}
+            className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-lg shadow-xs"
+            transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+          />
+        )}
+        <span className="relative w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+        <span className={`relative truncate min-w-0 ${activeSpender === 'husband' ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-600 dark:text-neutral-400'}`}>
+          {husbandName}
+        </span>
       </button>
       <button
         onClick={() => onSelectSpender('wife')}
-        className={`flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-          activeSpender === 'wife'
-            ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-            : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-        }`}
+        className="relative flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg flex items-center gap-1.5"
       >
-        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
-        <span className="truncate min-w-0">{wifeName}</span>
+        {activeSpender === 'wife' && (
+          <motion.div
+            layoutId={`spender-pill-${layoutScope}`}
+            className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-lg shadow-xs"
+            transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+          />
+        )}
+        <span className="relative w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+        <span className={`relative truncate min-w-0 ${activeSpender === 'wife' ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-600 dark:text-neutral-400'}`}>
+          {wifeName}
+        </span>
       </button>
     </div>
   );
@@ -114,14 +134,14 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
         </div>
 
         {/* Center: Apple Segmented Spender Switcher (desktop only, mobile gets its own row below) */}
-        <div className="hidden sm:flex shrink-0">{spenderSwitcher}</div>
+        <div className="hidden sm:flex shrink-0">{renderSpenderSwitcher('desktop')}</div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {onOpenLiveMobile && (
             <button
               onClick={onOpenLiveMobile}
-              className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-black/[0.05] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-neutral-800 dark:text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+              className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-black/[0.05] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-neutral-800 dark:text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 shadow-xs"
               title="Invite your partner to install this app"
             >
               <UserPlus className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#007AFF]" />
@@ -131,7 +151,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
 
           <button
             onClick={onOpenNotifications}
-            className="relative p-2 rounded-xl text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            className="relative p-2 rounded-xl text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-90"
             title="Budget Alerts & Notifications"
           >
             <Bell className="w-4 h-4" />
@@ -145,7 +165,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
               unlabeled dot here was confusing on a touch screen with no hover to reveal its title. */}
           <button
             onClick={onSwitchUser || onLockLedger}
-            className="hidden sm:flex px-2.5 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-800 text-xs font-semibold items-center gap-1.5 shadow-xs hover:border-[#007AFF] hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-all cursor-pointer"
+            className="hidden sm:flex px-2.5 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-800 text-xs font-semibold items-center gap-1.5 shadow-xs hover:border-[#007AFF] hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-all active:scale-95 cursor-pointer"
             title={`Signed in as ${authenticatedUser === 'husband' ? husbandName : wifeName} • Tap to switch identity on this device`}
           >
             <span
@@ -161,7 +181,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
 
           <button
             onClick={onOpenAddModal}
-            className="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors shadow-xs shrink-0"
+            className="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-all active:scale-90 shadow-xs shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Add</span>
@@ -170,7 +190,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
       </div>
 
       {/* Mobile-only second row: full-width spender switcher */}
-      <div className="sm:hidden px-3 pb-2.5">{spenderSwitcher}</div>
+      <div className="sm:hidden px-3 pb-2.5">{renderSpenderSwitcher('mobile')}</div>
     </header>
   );
 };

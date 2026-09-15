@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import {
   Transaction,
   SpenderId,
@@ -134,8 +135,18 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 
           <div className="my-2 space-y-2">
             <div className="w-full h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden flex">
-              <div className="h-full bg-blue-500" style={{ width: `${husbandSharePercent}%` }} />
-              <div className="h-full bg-purple-500" style={{ width: `${100 - husbandSharePercent}%` }} />
+              <motion.div
+                className="h-full bg-blue-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${husbandSharePercent}%` }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              />
+              <motion.div
+                className="h-full bg-purple-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${100 - husbandSharePercent}%` }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              />
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
@@ -209,11 +220,15 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             </p>
           ) : (
             <div className="space-y-3">
-              {categoryBarData.map(({ cat, spent }) => {
+              {categoryBarData.map(({ cat, spent }, index) => {
                 const widthPercent = Math.max((spent / maxCategorySpend) * 100, 3);
                 const shareOfTotal = totalDebits > 0 ? Math.round((spent / totalDebits) * 100) : 0;
                 return (
-                  <div key={cat.id} className="group">
+                  <div
+                    key={cat.id}
+                    className="group animate-fade-slide-up"
+                    style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
+                  >
                     <div className="flex items-center justify-between mb-1 gap-2">
                       <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 min-w-0">
                         <span
@@ -233,9 +248,12 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                       className="w-full h-2 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
                       title={`${cat.name}: ${formatCurrency(spent, currency)} (${shareOfTotal}% of total spend)`}
                     >
-                      <div
-                        className="h-full rounded-full transition-all group-hover:opacity-80"
-                        style={{ width: `${widthPercent}%`, backgroundColor: cat.color }}
+                      <motion.div
+                        className="h-full rounded-full group-hover:opacity-80 transition-opacity"
+                        style={{ backgroundColor: cat.color }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${widthPercent}%` }}
+                        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
                       />
                     </div>
                   </div>
@@ -273,7 +291,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {categories
             .filter((cat) => cat.id !== 'grey_area')
-            .map((cat) => {
+            .map((cat, index) => {
               const spent = categoryTotals[cat.id]?.total || 0;
               const budget = cat.budgetMonthly || 1;
               const percent = Math.min(Math.round((spent / budget) * 100), 100);
@@ -285,11 +303,12 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                   onClick={() =>
                     setSelectedCategoryFilter(isSelected ? 'all' : cat.id)
                   }
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`animate-fade-slide-up p-3 rounded-xl border text-left transition-all active:scale-[0.97] ${
                     isSelected
                       ? 'border-[#007AFF] bg-blue-50/40 dark:bg-blue-950/20'
                       : 'border-black/[0.04] dark:border-white/[0.06] bg-white dark:bg-neutral-900 hover:border-black/[0.1] dark:hover:border-white/[0.1]'
                   }`}
+                  style={{ animationDelay: `${Math.min(index * 40, 320)}ms` }}
                 >
                   <div className="flex items-center justify-between mb-2 gap-1.5">
                     <div className="flex items-center gap-2 min-w-0">
@@ -309,12 +328,12 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                   </div>
 
                   <div className="w-full h-1 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden mb-1.5">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${percent}%`,
-                        backgroundColor: spent > budget ? '#FF3B30' : cat.color,
-                      }}
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: spent > budget ? '#FF3B30' : cat.color }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percent}%` }}
+                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
                     />
                   </div>
 
@@ -361,7 +380,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               No transactions match your search.
             </div>
           ) : (
-            displayTransactions.map((tx) => {
+            displayTransactions.map((tx, index) => {
               const cat = categories.find((c) => c.id === tx.category) || categories[0];
               const isGrey = tx.status === 'grey_area';
               const isMine = tx.spender === authenticatedUser;
@@ -371,11 +390,12 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                 <div
                   key={tx.id}
                   onClick={() => onEditTransaction(tx)}
-                  className={`p-4 flex items-center justify-between gap-3 transition-colors cursor-pointer group ${
+                  className={`animate-fade-slide-up p-4 flex items-center justify-between gap-3 transition-colors cursor-pointer group ${
                     isGrey
                       ? 'bg-amber-50/40 dark:bg-amber-950/15'
                       : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.02]'
                   }`}
+                  style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     {/* Category icon avatar */}

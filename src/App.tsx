@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   LedgerState,
   SpenderId,
@@ -32,6 +33,21 @@ import {
 
 type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts';
 const SPENDER_ORDER: (SpenderId | 'shared')[] = ['shared', 'husband', 'wife'];
+
+// Bottom-nav tab switches (Overview/Grey Areas/Import SMS/Goals) get a plain fade.
+// Switching between Shared/Kiran/Mageswari — by swipe or tapping the segmented
+// control — gets a directional slide instead, since that's spatially meaningful.
+interface ContentTransition {
+  mode: 'fade' | 'slide';
+  direction: number;
+}
+const contentVariants = {
+  enter: ({ mode, direction }: ContentTransition) =>
+    mode === 'slide' ? { opacity: 0, x: direction > 0 ? 28 : -28 } : { opacity: 0 },
+  center: { opacity: 1, x: 0 },
+  exit: ({ mode, direction }: ContentTransition) =>
+    mode === 'slide' ? { opacity: 0, x: direction > 0 ? -28 : 28 } : { opacity: 0 },
+};
 
 const IDENTITY_STORAGE_KEY = 'family-ledger:identity';
 
@@ -82,8 +98,17 @@ export default function App() {
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-  // Swipe left/right on the main content to move between Shared / Kiran / Mageswari
+  // Bottom-nav tab switches fade; switching Shared/Kiran/Mageswari (swipe or tap)
+  // slides in the swiped/tapped direction instead.
   const touchStartX = React.useRef<number | null>(null);
+  const [slideDirection, setSlideDirection] = useState(1);
+  const [transitionMode, setTransitionMode] = useState<'fade' | 'slide'>('fade');
+
+  const handleTabChange = (tab: NavTab) => {
+    setTransitionMode('fade');
+    setActiveTab(tab);
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
@@ -95,10 +120,24 @@ export default function App() {
 
     const currentIndex = SPENDER_ORDER.indexOf(activeSpender);
     if (deltaX < 0 && currentIndex < SPENDER_ORDER.length - 1) {
+      setTransitionMode('slide');
+      setSlideDirection(1);
       setActiveSpender(SPENDER_ORDER[currentIndex + 1]);
     } else if (deltaX > 0 && currentIndex > 0) {
+      setTransitionMode('slide');
+      setSlideDirection(-1);
       setActiveSpender(SPENDER_ORDER[currentIndex - 1]);
     }
+  };
+
+  // Also used when tapping the segmented Shared/Husband/Wife switcher directly,
+  // so the slide direction stays consistent with tap position, not just swipes.
+  const handleSelectSpender = (spender: SpenderId | 'shared') => {
+    const fromIndex = SPENDER_ORDER.indexOf(activeSpender);
+    const toIndex = SPENDER_ORDER.indexOf(spender);
+    setTransitionMode('slide');
+    setSlideDirection(toIndex >= fromIndex ? 1 : -1);
+    setActiveSpender(spender);
   };
 
   const registerDevice = async (role: SpenderId) => {
@@ -453,7 +492,7 @@ export default function App() {
   // Direct jump to resolve grey area
   const handleOpenGreyAreaDirect = (txId: string) => {
     setFocusedGreyTxId(txId);
-    setActiveTab('grey_areas');
+    handleTabChange('grey_areas');
   };
 
   const unreadAlertsCount = ledger.alerts.filter((a) => !a.read).length;
@@ -488,11 +527,11 @@ export default function App() {
           familyName={ledger.familyName}
           activeSpender={activeSpender}
           authenticatedUser={authenticatedUser}
-          onSelectSpender={setActiveSpender}
+          onSelectSpender={handleSelectSpender}
           husbandName={ledger.husbandName}
           wifeName={ledger.wifeName}
           unreadAlertsCount={unreadAlertsCount}
-          onOpenNotifications={() => setActiveTab('budget_alerts')}
+          onOpenNotifications={() => handleTabChange('budget_alerts')}
           onOpenSyncModal={() => setShowSyncModal(true)}
           onOpenAddModal={() => setShowAddModal(true)}
           isSyncing={isSyncing}
@@ -504,65 +543,77 @@ export default function App() {
 
         {/* Main Body Content */}
         <main
-          className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28"
+          className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28 overflow-x-hidden"
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          {activeTab === 'dashboards' && (
-            <Dashboards
-              ledger={ledger}
-              activeSpender={activeSpender}
-              authenticatedUser={authenticatedUser}
-              onSelectSpender={setActiveSpender}
-              onResolveGreyArea={handleOpenGreyAreaDirect}
-              onEditTransaction={(tx) => setEditingTransaction(tx)}
-              onOpenCategoryManager={() => setShowCategoryManager(true)}
-            />
-          )}
+          <AnimatePresence mode="wait" custom={{ mode: transitionMode, direction: slideDirection }} initial={false}>
+            <motion.div
+              key={`${activeTab}-${activeSpender}`}
+              custom={{ mode: transitionMode, direction: slideDirection }}
+              variants={contentVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {activeTab === 'dashboards' && (
+                <Dashboards
+                  ledger={ledger}
+                  activeSpender={activeSpender}
+                  authenticatedUser={authenticatedUser}
+                  onSelectSpender={handleSelectSpender}
+                  onResolveGreyArea={handleOpenGreyAreaDirect}
+                  onEditTransaction={(tx) => setEditingTransaction(tx)}
+                  onOpenCategoryManager={() => setShowCategoryManager(true)}
+                />
+              )}
 
-          {activeTab === 'auto_parser' && (
-            <SmsUpiParser
-              ledger={ledger}
-              activeSpender={activeSpender}
-              onAddTransaction={handleAddTransaction}
-              onResolveGreyArea={handleOpenGreyAreaDirect}
-            />
-          )}
+              {activeTab === 'auto_parser' && (
+                <SmsUpiParser
+                  ledger={ledger}
+                  activeSpender={activeSpender}
+                  onAddTransaction={handleAddTransaction}
+                  onResolveGreyArea={handleOpenGreyAreaDirect}
+                />
+              )}
 
-          {activeTab === 'grey_areas' && (
-            <GreyAreaQueue
-              ledger={ledger}
-              authenticatedUser={authenticatedUser}
-              onResolve={handleResolveGreyArea}
-              focusedTransactionId={focusedGreyTxId}
-            />
-          )}
+              {activeTab === 'grey_areas' && (
+                <GreyAreaQueue
+                  ledger={ledger}
+                  authenticatedUser={authenticatedUser}
+                  onResolve={handleResolveGreyArea}
+                  focusedTransactionId={focusedGreyTxId}
+                />
+              )}
 
-          {activeTab === 'savings_goals' && (
-            <SavingsGoals
-              ledger={ledger}
-              onContribute={handleContributeGoal}
-              onAddGoal={handleAddGoal}
-              activeSpender={activeSpender}
-            />
-          )}
+              {activeTab === 'savings_goals' && (
+                <SavingsGoals
+                  ledger={ledger}
+                  onContribute={handleContributeGoal}
+                  onAddGoal={handleAddGoal}
+                  activeSpender={activeSpender}
+                />
+              )}
 
-          {activeTab === 'budget_alerts' && (
-            <BudgetAlerts
-              ledger={ledger}
-              onDismissAlert={handleDismissAlert}
-              onUpdateBudget={handleUpdateBudget}
-              onResolveGreyArea={handleOpenGreyAreaDirect}
-            />
-          )}
+              {activeTab === 'budget_alerts' && (
+                <BudgetAlerts
+                  ledger={ledger}
+                  onDismissAlert={handleDismissAlert}
+                  onUpdateBudget={handleUpdateBudget}
+                  onResolveGreyArea={handleOpenGreyAreaDirect}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         {/* Clean Apple iOS Tab Bar, with Import SMS raised as the highlighted center action */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-xl border-t border-black/[0.06] dark:border-white/[0.08] pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] px-4 transition-all">
           <div className="max-w-md mx-auto flex items-center justify-around">
             <button
-              onClick={() => setActiveTab('dashboards')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
+              onClick={() => handleTabChange('dashboards')}
+              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
                 activeTab === 'dashboards'
                   ? 'text-[#007AFF]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
@@ -573,8 +624,8 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setActiveTab('grey_areas')}
-              className={`relative flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
+              onClick={() => handleTabChange('grey_areas')}
+              className={`relative flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
                 activeTab === 'grey_areas'
                   ? 'text-[#007AFF]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
@@ -594,7 +645,7 @@ export default function App() {
             {/* Import SMS — elevated, highlighted center action */}
             <div className="flex-1 flex flex-col items-center">
               <button
-                onClick={() => setActiveTab('auto_parser')}
+                onClick={() => handleTabChange('auto_parser')}
                 className={`-mt-7 w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/30 ring-4 ring-white dark:ring-[#1C1C1E] transition-transform active:scale-95 ${
                   activeTab === 'auto_parser' ? 'scale-105' : ''
                 }`}
@@ -612,8 +663,8 @@ export default function App() {
             </div>
 
             <button
-              onClick={() => setActiveTab('savings_goals')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
+              onClick={() => handleTabChange('savings_goals')}
+              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
                 activeTab === 'savings_goals'
                   ? 'text-[#007AFF]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
@@ -626,75 +677,100 @@ export default function App() {
         </nav>
       </div>
 
-      {/* Cross-Device Cloud Sync Modal */}
-      <DeviceSyncModal
-        isOpen={showSyncModal}
-        onClose={() => setShowSyncModal(false)}
-        ledger={ledger}
-        onTriggerSync={fetchLedger}
-        isSyncing={isSyncing}
-        onResetHousehold={handleResetHousehold}
-        authenticatedUser={authenticatedUser}
-        onSwitchUser={() => {
-          setShowSyncModal(false);
-          handleSwitchUser();
-        }}
-      />
+      <AnimatePresence>
+        {/* Cross-Device Cloud Sync Modal */}
+        {showSyncModal && (
+          <DeviceSyncModal
+            key="sync-modal"
+            isOpen={showSyncModal}
+            onClose={() => setShowSyncModal(false)}
+            ledger={ledger}
+            onTriggerSync={fetchLedger}
+            isSyncing={isSyncing}
+            onResetHousehold={handleResetHousehold}
+            authenticatedUser={authenticatedUser}
+            onSwitchUser={() => {
+              setShowSyncModal(false);
+              handleSwitchUser();
+            }}
+          />
+        )}
 
-      {/* Manual Add Expense Modal */}
-      <AddTransactionModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        ledger={ledger}
-        onAddTransaction={handleAddTransaction}
-        authenticatedUser={authenticatedUser}
-      />
+        {/* Manual Add Expense Modal */}
+        {showAddModal && (
+          <AddTransactionModal
+            key="add-modal"
+            onClose={() => setShowAddModal(false)}
+            ledger={ledger}
+            onAddTransaction={handleAddTransaction}
+            authenticatedUser={authenticatedUser}
+          />
+        )}
 
-      {/* Edit / Inspect Transaction Modal with Ownership Security */}
-      {editingTransaction && (
-        <EditTransactionModal
-          isOpen={!!editingTransaction}
-          onClose={() => setEditingTransaction(null)}
-          transaction={editingTransaction}
-          authenticatedUser={authenticatedUser}
-          husbandName={ledger.husbandName}
-          wifeName={ledger.wifeName}
-          currency={ledger.currency}
-          categories={ledger.categories}
-          onSave={(transactionId, updates) =>
-            handleUpdateTransaction({ ...editingTransaction, id: transactionId, ...updates } as Transaction)
-          }
-          onDelete={handleDeleteTransaction}
-        />
-      )}
+        {/* Edit / Inspect Transaction Modal with Ownership Security */}
+        {editingTransaction && (
+          <EditTransactionModal
+            key="edit-modal"
+            isOpen={!!editingTransaction}
+            onClose={() => setEditingTransaction(null)}
+            transaction={editingTransaction}
+            authenticatedUser={authenticatedUser}
+            husbandName={ledger.husbandName}
+            wifeName={ledger.wifeName}
+            currency={ledger.currency}
+            categories={ledger.categories}
+            onSave={(transactionId, updates) =>
+              handleUpdateTransaction({ ...editingTransaction, id: transactionId, ...updates } as Transaction)
+            }
+            onDelete={handleDeleteTransaction}
+          />
+        )}
 
-      {/* Live On Mobile & QR Code Modal (invite your partner to install) */}
-      <LiveOnMobileModal
-        isOpen={showLiveMobileModal}
-        onClose={() => setShowLiveMobileModal(false)}
-      />
+        {/* Live On Mobile & QR Code Modal (invite your partner to install) */}
+        {showLiveMobileModal && (
+          <LiveOnMobileModal
+            key="live-mobile-modal"
+            isOpen={showLiveMobileModal}
+            onClose={() => setShowLiveMobileModal(false)}
+          />
+        )}
 
-      {/* Category Manager Modal */}
-      {showCategoryManager && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center">
-          <div className="bg-[#F2F2F7] dark:bg-[#1C1C1E] rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
-            <div className="flex items-center justify-end mb-1">
-              <button
-                onClick={() => setShowCategoryManager(false)}
-                className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <CategoryManager
-              ledger={ledger}
-              onAddCategory={handleAddCategory}
-              onUpdateCategory={handleUpdateCategory}
-              onDeleteCategory={handleDeleteCategory}
-            />
-          </div>
-        </div>
-      )}
+        {/* Category Manager Modal */}
+        {showCategoryManager && (
+          <motion.div
+            key="category-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center"
+            onClick={(e) => e.target === e.currentTarget && setShowCategoryManager(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+              className="bg-[#F2F2F7] dark:bg-[#1C1C1E] rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6"
+            >
+              <div className="flex items-center justify-end mb-1">
+                <button
+                  onClick={() => setShowCategoryManager(false)}
+                  className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <CategoryManager
+                ledger={ledger}
+                onAddCategory={handleAddCategory}
+                onUpdateCategory={handleUpdateCategory}
+                onDeleteCategory={handleDeleteCategory}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   SavingsGoal,
   SpenderId,
@@ -99,7 +100,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
         <button
           onClick={() => setShowNewGoalModal(true)}
-          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Goal</span>
@@ -108,7 +109,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
       {/* Goals Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {goals.map((goal) => {
+        {goals.map((goal, index) => {
           const percent = Math.min(
             Math.round((goal.currentAmount / goal.targetAmount) * 100),
             100
@@ -126,7 +127,8 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
           return (
             <div
               key={goal.id}
-              className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col justify-between space-y-4"
+              className="animate-fade-slide-up p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col justify-between space-y-4 transition-shadow hover:shadow-md"
+              style={{ animationDelay: `${Math.min(index * 60, 300)}ms` }}
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
@@ -173,27 +175,23 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
                   {/* Dual-color contributor progress bar */}
                   <div className="w-full h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden flex">
-                    <div
+                    <motion.div
                       title={`${husbandName}: ${formatCurrency(husbandTotal, currency)}`}
-                      className="h-full bg-blue-500 transition-all"
-                      style={{
-                        width: `${
-                          goal.targetAmount > 0
-                            ? (husbandTotal / goal.targetAmount) * 100
-                            : 0
-                        }%`,
+                      className="h-full bg-blue-500"
+                      initial={{ width: 0 }}
+                      animate={{
+                        width: `${goal.targetAmount > 0 ? (husbandTotal / goal.targetAmount) * 100 : 0}%`,
                       }}
+                      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                     />
-                    <div
+                    <motion.div
                       title={`${wifeName}: ${formatCurrency(wifeTotal, currency)}`}
-                      className="h-full bg-purple-500 transition-all"
-                      style={{
-                        width: `${
-                          goal.targetAmount > 0
-                            ? (wifeTotal / goal.targetAmount) * 100
-                            : 0
-                        }%`,
+                      className="h-full bg-purple-500"
+                      initial={{ width: 0 }}
+                      animate={{
+                        width: `${goal.targetAmount > 0 ? (wifeTotal / goal.targetAmount) * 100 : 0}%`,
                       }}
+                      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                     />
                   </div>
 
@@ -216,7 +214,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                   setActiveGoalId(goal.id);
                   setContributeAmount(0);
                 }}
-                className="w-full py-2 px-3 rounded-xl bg-black/[0.04] hover:bg-black/[0.07] dark:bg-white/[0.06] dark:hover:bg-white/[0.1] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2 px-3 rounded-xl bg-black/[0.04] hover:bg-black/[0.07] dark:bg-white/[0.06] dark:hover:bg-white/[0.1] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-all active:scale-95 flex items-center justify-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5 text-[#007AFF]" />
                 <span>Contribute</span>
@@ -227,9 +225,23 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
       </div>
 
       {/* Contribution Sheet */}
-      {selectedGoal && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xl space-y-4">
+      <AnimatePresence>
+        {selectedGoal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={(e) => e.target === e.currentTarget && setActiveGoalId(null)}
+          >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+            className="bg-white dark:bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xl space-y-4"
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
                 Contribute to {selectedGoal.title}
@@ -310,21 +322,34 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
               <button
                 onClick={handleContributeSubmit}
                 disabled={isSubmitting || contributeAmount <= 0}
-                className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Deposit {formatCurrency(contributeAmount, currency)}</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* New Goal Modal */}
-      {showNewGoalModal && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
-          <form
+      <AnimatePresence>
+        {showNewGoalModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={(e) => e.target === e.currentTarget && setShowNewGoalModal(false)}
+          >
+          <motion.form
             onSubmit={handleCreateGoal}
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             className="bg-white dark:bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xl space-y-4"
           >
             <div className="flex items-center justify-between">
@@ -395,7 +420,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                         key={color}
                         type="button"
                         onClick={() => setNewColor(color)}
-                        className={`w-6 h-6 rounded-full transition-transform ${
+                        className={`w-6 h-6 rounded-full transition-transform active:scale-90 ${
                           newColor === color ? 'scale-125 ring-2 ring-offset-2 ring-black/[0.2]' : ''
                         }`}
                         style={{ backgroundColor: color }}
@@ -407,14 +432,15 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium shadow-xs transition-colors"
+                className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98]"
               >
                 Create Goal
               </button>
             </div>
-          </form>
-        </div>
-      )}
+          </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { X, CheckCircle2 } from 'lucide-react';
 import { Transaction, SpenderId, CategoryId, LedgerState } from '../types';
 import { getCategoryIcon } from '../utils/helpers';
 
 interface AddTransactionModalProps {
-  isOpen: boolean;
   onClose: () => void;
   ledger: LedgerState;
   onAddTransaction: (transaction: Transaction) => Promise<void>;
@@ -12,7 +12,6 @@ interface AddTransactionModalProps {
 }
 
 export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
-  isOpen,
   onClose,
   ledger,
   onAddTransaction,
@@ -26,8 +25,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash'>('UPI');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,8 +57,21 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-md w-full p-6 border border-black/[0.08] dark:border-white/[0.08] shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+        className="bg-white dark:bg-neutral-900 rounded-3xl max-w-md w-full p-6 border border-black/[0.08] dark:border-white/[0.08] shadow-2xl space-y-4"
+      >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
             Log New Family Expense
@@ -195,13 +205,13 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           <button
             type="submit"
             disabled={isSubmitting || !amount}
-            className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5"
+            className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Add Transaction & Sync</span>
           </button>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import {
   Category,
   LedgerState,
@@ -84,7 +85,7 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
           </div>
         ) : (
           <div className="space-y-2">
-            {alerts.map((alert) => {
+            {alerts.map((alert, index) => {
               const isCritical = alert.type === 'critical';
               const isWarning = alert.type === 'warning';
               const isGrey = alert.type === 'grey_area';
@@ -92,7 +93,8 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
               return (
                 <div
                   key={alert.id}
-                  className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="animate-fade-slide-up p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
                 >
                   <div className="flex items-start gap-3">
                     <div
@@ -207,12 +209,12 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
 
                   <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
                     <div className="w-24 h-1.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] overflow-hidden hidden sm:block">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${percent}%`,
-                          backgroundColor: isOver ? '#FF3B30' : cat.color,
-                        }}
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ backgroundColor: isOver ? '#FF3B30' : cat.color }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${percent}%` }}
+                        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                       />
                     </div>
 
