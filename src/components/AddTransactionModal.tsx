@@ -70,7 +70,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-        className="bg-white dark:bg-neutral-900 rounded-3xl max-w-md w-full p-6 border border-black/[0.08] dark:border-white/[0.08] shadow-2xl space-y-4"
+        className="glass-sheet rounded-[28px] max-w-md w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4"
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-neutral-900 dark:text-white">

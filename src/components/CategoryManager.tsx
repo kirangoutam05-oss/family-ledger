@@ -226,7 +226,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             onSubmit={handleSubmit}
-            className="bg-white dark:bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xl space-y-4 max-h-[88vh] overflow-y-auto"
+            className="glass-sheet rounded-[24px] max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4 max-h-[88vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">

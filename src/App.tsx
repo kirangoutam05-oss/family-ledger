@@ -608,9 +608,10 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        {/* Clean Apple iOS Tab Bar, with Import SMS raised as the highlighted center action */}
-        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-xl border-t border-black/[0.06] dark:border-white/[0.08] pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] px-4 transition-all">
-          <div className="max-w-md mx-auto flex items-center justify-around">
+        {/* Floating Liquid-Glass tab bar — inset from the edges rather than flush,
+            so it reads as a distinct navigation layer hovering over content. */}
+        <nav className="fixed bottom-0 left-0 right-0 z-40 flex justify-center px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
+          <div className="glass-nav w-full max-w-md rounded-[28px] border border-black/[0.06] dark:border-white/[0.1] shadow-xl shadow-black/10 dark:shadow-black/40 pt-2 pb-2 px-4 flex items-center justify-around transition-all">
             <button
               onClick={() => handleTabChange('dashboards')}
               className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
@@ -751,8 +752,9 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 24 }}
               transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-              className="bg-[#F2F2F7] dark:bg-[#1C1C1E] rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6"
+              className="glass-sheet rounded-t-[28px] sm:rounded-[28px] w-full sm:max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6 border border-black/[0.06] dark:border-white/[0.1]"
             >
+              <div className="glass-grabber sm:hidden mb-3" />
               <div className="flex items-center justify-end mb-1">
                 <button
                   onClick={() => setShowCategoryManager(false)}

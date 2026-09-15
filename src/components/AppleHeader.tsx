@@ -101,7 +101,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
   );
 
   return (
-    <header className="sticky top-0 z-30 bg-[#F2F2F7]/90 dark:bg-[#1C1C1E]/90 backdrop-blur-xl border-b border-black/[0.05] dark:border-white/[0.08] transition-colors">
+    <header className="glass-nav sticky top-0 z-30 border-b border-black/[0.05] dark:border-white/[0.08] transition-colors">
       <div className="max-w-5xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Clean Brand & Sync State */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
