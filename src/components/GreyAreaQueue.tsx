@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   HelpCircle,
   CheckCircle2,
@@ -10,7 +10,7 @@ import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from
 interface GreyAreaQueueProps {
   ledger: LedgerState;
   authenticatedUser: SpenderId;
-  onResolve: (transactionId: string, category: CategoryId, note?: string) => Promise<void>;
+  onResolve: (transactionId: string, category: CategoryId, note?: string, title?: string) => Promise<void>;
   focusedTransactionId?: string | null;
 }
 
@@ -32,14 +32,24 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('bills');
   const [contextNote, setContextNote] = useState('');
+  const [editedTitle, setEditedTitle] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeTx = transactions.find((t) => t.id === activeTxId);
 
+  // Seeds the form fields whenever the active transaction changes — covers
+  // both an explicit row click and the transaction that's pre-selected on
+  // mount (via focusedTransactionId or the first item in the queue), which
+  // otherwise left the category/note/receiver fields at their empty defaults.
+  useEffect(() => {
+    if (!activeTx) return;
+    setSelectedCategory(activeTx.category !== 'grey_area' ? activeTx.category : 'bills');
+    setContextNote(activeTx.notes || '');
+    setEditedTitle(activeTx.title);
+  }, [activeTx?.id]);
+
   const handleOpenResolve = (tx: Transaction) => {
     setActiveTxId(tx.id);
-    setSelectedCategory(tx.category !== 'grey_area' ? tx.category : 'bills');
-    setContextNote(tx.notes || '');
   };
 
   const handleConfirmResolve = async () => {
@@ -47,7 +57,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onResolve(activeTx.id, selectedCategory, contextNote);
+      await onResolve(activeTx.id, selectedCategory, contextNote, editedTitle);
       const remaining = greyAreaTransactions.filter((t) => t.id !== activeTx.id);
       setActiveTxId(remaining[0]?.id || null);
     } catch (err) {
@@ -168,6 +178,22 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                   <p className="text-xs italic text-neutral-800 dark:text-neutral-200">
                     "{activeTx.contextQuestion || 'How should this transaction be categorized and split?'}"
                   </p>
+                </div>
+
+                {/* Receiver of Payment — the parsed payee name is often
+                    approximate (e.g. "UPI to Minhajul Karim"), so it's
+                    correctable right here alongside the category. */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300 block">
+                    Receiver of Payment
+                  </label>
+                  <input
+                    type="text"
+                    value={editedTitle}
+                    onChange={(e) => setEditedTitle(e.target.value)}
+                    placeholder="Who was this paid to?"
+                    className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                  />
                 </div>
 
                 {/* Category Picker */}

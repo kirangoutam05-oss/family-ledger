@@ -75,3 +75,13 @@
     background: rgba(255, 255, 255, 0.24);
   }
 }
+
+/* iOS Safari draws the native date/time picker's digits using its own
+   light-mode palette unless told otherwise, regardless of the input's own
+   dark background/text CSS — that's what made these unreadable ("a bug ...
+   on the phone"). This isn't visible in desktop Chrome, which honors the
+   input's own color, so it only ever shows up on an actual iPhone. */
+input[type="date"],
+input[type="time"] {
+  color-scheme: light dark;
+}

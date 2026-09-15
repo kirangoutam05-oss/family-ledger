@@ -34,6 +34,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   // trip — this is what the category picker/note below feed.
   const [inlineCategory, setInlineCategory] = useState<CategoryId>('bills');
   const [inlineNote, setInlineNote] = useState('');
+  const [inlineTitle, setInlineTitle] = useState('');
 
   const { categories, husbandName, wifeName, currency } = ledger;
 
@@ -68,6 +69,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
               : 'bills'
           );
           setInlineNote('');
+          setInlineTitle(data.transaction.title || '');
         }
       }
     } catch (err) {
@@ -87,7 +89,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
 
     const newTx: Transaction = {
       id: `tx-${Date.now()}`,
-      title: parsedPreview.title || 'UPI Transaction',
+      title: isGreyArea ? inlineTitle.trim() || parsedPreview.title || 'UPI Transaction' : parsedPreview.title || 'UPI Transaction',
       amount: parsedPreview.amount || 0,
       type: parsedPreview.type || 'debit',
       date: parsedPreview.date || new Date().toISOString(),
@@ -115,7 +117,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
 
     const newTx: Transaction = {
       id: `tx-${Date.now()}`,
-      title: parsedPreview.title || 'UPI Transaction',
+      title: inlineTitle.trim() || parsedPreview.title || 'UPI Transaction',
       amount: parsedPreview.amount || 0,
       type: parsedPreview.type || 'debit',
       date: parsedPreview.date || new Date().toISOString(),
@@ -247,7 +249,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
 
               <div>
                 <div className="text-sm font-semibold text-neutral-900 dark:text-white">
-                  {parsedPreview.title}
+                  {isGreyArea ? inlineTitle || parsedPreview.title : parsedPreview.title}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
                   <span>{getPaymentModeLabel(parsedPreview.paymentMode || 'UPI')}</span>
@@ -312,6 +314,19 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                   <span className="font-semibold">Context needed: </span>
                   <span>{parsedPreview.contextQuestion || 'This looks like an ambiguous transfer — pick the real category below.'}</span>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-amber-900 dark:text-amber-200 block">
+                  Receiver of Payment
+                </label>
+                <input
+                  type="text"
+                  value={inlineTitle}
+                  onChange={(e) => setInlineTitle(e.target.value)}
+                  placeholder="Who was this paid to?"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-amber-200 dark:border-amber-900/40 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                />
               </div>
 
               <div className="space-y-1.5">

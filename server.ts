@@ -501,7 +501,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
 // Resolve grey area context
 app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
   try {
-    const { transactionId, category, note } = req.body;
+    const { transactionId, category, note, title } = req.body;
     if (!transactionId || typeof transactionId !== 'string') {
       return res.status(400).json({ error: 'Valid transactionId is required' });
     }
@@ -513,6 +513,11 @@ app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
 
     if (category && getValidCategoryIds().includes(category)) {
       tx.category = category;
+    }
+
+    const cleanTitle = sanitizeString(title, 80);
+    if (cleanTitle) {
+      tx.title = cleanTitle;
     }
 
     tx.status = 'resolved';

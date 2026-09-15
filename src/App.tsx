@@ -27,13 +27,19 @@ import { WhoAreYouScreen } from './components/WhoAreYouScreen';
 import {
   LayoutDashboard,
   Sparkles,
-  HelpCircle,
   Target,
   UserCog,
-  X,
+  Tags,
 } from 'lucide-react';
 
-type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts' | 'account';
+type NavTab =
+  | 'dashboards'
+  | 'auto_parser'
+  | 'grey_areas'
+  | 'categories'
+  | 'savings_goals'
+  | 'budget_alerts'
+  | 'account';
 const SPENDER_ORDER: (SpenderId | 'shared')[] = ['shared', 'husband', 'wife'];
 
 // Bottom-nav tab switches (Overview/Grey Areas/Import SMS/Goals) get a plain fade.
@@ -96,7 +102,6 @@ export default function App() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showLiveMobileModal, setShowLiveMobileModal] = useState(false);
-  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
@@ -351,7 +356,12 @@ export default function App() {
   };
 
   // Resolve grey area context
-  const handleResolveGreyArea = async (transactionId: string, category: CategoryId, note?: string) => {
+  const handleResolveGreyArea = async (
+    transactionId: string,
+    category: CategoryId,
+    note?: string,
+    title?: string
+  ) => {
     setIsSyncing(true);
     try {
       const res = await fetch('/api/ledger/resolve-grey', {
@@ -361,6 +371,7 @@ export default function App() {
           transactionId,
           category,
           note,
+          title,
         }),
       });
       if (res.ok) {
@@ -375,6 +386,7 @@ export default function App() {
                 ...t,
                 status: 'resolved' as const,
                 category,
+                title: title?.trim() ? title.trim() : t.title,
                 notes: note ? (t.notes ? `${t.notes} • ${note}` : note) : t.notes,
               };
             }
@@ -524,7 +536,6 @@ export default function App() {
   };
 
   const unreadAlertsCount = ledger.alerts.filter((a) => !a.read).length;
-  const pendingGreyAreaCount = ledger.transactions.filter((t) => t.status === 'grey_area').length;
 
   // Wait for the initial fetch before deciding which screen to show, so a
   // returning user doesn't flash the setup screen while the real ledger loads.
@@ -593,7 +604,7 @@ export default function App() {
                   onSelectSpender={handleSelectSpender}
                   onResolveGreyArea={handleOpenGreyAreaDirect}
                   onEditTransaction={(tx) => setEditingTransaction(tx)}
-                  onOpenCategoryManager={() => setShowCategoryManager(true)}
+                  onOpenCategoryManager={() => handleTabChange('categories')}
                 />
               )}
 
@@ -611,6 +622,15 @@ export default function App() {
                   authenticatedUser={authenticatedUser}
                   onResolve={handleResolveGreyArea}
                   focusedTransactionId={focusedGreyTxId}
+                />
+              )}
+
+              {activeTab === 'categories' && (
+                <CategoryManager
+                  ledger={ledger}
+                  onAddCategory={handleAddCategory}
+                  onUpdateCategory={handleUpdateCategory}
+                  onDeleteCategory={handleDeleteCategory}
                 />
               )}
 
@@ -663,22 +683,15 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => handleTabChange('grey_areas')}
-              className={`relative flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
-                activeTab === 'grey_areas'
+              onClick={() => handleTabChange('categories')}
+              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
+                activeTab === 'categories'
                   ? 'text-[#007AFF]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
             >
-              <div className="relative">
-                <HelpCircle className="w-5 h-5" />
-                {pendingGreyAreaCount > 0 && (
-                  <span className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
-                    {pendingGreyAreaCount}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-medium tracking-tight">Grey Areas</span>
+              <Tags className="w-5 h-5" />
+              <span className="text-[10px] font-medium tracking-tight">Category</span>
             </button>
 
             {/* Import SMS — elevated, highlighted center action */}
@@ -786,42 +799,6 @@ export default function App() {
           />
         )}
 
-        {/* Category Manager Modal */}
-        {showCategoryManager && (
-          <motion.div
-            key="category-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center"
-            onClick={(e) => e.target === e.currentTarget && setShowCategoryManager(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 24 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-              className="glass-sheet rounded-t-[28px] sm:rounded-[28px] w-full sm:max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6 border border-black/[0.06] dark:border-white/[0.1]"
-            >
-              <div className="glass-grabber sm:hidden mb-3" />
-              <div className="flex items-center justify-end mb-1">
-                <button
-                  onClick={() => setShowCategoryManager(false)}
-                  className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <CategoryManager
-                ledger={ledger}
-                onAddCategory={handleAddCategory}
-                onUpdateCategory={handleUpdateCategory}
-                onDeleteCategory={handleDeleteCategory}
-              />
-            </motion.div>
-          </motion.div>
-        )}
       </AnimatePresence>
     </div>
   );
