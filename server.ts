@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { Pool } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { EMPTY_LEDGER_STATE } from './src/data/initialData';
@@ -74,14 +75,33 @@ function sanitizeString(str: unknown, maxLen = 150): string {
   return str.replace(/<[^>]*>?/gm, '').trim().slice(0, maxLen);
 }
 
-// File-backed state: survives a server restart (not just in-memory), loaded once at
-// boot and written after every mutation. A real database would still be needed for
-// durability across a redeploy on ephemeral hosting, but this is a real improvement
-// over pure in-memory state for a long-running process.
+// Persistent state. When DATABASE_URL is set (production), the ledger lives in a
+// single-row Postgres table and survives redeploys, not just restarts. Without it
+// (local dev), falls back to a JSON file on disk — convenient locally, but does not
+// survive a redeploy on ephemeral hosting.
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'ledger.json');
+const LEDGER_ROW_ID = 'default';
 
-function loadLedgerState(): LedgerState {
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    })
+  : null;
+
+async function ensureLedgerTable() {
+  if (!pool) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ledger_state (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+}
+
+function loadLedgerStateFromFile(): LedgerState {
   try {
     const raw = fs.readFileSync(DATA_FILE, 'utf-8');
     return JSON.parse(raw) as LedgerState;
@@ -90,16 +110,38 @@ function loadLedgerState(): LedgerState {
   }
 }
 
-function persistLedgerState() {
+async function initLedgerState(): Promise<LedgerState> {
+  if (!pool) return loadLedgerStateFromFile();
+
+  await ensureLedgerTable();
+  const result = await pool.query('SELECT data FROM ledger_state WHERE id = $1', [LEDGER_ROW_ID]);
+  if (result.rows.length > 0) {
+    return result.rows[0].data as LedgerState;
+  }
+
+  const initial = JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
+  await pool.query('INSERT INTO ledger_state (id, data) VALUES ($1, $2)', [LEDGER_ROW_ID, initial]);
+  return initial;
+}
+
+async function persistLedgerState() {
   try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(currentLedgerState, null, 2), 'utf-8');
+    if (pool) {
+      await pool.query(
+        'INSERT INTO ledger_state (id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = now()',
+        [LEDGER_ROW_ID, currentLedgerState]
+      );
+    } else {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(DATA_FILE, JSON.stringify(currentLedgerState, null, 2), 'utf-8');
+    }
   } catch (err) {
     console.error('Failed to persist ledger state:', err);
   }
 }
 
-let currentLedgerState: LedgerState = loadLedgerState();
+// Populated by initLedgerState() before the server starts listening (see startServer()).
+let currentLedgerState: LedgerState = JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
 
 // Lazy-initialized Gemini client
 let genAIClient: GoogleGenAI | null = null;
@@ -763,6 +805,9 @@ Determine:
 
 // Start server with Vite middleware in dev or static files in production
 async function startServer() {
+  currentLedgerState = await initLedgerState();
+  console.log(`Ledger storage: ${pool ? 'Postgres (persistent across deploys)' : 'local file (data/ledger.json)'}`);
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
