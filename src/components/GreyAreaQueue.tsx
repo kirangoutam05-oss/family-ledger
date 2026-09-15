@@ -5,7 +5,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { Transaction, CategoryId, LedgerState, SpenderId } from '../types';
-import { formatCurrency, formatDate, getCategoryIcon } from '../utils/helpers';
+import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
 interface GreyAreaQueueProps {
   ledger: LedgerState;
@@ -122,7 +122,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                       <span>•</span>
                       <span>{tx.spender === 'husband' ? husbandName : wifeName}</span>
                       <span>•</span>
-                      <span>{tx.paymentMode}</span>
+                      <span>{getPaymentModeLabel(tx.paymentMode)}</span>
                     </div>
 
                     {tx.greyAreaReason && (

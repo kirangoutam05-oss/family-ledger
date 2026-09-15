@@ -13,7 +13,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { Transaction, Category, SpenderId, CategoryId } from '../types';
-import { formatCurrency, formatDate, getCategoryIcon } from '../utils/helpers';
+import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
 interface EditTransactionModalProps {
   isOpen: boolean;
@@ -237,16 +237,16 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Category
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
                 {categories.map((cat) => (
                   <button
                     key={cat.id}
                     type="button"
                     onClick={() => setCategory(cat.id)}
-                    className={`p-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-all ${
+                    className={`p-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white transition-all ${
                       category === cat.id
-                        ? 'border-[#007AFF] bg-blue-50/50 dark:bg-blue-950/30 text-[#007AFF]'
-                        : 'border-black/[0.06] dark:border-white/[0.06] text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                        ? 'ring-2 ring-[#007AFF] border-blue-200 text-[#007AFF]'
+                        : 'border-neutral-200 text-neutral-900 hover:border-neutral-300'
                     }`}
                   >
                     <div
@@ -255,7 +255,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     >
                       {getCategoryIcon(cat.icon, 'w-2.5 h-2.5')}
                     </div>
-                    <span className="truncate min-w-0">{cat.name}</span>
+                    <span className="min-w-0 leading-tight text-left">{cat.name}</span>
                   </button>
                 ))}
               </div>
@@ -266,19 +266,19 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Payment Mode
               </label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {(['UPI', 'Card', 'NetBanking', 'Cash'] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => setPaymentMode(mode)}
-                    className={`py-2 rounded-xl border text-xs font-medium transition-all ${
+                    className={`py-2 rounded-xl border text-xs font-medium transition-all whitespace-nowrap ${
                       paymentMode === mode
                         ? 'border-[#007AFF] bg-blue-50/50 dark:bg-blue-950/30 text-[#007AFF] font-semibold'
                         : 'border-black/[0.06] dark:border-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
-                    {mode}
+                    {getPaymentModeLabel(mode)}
                   </button>
                 ))}
               </div>
@@ -365,7 +365,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     {transaction.title}
                   </h4>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                    {formatDate(transaction.date)} • {transaction.paymentMode}
+                    {formatDate(transaction.date)} • {getPaymentModeLabel(transaction.paymentMode)}
                   </p>
                 </div>
                 <div className="text-right">

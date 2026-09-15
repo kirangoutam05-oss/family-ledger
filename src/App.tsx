@@ -130,14 +130,21 @@ export default function App() {
     }
   };
 
-  // Also used when tapping the segmented Shared/Husband/Wife switcher directly,
-  // so the slide direction stays consistent with tap position, not just swipes.
+  // Also used when picking a spender from the header dropdown, so the slide
+  // direction stays consistent with tap position, not just swipes.
   const handleSelectSpender = (spender: SpenderId | 'shared') => {
     const fromIndex = SPENDER_ORDER.indexOf(activeSpender);
     const toIndex = SPENDER_ORDER.indexOf(spender);
     setTransitionMode('slide');
     setSlideDirection(toIndex >= fromIndex ? 1 : -1);
     setActiveSpender(spender);
+  };
+
+  // Tapping the household name in the header: jump straight back to the
+  // shared Overview tab, from wherever the user currently is.
+  const handleGoToOverview = () => {
+    handleSelectSpender('shared');
+    handleTabChange('dashboards');
   };
 
   const registerDevice = async (role: SpenderId) => {
@@ -528,6 +535,7 @@ export default function App() {
           activeSpender={activeSpender}
           authenticatedUser={authenticatedUser}
           onSelectSpender={handleSelectSpender}
+          onGoToOverview={handleGoToOverview}
           husbandName={ledger.husbandName}
           wifeName={ledger.wifeName}
           unreadAlertsCount={unreadAlertsCount}

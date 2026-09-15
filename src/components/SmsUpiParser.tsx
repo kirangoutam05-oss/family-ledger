@@ -6,7 +6,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Transaction, SpenderId, LedgerState } from '../types';
-import { formatCurrency, getCategoryIcon } from '../utils/helpers';
+import { formatCurrency, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
 interface SmsUpiParserProps {
   ledger: LedgerState;
@@ -214,7 +214,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                   {parsedPreview.title}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
-                  <span>{parsedPreview.paymentMode || 'UPI'}</span>
+                  <span>{getPaymentModeLabel(parsedPreview.paymentMode || 'UPI')}</span>
                   <span>•</span>
                   <span>{parsedPreview.bankName || 'Bank Alert'}</span>
                   <span>•</span>

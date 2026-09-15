@@ -132,3 +132,10 @@ export function getPaymentModeIcon(mode: string, className = 'w-4 h-4') {
       return React.createElement(Wallet, { className });
   }
 }
+
+// The stored value stays 'Card' (matches existing data, the SMS/Gemini parser
+// schema, and server-side validation) — only the label shown to people says
+// "Credit Card".
+export function getPaymentModeLabel(mode: string): string {
+  return mode === 'Card' ? 'Credit Card' : mode;
+}

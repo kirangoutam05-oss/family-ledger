@@ -1,8 +1,9 @@
-import React from 'react';
-import { motion } from 'motion/react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Bell,
-  Users,
+  ChevronDown,
+  Check,
   Plus,
   UserPlus,
   Lock,
@@ -14,6 +15,7 @@ interface AppleHeaderProps {
   activeSpender: SpenderId | 'shared';
   authenticatedUser: SpenderId;
   onSelectSpender: (spender: SpenderId | 'shared') => void;
+  onGoToOverview: () => void;
   husbandName: string;
   wifeName: string;
   unreadAlertsCount: number;
@@ -32,6 +34,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
   activeSpender,
   authenticatedUser,
   onSelectSpender,
+  onGoToOverview,
   husbandName,
   wifeName,
   unreadAlertsCount,
@@ -43,84 +46,90 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
   onLockLedger,
   onSwitchUser,
 }) => {
-  // A shared-layout pill slides between whichever button is active, instead of the
-  // background instantly swapping. Rendered twice (desktop row + mobile row), so
-  // each instance gets its own layoutId — they're separate DOM trees and shouldn't
-  // try to animate a single pill between breakpoints.
-  const renderSpenderSwitcher = (layoutScope: string) => (
-    <div className="bg-black/[0.06] dark:bg-white/[0.08] p-1 rounded-xl flex items-center text-xs font-medium">
-      <button
-        onClick={() => onSelectSpender('shared')}
-        className="relative flex-1 sm:flex-none justify-center px-3 py-1.5 sm:py-1 rounded-lg flex items-center gap-1.5"
-      >
-        {activeSpender === 'shared' && (
-          <motion.div
-            layoutId={`spender-pill-${layoutScope}`}
-            className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-lg shadow-xs"
-            transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-          />
-        )}
-        <Users className={`relative w-3.5 h-3.5 ${activeSpender === 'shared' ? 'opacity-100' : 'opacity-70'}`} />
-        <span className={`relative ${activeSpender === 'shared' ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-600 dark:text-neutral-400'}`}>
-          Shared
-        </span>
-      </button>
-      <button
-        onClick={() => onSelectSpender('husband')}
-        className="relative flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg flex items-center gap-1.5"
-      >
-        {activeSpender === 'husband' && (
-          <motion.div
-            layoutId={`spender-pill-${layoutScope}`}
-            className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-lg shadow-xs"
-            transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-          />
-        )}
-        <span className="relative w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-        <span className={`relative truncate min-w-0 ${activeSpender === 'husband' ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-600 dark:text-neutral-400'}`}>
-          {husbandName}
-        </span>
-      </button>
-      <button
-        onClick={() => onSelectSpender('wife')}
-        className="relative flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg flex items-center gap-1.5"
-      >
-        {activeSpender === 'wife' && (
-          <motion.div
-            layoutId={`spender-pill-${layoutScope}`}
-            className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-lg shadow-xs"
-            transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-          />
-        )}
-        <span className="relative w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
-        <span className={`relative truncate min-w-0 ${activeSpender === 'wife' ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-600 dark:text-neutral-400'}`}>
-          {wifeName}
-        </span>
-      </button>
-    </div>
-  );
+  const [spenderMenuOpen, setSpenderMenuOpen] = useState(false);
+
+  const activeDotClass =
+    activeSpender === 'husband' ? 'bg-blue-500' : activeSpender === 'wife' ? 'bg-purple-500' : 'bg-neutral-400';
 
   return (
     <header className="glass-nav sticky top-0 z-30 border-b border-black/[0.05] dark:border-white/[0.08] transition-colors">
-      <div className="max-w-5xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Left: Clean Brand & Sync State */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shadow-xs border border-black/[0.08] dark:border-white/[0.12] shrink-0 flex items-center justify-center">
-            <img
-              src="/app-logo.jpg?v=4"
-              alt="Couple Ledger Logo"
-              className="w-full h-full object-cover object-center block"
-              referrerPolicy="no-referrer"
-            />
-          </div>
+      <div className="max-w-5xl mx-auto px-3 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
+        {/* Left: Brand mark + household name/spender picker */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <img
+            src="/app-logo-mark.png?v=1"
+            alt=""
+            className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0 -my-1"
+            referrerPolicy="no-referrer"
+          />
           <div className="flex flex-col justify-center min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-              <h1 className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-white leading-tight truncate max-w-[100px] sm:max-w-none">
+            <div className="flex items-center gap-0.5 min-w-0">
+              <button
+                onClick={onGoToOverview}
+                className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-white leading-tight truncate max-w-[140px] sm:max-w-none text-left active:opacity-60 transition-opacity"
+                title="Go to Overview"
+              >
                 {familyName}
-              </h1>
+              </button>
+
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setSpenderMenuOpen((v) => !v)}
+                  className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-0.5 transition-colors active:scale-90"
+                  title="Switch between Kiran and Mageswari"
+                >
+                  <span className={`w-2 h-2 rounded-full ${activeDotClass}`} />
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                <AnimatePresence>
+                  {spenderMenuOpen && (
+                    <>
+                      <button
+                        className="fixed inset-0 z-40 cursor-default"
+                        onClick={() => setSpenderMenuOpen(false)}
+                        aria-label="Close menu"
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        className="glass-sheet absolute left-0 top-full mt-2 w-44 rounded-2xl border border-black/[0.06] dark:border-white/[0.1] p-1.5 z-50"
+                      >
+                        <button
+                          onClick={() => {
+                            onSelectSpender('husband');
+                            setSpenderMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                          <span className="truncate min-w-0 flex-1 text-left">{husbandName}</span>
+                          {activeSpender === 'husband' && <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                        </button>
+                        <button
+                          onClick={() => {
+                            onSelectSpender('wife');
+                            setSpenderMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                          <span className="truncate min-w-0 flex-1 text-left">{wifeName}</span>
+                          {activeSpender === 'wife' && <Check className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+
               <button
                 onClick={onOpenSyncModal}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium transition-colors shrink-0"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium transition-colors shrink-0 ml-0.5"
                 title="Family sync status. Tap to see paired devices or switch who's using this phone."
               >
                 <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isSyncing ? 'animate-ping' : ''}`} />
@@ -132,9 +141,6 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
             </p>
           </div>
         </div>
-
-        {/* Center: Apple Segmented Spender Switcher (desktop only, mobile gets its own row below) */}
-        <div className="hidden sm:flex shrink-0">{renderSpenderSwitcher('desktop')}</div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
@@ -188,9 +194,6 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Mobile-only second row: full-width spender switcher */}
-      <div className="sm:hidden px-3 pb-2.5">{renderSpenderSwitcher('mobile')}</div>
     </header>
   );
 };

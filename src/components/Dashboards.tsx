@@ -5,7 +5,7 @@ import {
   SpenderId,
   LedgerState,
 } from '../types';
-import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon } from '../utils/helpers';
+import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel } from '../utils/helpers';
 import {
   TrendingDown,
   Users,
@@ -434,7 +434,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                       <div className="flex items-center gap-1.5 text-xs text-neutral-400 truncate">
                         <span>{formatDate(tx.date)}</span>
                         <span>•</span>
-                        <span>{tx.paymentMode}</span>
+                        <span>{getPaymentModeLabel(tx.paymentMode)}</span>
                         <span>•</span>
                         <span className={isMine ? 'text-[#007AFF] font-medium' : 'text-neutral-600 dark:text-neutral-300'}>
                           {ownerName}

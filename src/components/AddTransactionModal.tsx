@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, CheckCircle2 } from 'lucide-react';
 import { Transaction, SpenderId, CategoryId, LedgerState } from '../types';
-import { getCategoryIcon } from '../utils/helpers';
+import { getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
 interface AddTransactionModalProps {
   onClose: () => void;
@@ -148,7 +148,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             <label className="text-xs font-semibold text-neutral-500 block mb-1">
               Category
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto pr-1">
               {categories
                 .filter((c) => c.id !== 'grey_area')
                 .map((cat) => {
@@ -158,11 +158,11 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       key={cat.id}
                       type="button"
                       onClick={() => setCategory(cat.id)}
-                      className={`p-2 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                      className={`p-2 rounded-xl border text-left flex items-center gap-2 bg-white transition-all ${
                         isSelected
-                          ? 'ring-2 ring-blue-500 bg-white dark:bg-neutral-800 shadow-xs'
-                          : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/40 text-neutral-700 dark:text-neutral-300'
-                      } ${cat.badgeBorder}`}
+                          ? 'ring-2 ring-blue-500 border-blue-200 shadow-xs'
+                          : 'border-neutral-200 hover:border-neutral-300'
+                      }`}
                     >
                       <div
                         className="w-5 h-5 rounded-md flex items-center justify-center text-white shrink-0"
@@ -170,7 +170,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       >
                         {getCategoryIcon(cat.icon, 'w-3 h-3')}
                       </div>
-                      <span className="truncate min-w-0 text-[11px] font-semibold">
+                      <span className="min-w-0 text-[11px] font-semibold leading-tight text-neutral-900">
                         {cat.name}
                       </span>
                     </button>
@@ -184,19 +184,19 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             <label className="text-xs font-semibold text-neutral-500 block mb-1">
               Payment Mode
             </label>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
               {(['UPI', 'Card', 'NetBanking', 'Cash'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setPaymentMode(mode)}
-                  className={`py-1.5 px-2 rounded-xl border text-xs font-medium transition-colors ${
+                  className={`py-1.5 px-2 rounded-xl border text-xs font-medium transition-colors whitespace-nowrap ${
                     paymentMode === mode
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold'
                       : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
                   }`}
                 >
-                  {mode}
+                  {getPaymentModeLabel(mode)}
                 </button>
               ))}
             </div>
