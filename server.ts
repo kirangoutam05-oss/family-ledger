@@ -89,7 +89,10 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'ledger.json');
 const LEDGER_ROW_ID = 'default';
 
-const pool = process.env.DATABASE_URL
+// `pool` is mutable: if Postgres is unreachable or misconfigured at startup, we
+// fall back to file storage rather than crashing the whole server — a bad
+// DATABASE_URL should degrade the app, not take it down entirely.
+let pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
@@ -119,15 +122,24 @@ function loadLedgerStateFromFile(): LedgerState {
 async function initLedgerState(): Promise<LedgerState> {
   if (!pool) return loadLedgerStateFromFile();
 
-  await ensureLedgerTable();
-  const result = await pool.query('SELECT data FROM ledger_state WHERE id = $1', [LEDGER_ROW_ID]);
-  if (result.rows.length > 0) {
-    return result.rows[0].data as LedgerState;
-  }
+  try {
+    await ensureLedgerTable();
+    const result = await pool.query('SELECT data FROM ledger_state WHERE id = $1', [LEDGER_ROW_ID]);
+    if (result.rows.length > 0) {
+      return result.rows[0].data as LedgerState;
+    }
 
-  const initial = JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
-  await pool.query('INSERT INTO ledger_state (id, data) VALUES ($1, $2)', [LEDGER_ROW_ID, initial]);
-  return initial;
+    const initial = JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
+    await pool.query('INSERT INTO ledger_state (id, data) VALUES ($1, $2)', [LEDGER_ROW_ID, initial]);
+    return initial;
+  } catch (err) {
+    console.error(
+      'Could not connect to Postgres (check DATABASE_URL). Falling back to local file storage for this run:',
+      err
+    );
+    pool = null;
+    return loadLedgerStateFromFile();
+  }
 }
 
 async function persistLedgerState() {
