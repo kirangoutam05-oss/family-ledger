@@ -1,10 +1,11 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
-import { INITIAL_LEDGER_STATE } from './src/data/initialData';
-import { LedgerState, Transaction, SavingsGoal, BudgetAlert, CategoryId, SpenderId } from './src/types';
+import { EMPTY_LEDGER_STATE } from './src/data/initialData';
+import { LedgerState, Transaction, SavingsGoal, BudgetAlert, CategoryId, SpenderId, DeviceInfo } from './src/types';
 
 dotenv.config();
 
@@ -73,8 +74,32 @@ function sanitizeString(str: unknown, maxLen = 150): string {
   return str.replace(/<[^>]*>?/gm, '').trim().slice(0, maxLen);
 }
 
-// In-memory persistent state (seeded with initial family data)
-let currentLedgerState: LedgerState = JSON.parse(JSON.stringify(INITIAL_LEDGER_STATE));
+// File-backed state: survives a server restart (not just in-memory), loaded once at
+// boot and written after every mutation. A real database would still be needed for
+// durability across a redeploy on ephemeral hosting, but this is a real improvement
+// over pure in-memory state for a long-running process.
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_FILE = path.join(DATA_DIR, 'ledger.json');
+
+function loadLedgerState(): LedgerState {
+  try {
+    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+    return JSON.parse(raw) as LedgerState;
+  } catch {
+    return JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
+  }
+}
+
+function persistLedgerState() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(currentLedgerState, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to persist ledger state:', err);
+  }
+}
+
+let currentLedgerState: LedgerState = loadLedgerState();
 
 // Lazy-initialized Gemini client
 let genAIClient: GoogleGenAI | null = null;
@@ -95,7 +120,12 @@ function getGenAI(): GoogleGenAI | null {
 }
 
 // Heuristic fallback SMS parser
-function parseSmsHeuristic(sms: string, defaultSpender: 'husband' | 'wife' = 'husband'): Partial<Transaction> {
+function parseSmsHeuristic(
+  sms: string,
+  defaultSpender: 'husband' | 'wife' = 'husband',
+  husbandName = 'your partner',
+  wifeName = 'your partner'
+): Partial<Transaction> {
   const cleanSms = sms.trim();
   
   // Extract amount: e.g. Rs. 2,500.00, INR 1,420, Rs 3850
@@ -147,7 +177,7 @@ function parseSmsHeuristic(sms: string, defaultSpender: 'husband' | 'wife' = 'hu
     category = 'grey_area';
     isGreyArea = true;
     greyAreaReason = 'Cash withdrawal intent (groceries, maid salary, or personal cash)';
-    contextQuestion = `Hey ${defaultSpender === 'husband' ? 'Arjun' : 'Priya'}, was this cash withdrawal for household expenses (cook/maid salary) or personal pocket cash?`;
+    contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, was this cash withdrawal for household expenses (cook/maid salary) or personal pocket cash?`;
   } else if (/swiggy|zomato|starbucks|mcdonald|restaurant|cafe|bistro|dining|eatclub|pizza/i.test(lower)) {
     const m = cleanSms.match(/to\s+([A-Z0-9\s]+?)(?:ref|via|on|\.|$)/i);
     title = m ? m[1].trim() : 'Food & Dining Order';
@@ -188,7 +218,7 @@ function parseSmsHeuristic(sms: string, defaultSpender: 'husband' | 'wife' = 'hu
     category = 'grey_area';
     isGreyArea = true;
     greyAreaReason = 'Direct peer transfer to an individual without merchant invoice';
-    contextQuestion = `Hey ${defaultSpender === 'husband' ? 'Arjun' : 'Priya'}, was this ${amount ? '₹' + amount.toLocaleString('en-IN') : 'UPI'} transfer to ${title} for a household expense or personal loan/split?`;
+    contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, was this ${amount ? '₹' + amount.toLocaleString('en-IN') : 'UPI'} transfer to ${title} for a household expense or personal loan/split?`;
   }
 
   return {
@@ -237,6 +267,7 @@ app.post('/api/ledger/sync', (req, res) => {
       currentLedgerState.categories = incoming.categories;
     }
     currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
     res.json({ success: true, ledger: currentLedgerState });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Sync failed' });
@@ -300,6 +331,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
 
     currentLedgerState.transactions.unshift(tx);
     currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
 
     // Check if budget exceeded for this category
     const cat = currentLedgerState.categories.find((c) => c.id === tx.category);
@@ -407,6 +439,7 @@ app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
     );
 
     currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
     res.json({ success: true, transaction: tx, ledger: currentLedgerState });
   } catch {
     res.status(500).json({ error: 'An error occurred while resolving the transaction.' });
@@ -467,6 +500,7 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
     }
 
     currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
     res.json({ success: true, transaction: tx, ledger: currentLedgerState });
   } catch {
     res.status(500).json({ error: 'An error occurred while updating the transaction.' });
@@ -498,6 +532,7 @@ app.post('/api/ledger/transaction/delete', rateLimit(60, 60000), (req, res) => {
 
     currentLedgerState.transactions.splice(txIndex, 1);
     currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
     res.json({ success: true, ledger: currentLedgerState });
   } catch {
     res.status(500).json({ error: 'An error occurred while deleting the transaction.' });
@@ -539,22 +574,94 @@ app.post('/api/ledger/goal-contribution', rateLimit(60, 60000), (req, res) => {
     }
 
     currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
     res.json({ success: true, goal, ledger: currentLedgerState });
   } catch {
     res.status(500).json({ error: 'An error occurred while contributing to the savings goal.' });
   }
 });
 
-// Reset demo data
+// Wipe all household data (transactions/goals/alerts) but keep the household's
+// identity (names, currency, setup, paired devices) intact.
 app.post('/api/ledger/reset', (req, res) => {
-  currentLedgerState = JSON.parse(JSON.stringify(INITIAL_LEDGER_STATE));
+  currentLedgerState.transactions = [];
+  currentLedgerState.goals = [];
+  currentLedgerState.alerts = [];
   currentLedgerState.lastSyncTime = new Date().toISOString();
+  persistLedgerState();
   res.json({ success: true, ledger: currentLedgerState });
+});
+
+// One-time household setup: real family/partner names, currency
+app.post('/api/household/setup', (req, res) => {
+  try {
+    const { familyName, husbandName, wifeName, currency, myRole } = req.body;
+
+    const cleanFamilyName = sanitizeString(familyName, 60);
+    const cleanHusbandName = sanitizeString(husbandName, 40);
+    const cleanWifeName = sanitizeString(wifeName, 40);
+    const cleanCurrency = typeof currency === 'string' && currency.trim() ? currency.trim().slice(0, 3) : '₹';
+
+    if (!cleanFamilyName || !cleanHusbandName || !cleanWifeName) {
+      return res.status(400).json({ error: 'Household name and both partner names are required' });
+    }
+    if (myRole !== 'husband' && myRole !== 'wife') {
+      return res.status(400).json({ error: 'myRole must be "husband" or "wife"' });
+    }
+
+    currentLedgerState.familyName = cleanFamilyName;
+    currentLedgerState.husbandName = cleanHusbandName;
+    currentLedgerState.wifeName = cleanWifeName;
+    currentLedgerState.currency = cleanCurrency;
+    currentLedgerState.setupComplete = true;
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+
+    res.json({ success: true, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while setting up the household.' });
+  }
+});
+
+// Register a device's real per-device identity (which role picked this phone)
+app.post('/api/ledger/register-device', (req, res) => {
+  try {
+    const { role } = req.body;
+    if (role !== 'husband' && role !== 'wife') {
+      return res.status(400).json({ error: 'role must be "husband" or "wife"' });
+    }
+
+    const name = role === 'husband' ? currentLedgerState.husbandName : currentLedgerState.wifeName;
+    const existing = currentLedgerState.connectedDevices.find((d) => d.owner === role);
+
+    const device: DeviceInfo = {
+      id: existing?.id || `dev-${role}-${Date.now()}`,
+      name: `${name}'s device`,
+      owner: role,
+      deviceModel: 'Web / PWA',
+      lastActive: 'Just now',
+      isOnline: true,
+    };
+
+    if (existing) {
+      currentLedgerState.connectedDevices = currentLedgerState.connectedDevices.map((d) =>
+        d.owner === role ? device : d
+      );
+    } else {
+      currentLedgerState.connectedDevices.push(device);
+    }
+
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+    res.json({ success: true, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while registering this device.' });
+  }
 });
 
 // AI & Heuristic SMS / UPI Parser Endpoint
 app.post('/api/parse-sms', rateLimit(30, 60000), async (req, res) => {
-  const { smsText, defaultSpender = 'husband' } = req.body;
+  const { smsText, defaultSpender = 'husband', husbandName, wifeName } = req.body;
   if (!smsText || typeof smsText !== 'string' || smsText.trim().length < 3) {
     return res.status(400).json({ error: 'Valid smsText of at least 3 characters is required' });
   }
@@ -564,6 +671,8 @@ app.post('/api/parse-sms', rateLimit(30, 60000), async (req, res) => {
   }
 
   const safeSpender: SpenderId = defaultSpender === 'wife' ? 'wife' : 'husband';
+  const safeHusbandName = sanitizeString(husbandName, 40) || currentLedgerState.husbandName || 'your partner';
+  const safeWifeName = sanitizeString(wifeName, 40) || currentLedgerState.wifeName || 'your partner';
   const cleanSms = sanitizeString(smsText, 2000);
   const maskedSms = maskSensitiveFinancialData(cleanSms);
   const ai = getGenAI();
@@ -596,7 +705,7 @@ Determine:
 7. upiRef: UPI reference or transaction ID if present
 8. isGreyArea: boolean (true if payee is an individual or ATM or ambiguous transfer)
 9. greyAreaReason: why context is needed
-10. contextQuestion: A polite, natural question addressing ${safeSpender === 'husband' ? 'Arjun' : 'Priya'} asking for the exact nature of the spend (e.g. household repair vs personal loan).
+10. contextQuestion: A polite, natural question addressing ${safeSpender === 'husband' ? safeHusbandName : safeWifeName} asking for the exact nature of the spend (e.g. household repair vs personal loan).
 11. suggestedSplit: "50-50" | "husband-full" | "wife-full"`;
 
       const geminiResponse = await ai.models.generateContent({
@@ -674,7 +783,7 @@ Determine:
   }
 
   // Fallback heuristic parser
-  const heuristicResult = parseSmsHeuristic(maskedSms, safeSpender);
+  const heuristicResult = parseSmsHeuristic(maskedSms, safeSpender, safeHusbandName, safeWifeName);
   return res.json({
     success: true,
     source: 'heuristic',

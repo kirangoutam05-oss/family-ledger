@@ -27,7 +27,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
   const { goals, husbandName, wifeName, currency } = ledger;
 
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
-  const [contributeAmount, setContributeAmount] = useState<number>(5000);
+  const [contributeAmount, setContributeAmount] = useState<number>(0);
   const [selectedContributor, setSelectedContributor] = useState<SpenderId>(
     activeSpender === 'wife' ? 'wife' : 'husband'
   );
@@ -36,8 +36,8 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
   // New goal state
   const [newTitle, setNewTitle] = useState('');
-  const [newTargetAmount, setNewTargetAmount] = useState<number>(50000);
-  const [newTargetDate, setNewTargetDate] = useState('2026-12-31');
+  const [newTargetAmount, setNewTargetAmount] = useState<number | ''>('');
+  const [newTargetDate, setNewTargetDate] = useState('');
   const [newColor, setNewColor] = useState('#007AFF');
 
   const selectedGoal = goals.find((g) => g.id === activeGoalId);
@@ -57,7 +57,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || !newTargetAmount || Number(newTargetAmount) <= 0 || !newTargetDate) return;
 
     const goal: SavingsGoal = {
       id: `goal-${Date.now()}`,
@@ -73,6 +73,8 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
     await onAddGoal(goal);
     setShowNewGoalModal(false);
     setNewTitle('');
+    setNewTargetAmount('');
+    setNewTargetDate('');
   };
 
   const totalSavedAcrossAll = goals.reduce((sum, g) => sum + g.currentAmount, 0);
@@ -212,7 +214,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
               <button
                 onClick={() => {
                   setActiveGoalId(goal.id);
-                  setContributeAmount(5000);
+                  setContributeAmount(0);
                 }}
                 className="w-full py-2 px-3 rounded-xl bg-black/[0.04] hover:bg-black/[0.07] dark:bg-white/[0.06] dark:hover:bg-white/[0.1] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-colors flex items-center justify-center gap-1.5"
               >
@@ -362,8 +364,9 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                   min="1000"
                   step="500"
                   required
+                  placeholder="e.g. 50000"
                   value={newTargetAmount}
-                  onChange={(e) => setNewTargetAmount(Number(e.target.value))}
+                  onChange={(e) => setNewTargetAmount(e.target.value === '' ? '' : Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
                 />
               </div>

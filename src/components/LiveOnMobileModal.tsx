@@ -7,32 +7,17 @@ import {
   X,
   Share2,
   PlusSquare,
-  ArrowRight,
-  Send,
-  Sparkles,
   ExternalLink,
 } from 'lucide-react';
-import { DeviceInfo, Transaction, LedgerState } from '../types';
 
 interface LiveOnMobileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  ledger: LedgerState;
-  currentDevice: DeviceInfo;
-  onAddTransaction: (transaction: Transaction) => Promise<void>;
 }
 
-export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({
-  isOpen,
-  onClose,
-  ledger,
-  currentDevice,
-  onAddTransaction,
-}) => {
+export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, onClose }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
-  const [isSendingTestTx, setIsSendingTestTx] = useState(false);
-  const [testSentMessage, setTestSentMessage] = useState<string | null>(null);
 
   // Determine the best live mobile URL
   const mobileUrl = typeof window !== 'undefined' ? window.location.href : '';
@@ -63,39 +48,6 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({
     }
   };
 
-  // Quick live test: simulate an instant mobile UPI debit synced from phone
-  const handleSendMobileTest = async () => {
-    setIsSendingTestTx(true);
-    setTestSentMessage(null);
-
-    const isHusband = currentDevice.role === 'husband';
-    const testAmount = Math.floor(Math.random() * 800) + 150;
-    const testTx: Transaction = {
-      id: `live-phone-${Date.now()}`,
-      title: 'Blinkit Instant Groceries',
-      amount: testAmount,
-      type: 'debit',
-      date: new Date().toISOString(),
-      spender: isHusband ? 'husband' : 'wife',
-      category: 'groceries',
-      paymentMode: 'UPI',
-      upiRef: `UPI/LiveMobile/${Math.floor(100000 + Math.random() * 900000)}`,
-      bankName: 'HDFC Bank',
-      rawSms: `Rs.${testAmount}.00 debited from HDFC a/c **4012 on ${new Date().toLocaleDateString()} to BLINKIT via UPI.`,
-      status: 'verified',
-      splitRatio: { husband: 50, wife: 50 },
-      notes: 'Live phone test transaction',
-    };
-
-    try {
-      await onAddTransaction(testTx);
-      setTestSentMessage(`Sent ₹${testAmount} UPI debit from ${currentDevice.name}! Watch it sync across devices.`);
-      setTimeout(() => setTestSentMessage(null), 5000);
-    } finally {
-      setIsSendingTestTx(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-neutral-900 rounded-3xl max-w-lg w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 relative">
@@ -120,13 +72,13 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({
           <div className="flex-1 pr-6 flex flex-col justify-center">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-[#007AFF] uppercase tracking-wider mb-0.5">
               <Smartphone className="w-3.5 h-3.5" />
-              <span>Open & Test on Your Mobile Device</span>
+              <span>Invite Your Partner</span>
             </div>
             <h2 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-white leading-tight">
-              Scan to Open on iPhone or Android
+              Scan to Install on iPhone or Android
             </h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Point your phone's camera at the QR code below to launch the live app immediately.
+              Have your partner point their phone's camera at this QR code to open the app on their own device.
             </p>
           </div>
         </div>
@@ -198,39 +150,6 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({
               </a>
             </div>
           </div>
-        </div>
-
-        {/* Live Cross-Device Test Trigger */}
-        <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-500/20 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-neutral-900 dark:text-white flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#007AFF]" />
-              <span>Test Real-Time Sync</span>
-            </span>
-            <span className="text-[10px] text-neutral-400">
-              Active: {currentDevice.name}
-            </span>
-          </div>
-
-          <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-            Click below to fire a simulated UPI debit right now and watch the balances update across both devices in real time.
-          </p>
-
-          <button
-            onClick={handleSendMobileTest}
-            disabled={isSendingTestTx}
-            className="w-full py-2 px-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors shadow-xs"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>{isSendingTestTx ? 'Sending...' : 'Fire Live Test UPI Transaction'}</span>
-          </button>
-
-          {testSentMessage && (
-            <div className="p-2.5 rounded-xl bg-emerald-100/70 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] flex items-center gap-2">
-              <Check className="w-3.5 h-3.5 shrink-0" />
-              <span>{testSentMessage}</span>
-            </div>
-          )}
         </div>
 
         {/* URL Link Preview */}

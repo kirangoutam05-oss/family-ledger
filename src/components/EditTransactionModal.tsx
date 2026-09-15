@@ -27,7 +27,6 @@ interface EditTransactionModalProps {
   categories: Category[];
   onSave: (transactionId: string, updates: Partial<Transaction>) => Promise<void>;
   onDelete: (transactionId: string) => Promise<void>;
-  onSwitchUser?: () => void;
 }
 
 export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
@@ -41,7 +40,6 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   categories,
   onSave,
   onDelete,
-  onSwitchUser,
 }) => {
   if (!isOpen || !transaction) return null;
 
@@ -198,21 +196,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 You cannot edit {ownerName}'s expenses
               </p>
               <p className="text-amber-800/80 dark:text-amber-300/80 leading-relaxed">
-                You are currently authenticated as <span className="font-semibold">{currentUserName}</span>. To preserve financial integrity and personal accounting trust, couple expenses can only be edited or deleted by the spouse who logged them.
+                You are currently signed in as <span className="font-semibold">{currentUserName}</span> on this device. To preserve financial integrity and personal accounting trust, couple expenses can only be edited or deleted by the spouse who logged them — ask {ownerName} to make this change on their own phone.
               </p>
-              {onSwitchUser && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onSwitchUser();
-                  }}
-                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] shadow-xs transition-colors"
-                >
-                  <Lock className="w-3 h-3" />
-                  <span>Switch Account to {ownerName}</span>
-                </button>
-              )}
             </div>
           </div>
         ) : (

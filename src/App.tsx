@@ -6,9 +6,9 @@ import {
   CategoryId,
   SplitType,
   SavingsGoal,
-  DeviceInfo,
+  DeviceIdentity,
 } from './types';
-import { INITIAL_LEDGER_STATE } from './data/initialData';
+import { EMPTY_LEDGER_STATE } from './data/initialData';
 import { AppleHeader } from './components/AppleHeader';
 import { Dashboards } from './components/Dashboards';
 import { SmsUpiParser } from './components/SmsUpiParser';
@@ -20,39 +20,60 @@ import { AddTransactionModal } from './components/AddTransactionModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { SettleUpModal } from './components/SettleUpModal';
 import { LiveOnMobileModal } from './components/LiveOnMobileModal';
-import { StartupScreen } from './components/StartupScreen';
-import { BiometricAuthScreen } from './components/BiometricAuthScreen';
-import { AnimatePresence } from 'motion/react';
+import { HouseholdSetupScreen } from './components/HouseholdSetupScreen';
+import { WhoAreYouScreen } from './components/WhoAreYouScreen';
 import {
   LayoutDashboard,
   Sparkles,
   HelpCircle,
   Target,
   Bell,
-  Smartphone,
-  Maximize2,
-  Minimize2,
-  RefreshCw,
 } from 'lucide-react';
 
 type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts';
 
+const IDENTITY_STORAGE_KEY = 'family-ledger:identity';
+
+function loadLocalIdentity(): DeviceIdentity | null {
+  try {
+    const raw = localStorage.getItem(IDENTITY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.role === 'husband' || parsed?.role === 'wife') return parsed as DeviceIdentity;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalIdentity(role: SpenderId) {
+  const identity: DeviceIdentity = { role, setAt: new Date().toISOString() };
+  try {
+    localStorage.setItem(IDENTITY_STORAGE_KEY, JSON.stringify(identity));
+  } catch {
+    // localStorage unavailable (private mode, etc.) — identity just won't persist
+  }
+}
+
+function clearLocalIdentity() {
+  try {
+    localStorage.removeItem(IDENTITY_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function App() {
-  const [ledger, setLedger] = useState<LedgerState>(INITIAL_LEDGER_STATE);
+  const [ledger, setLedger] = useState<LedgerState>(EMPTY_LEDGER_STATE);
+  const [isLedgerLoaded, setIsLedgerLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<NavTab>('dashboards');
   const [activeSpender, setActiveSpender] = useState<SpenderId | 'shared'>('shared');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isDeviceFrame, setIsDeviceFrame] = useState(false);
 
-  // Active simulated device
-  const [currentDevice, setCurrentDevice] = useState<DeviceInfo>(
-    INITIAL_LEDGER_STATE.connectedDevices[0]
-  );
+  // Real per-device identity, persisted locally — not a fake auth flow
+  const [identity, setIdentity] = useState<DeviceIdentity | null>(() => loadLocalIdentity());
+  const authenticatedUser: SpenderId = identity?.role ?? 'husband';
 
-  // Security & Modals state
-  const [isBiometricUnlocked, setIsBiometricUnlocked] = useState(false);
-  const [authenticatedUser, setAuthenticatedUser] = useState<SpenderId>('husband');
-  const [showStartupScreen, setShowStartupScreen] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettleUpModal, setShowSettleUpModal] = useState(false);
@@ -60,16 +81,56 @@ export default function App() {
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-  const handleBiometricSuccess = (spender: SpenderId) => {
-    setIsBiometricUnlocked(true);
-    setAuthenticatedUser(spender);
-    setActiveSpender(spender);
-    setShowStartupScreen(true);
+  const registerDevice = async (role: SpenderId) => {
+    try {
+      const res = await fetch('/api/ledger/register-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      }
+    } catch (err) {
+      console.warn('Could not register device:', err);
+    }
+  };
+
+  const handleHouseholdSetup = async (details: {
+    familyName: string;
+    husbandName: string;
+    wifeName: string;
+    currency: string;
+    myRole: SpenderId;
+  }) => {
+    const res = await fetch('/api/household/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to set up household');
+    }
+    const data = await res.json();
+    if (data.ledger) setLedger(data.ledger);
+    saveLocalIdentity(details.myRole);
+    setIdentity({ role: details.myRole, setAt: new Date().toISOString() });
+    setActiveSpender('shared');
+    await registerDevice(details.myRole);
+  };
+
+  const handleWhoAreYou = async (role: SpenderId) => {
+    saveLocalIdentity(role);
+    setIdentity({ role, setAt: new Date().toISOString() });
+    setActiveSpender('shared');
+    await registerDevice(role);
   };
 
   const handleSwitchUser = () => {
-    setIsBiometricUnlocked(false);
-    setShowStartupScreen(false);
+    clearLocalIdentity();
+    setIdentity(null);
   };
 
   // Update transaction with spouse ownership enforcement
@@ -138,6 +199,8 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Could not fetch server ledger, using local state:', err);
+    } finally {
+      setIsLedgerLoaded(true);
     }
   }, []);
 
@@ -328,8 +391,8 @@ export default function App() {
     syncLedgerToServer(updated);
   };
 
-  // Reset demo data
-  const handleResetDemo = async () => {
+  // Wipe all household data (transactions/goals/alerts), keeping household setup intact
+  const handleResetHousehold = async () => {
     try {
       const res = await fetch('/api/ledger/reset', { method: 'POST' });
       if (res.ok) {
@@ -337,14 +400,8 @@ export default function App() {
         if (data.ledger) setLedger(data.ledger);
       }
     } catch (err) {
-      setLedger(INITIAL_LEDGER_STATE);
+      console.error('Failed to reset household data:', err);
     }
-  };
-
-  // Switch device
-  const handleSwitchDevice = (device: DeviceInfo) => {
-    setCurrentDevice(device);
-    setActiveSpender(device.owner);
   };
 
   // Direct jump to resolve grey area
@@ -356,27 +413,30 @@ export default function App() {
   const unreadAlertsCount = ledger.alerts.filter((a) => !a.read).length;
   const pendingGreyAreaCount = ledger.transactions.filter((t) => t.status === 'grey_area').length;
 
+  // Wait for the initial fetch before deciding which screen to show, so a
+  // returning user doesn't flash the setup screen while the real ledger loads.
+  if (!isLedgerLoaded) {
+    return <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#000000]" />;
+  }
+
+  if (!ledger.setupComplete) {
+    return <HouseholdSetupScreen onComplete={handleHouseholdSetup} />;
+  }
+
+  if (!identity) {
+    return (
+      <WhoAreYouScreen
+        familyName={ledger.familyName}
+        husbandName={ledger.husbandName}
+        wifeName={ledger.wifeName}
+        onSelect={handleWhoAreYou}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white flex flex-col font-sans transition-colors selection:bg-blue-500/20">
-      {/* Device Frame Wrapper or Full Screen */}
-      <div
-        className={`w-full transition-all duration-300 mx-auto flex-1 flex flex-col ${
-          isDeviceFrame
-            ? 'max-w-md my-6 rounded-[48px] shadow-2xl border-[8px] border-neutral-800 bg-[#F2F2F7] dark:bg-[#1C1C1E] overflow-hidden ring-1 ring-black/10'
-            : 'max-w-6xl'
-        }`}
-      >
-        {/* Dynamic Island / Device Notch simulation when in device frame */}
-        {isDeviceFrame && (
-          <div className="w-full bg-[#F2F2F7] dark:bg-[#1C1C1E] pt-3 pb-1 px-6 flex items-center justify-between text-[11px] font-semibold text-neutral-800 dark:text-neutral-200">
-            <span>9:41</span>
-            <div className="w-24 h-5 rounded-full bg-black flex items-center justify-end px-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-            <span>5G • 100%</span>
-          </div>
-        )}
-
+      <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col">
         {/* Apple Top Navigation Bar */}
         <AppleHeader
           familyName={ledger.familyName}
@@ -391,12 +451,8 @@ export default function App() {
           onOpenAddModal={() => setShowAddModal(true)}
           isSyncing={isSyncing}
           lastSyncTime={ledger.lastSyncTime}
-          currentDevice={currentDevice}
-          isDeviceFrame={isDeviceFrame}
-          onToggleDeviceFrame={() => setIsDeviceFrame(!isDeviceFrame)}
           onOpenLiveMobile={() => setShowLiveMobileModal(true)}
-          onShowStartupScreen={() => setShowStartupScreen(true)}
-          onLockLedger={() => setIsBiometricUnlocked(false)}
+          onLockLedger={handleSwitchUser}
           onSwitchUser={handleSwitchUser}
         />
 
@@ -429,7 +485,6 @@ export default function App() {
               authenticatedUser={authenticatedUser}
               onResolve={handleResolveGreyArea}
               focusedTransactionId={focusedGreyTxId}
-              onSwitchUser={handleSwitchUser}
             />
           )}
 
@@ -539,9 +594,7 @@ export default function App() {
         ledger={ledger}
         onTriggerSync={fetchLedger}
         isSyncing={isSyncing}
-        onResetDemo={handleResetDemo}
-        currentDevice={currentDevice}
-        onSwitchDevice={handleSwitchDevice}
+        onResetHousehold={handleResetHousehold}
       />
 
       {/* Manual Add Expense Modal */}
@@ -559,10 +612,15 @@ export default function App() {
           isOpen={!!editingTransaction}
           onClose={() => setEditingTransaction(null)}
           transaction={editingTransaction}
-          ledger={ledger}
           authenticatedUser={authenticatedUser}
-          onUpdateTransaction={handleUpdateTransaction}
-          onDeleteTransaction={handleDeleteTransaction}
+          husbandName={ledger.husbandName}
+          wifeName={ledger.wifeName}
+          currency={ledger.currency}
+          categories={ledger.categories}
+          onSave={(transactionId, updates) =>
+            handleUpdateTransaction({ ...editingTransaction, id: transactionId, ...updates } as Transaction)
+          }
+          onDelete={handleDeleteTransaction}
         />
       )}
 
@@ -574,38 +632,11 @@ export default function App() {
         onAddTransaction={handleAddTransaction}
       />
 
-      {/* Live On Mobile & QR Code Modal */}
+      {/* Live On Mobile & QR Code Modal (invite your partner to install) */}
       <LiveOnMobileModal
         isOpen={showLiveMobileModal}
         onClose={() => setShowLiveMobileModal(false)}
-        ledger={ledger}
-        currentDevice={currentDevice}
-        onAddTransaction={handleAddTransaction}
       />
-
-      {/* Local-only Biometric Authentication Layer (Face ID / Touch ID / Passcode) */}
-      <AnimatePresence>
-        {!isBiometricUnlocked && (
-          <BiometricAuthScreen
-            onAuthenticated={handleBiometricSuccess}
-            familyName={ledger.familyName}
-            husbandName={ledger.husbandName}
-            wifeName={ledger.wifeName}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Apple-style Startup Splash Screen */}
-      <AnimatePresence>
-        {isBiometricUnlocked && showStartupScreen && (
-          <StartupScreen
-            onComplete={() => setShowStartupScreen(false)}
-            familyName={ledger.familyName}
-            husbandName={ledger.husbandName}
-            wifeName={ledger.wifeName}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

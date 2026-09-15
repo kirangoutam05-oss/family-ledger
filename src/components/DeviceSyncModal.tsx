@@ -1,19 +1,14 @@
 import React, { useState } from 'react';
 import {
-  Smartphone,
-  Share2,
   RefreshCw,
   CheckCircle2,
   Copy,
-  Users,
   Wifi,
-  QrCode,
   RotateCcw,
   X,
-  ExternalLink,
+  ShieldAlert,
 } from 'lucide-react';
-import { LedgerState, DeviceInfo, SpenderId } from '../types';
-import { formatDate } from '../utils/helpers';
+import { LedgerState } from '../types';
 
 interface DeviceSyncModalProps {
   isOpen: boolean;
@@ -21,9 +16,7 @@ interface DeviceSyncModalProps {
   ledger: LedgerState;
   onTriggerSync: () => Promise<void>;
   isSyncing: boolean;
-  onResetDemo: () => Promise<void>;
-  currentDevice: DeviceInfo;
-  onSwitchDevice: (device: DeviceInfo) => void;
+  onResetHousehold: () => Promise<void>;
 }
 
 export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
@@ -32,12 +25,22 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
   ledger,
   onTriggerSync,
   isSyncing,
-  onResetDemo,
-  currentDevice,
-  onSwitchDevice,
+  onResetHousehold,
 }) => {
   const [copied, setCopied] = useState(false);
-  const { familyId, familyName, connectedDevices, lastSyncTime, husbandName, wifeName } = ledger;
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const { familyId, connectedDevices, husbandName, wifeName } = ledger;
+
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    try {
+      await onResetHousehold();
+    } finally {
+      setIsResetting(false);
+      setShowResetConfirm(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -115,29 +118,22 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
           </p>
         </div>
 
-        {/* Paired Devices List with Interactive Device Switcher */}
+        {/* Paired Devices List (informational — who has actually connected) */}
         <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-              Paired Family Devices ({connectedDevices.length})
-            </span>
-            <span className="text-[10px] text-neutral-400">
-              Click to simulate viewing as device
-            </span>
-          </div>
+          <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+            Paired Devices ({connectedDevices.length})
+          </span>
 
-          <div className="space-y-2">
-            {connectedDevices.map((device) => {
-              const isCurrent = currentDevice.id === device.id;
-              return (
+          {connectedDevices.length === 0 ? (
+            <p className="text-xs text-neutral-400 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-700/80">
+              No devices paired yet. Share this app with your partner so they can install it on their own phone.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {connectedDevices.map((device) => (
                 <div
                   key={device.id}
-                  onClick={() => onSwitchDevice(device)}
-                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    isCurrent
-                      ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/30 ring-2 ring-blue-500/20'
-                      : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300'
-                  }`}
+                  className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-800 flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -151,45 +147,66 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
                     </div>
 
                     <div>
-                      <div className="text-xs font-semibold text-neutral-900 dark:text-white flex items-center gap-1.5">
-                        <span>{device.name}</span>
-                        {isCurrent && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-500 text-white">
-                            This Device
-                          </span>
-                        )}
+                      <div className="text-xs font-semibold text-neutral-900 dark:text-white">
+                        {device.name}
                       </div>
                       <div className="text-[11px] text-neutral-400">
-                        {device.deviceModel} • {device.lastActive}
+                        {device.lastActive}
                       </div>
                     </div>
                   </div>
 
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20" />
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Sync Controls */}
-        <div className="pt-2 border-t border-black/[0.06] dark:border-white/[0.06] flex items-center justify-between gap-2">
-          <button
-            onClick={onResetDemo}
-            className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Demo Ledger</span>
-          </button>
+        <div className="pt-2 border-t border-black/[0.06] dark:border-white/[0.06] space-y-3">
+          {showResetConfirm ? (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 space-y-2">
+              <div className="flex items-start gap-2 text-red-700 dark:text-red-400 text-xs font-semibold">
+                <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>This permanently deletes every transaction, goal, and alert for this household. This cannot be undone.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleConfirmReset}
+                  disabled={isResetting}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold"
+                >
+                  {isResetting ? 'Resetting...' : 'Yes, delete everything'}
+                </button>
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  className="px-3 py-1.5 rounded-lg border border-black/10 dark:border-white/10 text-xs text-neutral-600 dark:text-neutral-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => setShowResetConfirm(true)}
+                className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Household Data</span>
+              </button>
 
-          <button
-            onClick={onTriggerSync}
-            disabled={isSyncing}
-            className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Syncing...' : 'Sync Cloud Now'}</span>
-          </button>
+              <button
+                onClick={onTriggerSync}
+                disabled={isSyncing}
+                className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Syncing...' : 'Sync Cloud Now'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

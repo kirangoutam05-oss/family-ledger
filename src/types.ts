@@ -97,12 +97,18 @@ export interface LedgerState {
   husbandName: string;
   wifeName: string;
   currency: string;
+  setupComplete: boolean;
   transactions: Transaction[];
   goals: SavingsGoal[];
   categories: Category[];
   alerts: BudgetAlert[];
   lastSyncTime: string;
   connectedDevices: DeviceInfo[];
+}
+
+export interface DeviceIdentity {
+  role: SpenderId;
+  setAt: string;
 }
 
 export interface ParseSmsRequest {

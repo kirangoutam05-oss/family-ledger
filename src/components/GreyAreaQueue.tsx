@@ -21,7 +21,6 @@ interface GreyAreaQueueProps {
     note?: string
   ) => Promise<void>;
   focusedTransactionId?: string | null;
-  onSwitchUser?: () => void;
 }
 
 export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
@@ -29,7 +28,6 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
   authenticatedUser,
   onResolve,
   focusedTransactionId,
-  onSwitchUser,
 }) => {
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
@@ -169,18 +167,8 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-amber-800/80 dark:text-amber-300/80 leading-relaxed">
-                      This expense was paid by <span className="font-semibold">{activeTx.spender === 'husband' ? husbandName : wifeName}</span>. Because you are logged in as <span className="font-semibold">{authenticatedUser === 'husband' ? husbandName : wifeName}</span>, you cannot categorize or change the couple split for your partner's expense.
+                      This expense was paid by <span className="font-semibold">{activeTx.spender === 'husband' ? husbandName : wifeName}</span>. Because you are signed in as <span className="font-semibold">{authenticatedUser === 'husband' ? husbandName : wifeName}</span> on this device, you cannot categorize or change the couple split for your partner's expense — ask them to resolve it on their own phone.
                     </p>
-                    {onSwitchUser && (
-                      <button
-                        type="button"
-                        onClick={onSwitchUser}
-                        className="mt-1.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs shadow-xs transition-colors"
-                      >
-                        <Lock className="w-3 h-3" />
-                        <span>Switch Account to {activeTx.spender === 'husband' ? husbandName : wifeName}</span>
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <div className="px-3.5 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-2 text-xs text-[#007AFF] font-medium">

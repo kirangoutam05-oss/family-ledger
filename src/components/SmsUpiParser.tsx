@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import {
   Sparkles,
-  Smartphone,
   CheckCircle2,
   HelpCircle,
-  ArrowRight,
   RefreshCw,
 } from 'lucide-react';
 import { Transaction, SpenderId, LedgerState } from '../types';
-import { SAMPLE_SMS_DATA, SampleSmsItem } from '../data/sampleSms';
-import { formatCurrency, getCategoryIcon, getPaymentModeIcon } from '../utils/helpers';
+import { formatCurrency, getCategoryIcon } from '../utils/helpers';
 
 interface SmsUpiParserProps {
   ledger: LedgerState;
@@ -32,7 +29,6 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   const [parsedPreview, setParsedPreview] = useState<Partial<Transaction> | null>(null);
   const [parseSource, setParseSource] = useState<'gemini' | 'heuristic' | null>(null);
   const [addedSuccess, setAddedSuccess] = useState(false);
-  const [activePresetId, setActivePresetId] = useState<string | null>(null);
 
   const { categories, husbandName, wifeName, currency } = ledger;
 
@@ -51,6 +47,8 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
         body: JSON.stringify({
           smsText: text,
           defaultSpender: selectedSpender,
+          husbandName,
+          wifeName,
         }),
       });
 
@@ -64,14 +62,6 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
     } finally {
       setIsParsing(false);
     }
-  };
-
-  // Select sample preset
-  const handleSelectSample = (sample: SampleSmsItem) => {
-    setActivePresetId(sample.id);
-    setSmsInput(sample.text);
-    setSelectedSpender(sample.suggestedSpender);
-    handleParse(sample.text);
   };
 
   // Add parsed transaction to ledger
@@ -101,7 +91,6 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
     setAddedSuccess(true);
     setParsedPreview(null);
     setSmsInput('');
-    setActivePresetId(null);
 
     // If it was a grey area, auto-trigger the context modal
     if (newTx.status === 'grey_area') {
@@ -158,7 +147,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
           <textarea
             value={smsInput}
             onChange={(e) => setSmsInput(e.target.value)}
-            placeholder="Paste your bank alert message here (e.g., 'Rs. 1,420 debited from HDFC a/c **4012 on 10-09-26 to BLINKIT via UPI...')"
+            placeholder="Paste your bank or UPI alert here, e.g. &quot;Rs. 1,420 debited from HDFC a/c **4012 on 10-09-26 to BLINKIT via UPI&quot;"
             rows={3}
             className="w-full p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-[#007AFF] resize-none"
           />
@@ -192,7 +181,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
         {addedSuccess && (
           <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Transaction successfully saved and synced across devices.</span>
+            <span>Transaction saved to the shared ledger.</span>
           </div>
         )}
       </div>
@@ -273,53 +262,6 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
           </div>
         </div>
       )}
-
-      {/* Sample Bank Alerts */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider px-1">
-          Sample SMS Alerts for Testing
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-          {SAMPLE_SMS_DATA.map((sample) => (
-            <button
-              key={sample.id}
-              onClick={() => handleSelectSample(sample)}
-              className={`p-3.5 rounded-xl border text-left transition-all ${
-                activePresetId === sample.id
-                  ? 'border-[#007AFF] bg-blue-50/30 dark:bg-blue-950/20'
-                  : 'border-black/[0.04] dark:border-white/[0.06] bg-white dark:bg-neutral-900 hover:border-black/[0.1] dark:hover:border-white/[0.1]'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-neutral-900 dark:text-white">
-                  {sample.label}
-                </span>
-                {sample.isGreyArea ? (
-                  <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
-                    Needs context
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-neutral-400">
-                    {sample.categoryHint}
-                  </span>
-                )}
-              </div>
-
-              <p className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400 line-clamp-2 leading-relaxed">
-                "{sample.text}"
-              </p>
-
-              <div className="mt-2 flex items-center justify-between text-[10px] text-neutral-400">
-                <span>{sample.sender}</span>
-                <span className="text-[#007AFF] font-medium flex items-center gap-0.5">
-                  Auto-Parse <ArrowRight className="w-3 h-3" />
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };
