@@ -246,9 +246,15 @@ function parseSmsHeuristic(
     amount = parseFloat(amountMatch[1].replace(/,/g, '')) || 0;
   }
 
-  // Type: debit vs credit
-  const isCredit = /credited|received|refund|deposited/i.test(cleanSms);
-  const type: 'debit' | 'credit' = isCredit ? 'credit' : 'debit';
+  // Type: debit vs credit. Bank SMS for a UPI transfer often mention BOTH
+  // sides in one message — e.g. "Acct debited for Rs 40; Minhajul Karim
+  // credited" — where "credited" describes the payee, not the user's own
+  // account. Checking for "credited" alone misreads that as an incoming
+  // payment, so "debited" (money leaving the user's account) wins whenever
+  // both keywords are present.
+  const hasDebitKeyword = /debited|spent|withdrawn|charged|paid/i.test(cleanSms);
+  const hasCreditKeyword = /credited|received|refund|deposited/i.test(cleanSms);
+  const type: 'debit' | 'credit' = hasDebitKeyword ? 'debit' : hasCreditKeyword ? 'credit' : 'debit';
 
   // Detect payment mode
   let paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' = 'UPI';
@@ -318,8 +324,11 @@ function parseSmsHeuristic(
     title = 'Investment SIP';
     category = 'investments';
   } else {
-    // Ambiguous UPI to person / number
-    const personMatch = cleanSms.match(/to\s+([A-Za-z\s]+?)(?:\s*\([^\)]*\)|\s*ref|\s*on|\s*via|\.|$)/i);
+    // Ambiguous UPI to person / number — the payee is named either as
+    // "...to NAME" or, in ICICI-style two-sided messages, as "NAME credited".
+    const personMatch =
+      cleanSms.match(/to\s+([A-Za-z\s]+?)(?:\s*\([^\)]*\)|\s*ref|\s*on|\s*via|\.|$)/i) ||
+      cleanSms.match(/;\s*([A-Za-z][A-Za-z\s]{2,40}?)\s+credited/i);
     if (personMatch && personMatch[1].trim().length > 2) {
       title = `UPI to ${personMatch[1].trim()}`;
     } else {
@@ -915,7 +924,12 @@ Categories must be strictly one of:
 Determine:
 1. title: Clean merchant or payee name
 2. amount: Clean positive number (INR)
-3. type: "debit" or "credit"
+3. type: "debit" or "credit" — many bank SMS describe BOTH sides of a UPI
+   transfer in one message (e.g. "Acct debited for Rs 40; Rahul Sharma
+   credited"), where "credited" refers to the payee's account, not the
+   user's own. If the message says the user's account/card was debited,
+   the type is "debit" even if a payee's name also appears next to the
+   word "credited".
 4. category: one of the above
 5. paymentMode: "UPI" | "Card" | "NetBanking" | "Cash"
 6. bankName: detected bank (e.g. HDFC Bank, ICICI Bank, SBI, etc.)

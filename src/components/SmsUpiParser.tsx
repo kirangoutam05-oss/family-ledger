@@ -233,6 +233,39 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             </div>
           </div>
 
+          {/* Debit/Credit clarification — bank SMS often mention both sides
+              of a UPI transfer (e.g. "Acct debited...; Payee credited"),
+              so the auto-detected direction is always editable here. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+              This was:
+            </span>
+            <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-lg text-xs">
+              <button
+                type="button"
+                onClick={() => setParsedPreview({ ...parsedPreview, type: 'debit' })}
+                className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                  (parsedPreview.type || 'debit') === 'debit'
+                    ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
+                    : 'text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Money Out (Debit)
+              </button>
+              <button
+                type="button"
+                onClick={() => setParsedPreview({ ...parsedPreview, type: 'credit' })}
+                className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                  parsedPreview.type === 'credit'
+                    ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
+                    : 'text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Money In (Credit)
+              </button>
+            </div>
+          </div>
+
           {/* Grey Area Alert Callout */}
           {parsedPreview.status === 'grey_area' && (
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">

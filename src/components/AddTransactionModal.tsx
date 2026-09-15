@@ -19,11 +19,16 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 }) => {
   const { categories, husbandName, wifeName, currency } = ledger;
 
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<CategoryId>('groceries');
   const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash'>('UPI');
   const [notes, setNotes] = useState('');
+  const [dateStr, setDateStr] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
+  const [timeStr, setTimeStr] = useState(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,12 +37,15 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
     setIsSubmitting(true);
 
+    const enteredDate = dateStr && timeStr ? new Date(`${dateStr}T${timeStr}:00`) : new Date();
+    const isoDate = isNaN(enteredDate.getTime()) ? new Date().toISOString() : enteredDate.toISOString();
+
     const newTx: Transaction = {
       id: `tx-manual-${Date.now()}`,
       title: title.trim(),
       amount: Number(amount),
       type: 'debit',
-      date: new Date().toISOString(),
+      date: isoDate,
       spender: authenticatedUser,
       category,
       paymentMode,
@@ -114,6 +122,30 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               onChange={(e) => setTitle(e.target.value)}
               className="w-full text-xs font-medium px-3.5 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          {/* Date & Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-neutral-500 block mb-1">Date</label>
+              <input
+                type="date"
+                required
+                value={dateStr}
+                onChange={(e) => setDateStr(e.target.value)}
+                className="w-full text-xs font-medium px-3.5 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-neutral-500 block mb-1">Time</label>
+              <input
+                type="time"
+                required
+                value={timeStr}
+                onChange={(e) => setTimeStr(e.target.value)}
+                className="w-full text-xs font-medium px-3.5 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
 
           {/* Paid By - Authenticated Spender */}
