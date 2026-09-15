@@ -1,17 +1,7 @@
 import React, { useState } from 'react';
-import {
-  X,
-  CheckCircle2,
-  Users,
-  User,
-  Sliders,
-  Smartphone,
-  CreditCard,
-  Banknote,
-  Wallet,
-} from 'lucide-react';
-import { Transaction, Category, SpenderId, CategoryId, LedgerState } from '../types';
-import { formatCurrency, getCategoryIcon } from '../utils/helpers';
+import { X, CheckCircle2 } from 'lucide-react';
+import { Transaction, SpenderId, CategoryId, LedgerState } from '../types';
+import { getCategoryIcon } from '../utils/helpers';
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -34,8 +24,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<CategoryId>('groceries');
   const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash'>('UPI');
-  const [splitType, setSplitType] = useState<'50-50' | 'husband-full' | 'wife-full' | 'custom'>('50-50');
-  const [customHusbandPercent, setCustomHusbandPercent] = useState(50);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -46,19 +34,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     if (!title.trim() || !amount || Number(amount) <= 0) return;
 
     setIsSubmitting(true);
-
-    let hSplit = 50;
-    let wSplit = 50;
-    if (splitType === 'husband-full') {
-      hSplit = 100;
-      wSplit = 0;
-    } else if (splitType === 'wife-full') {
-      hSplit = 0;
-      wSplit = 100;
-    } else if (splitType === 'custom') {
-      hSplit = customHusbandPercent;
-      wSplit = 100 - customHusbandPercent;
-    }
 
     const newTx: Transaction = {
       id: `tx-manual-${Date.now()}`,
@@ -71,7 +46,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       paymentMode,
       bankName: paymentMode === 'UPI' ? 'GPay UPI' : 'Card',
       status: 'verified',
-      splitRatio: { husband: hSplit, wife: wSplit },
       notes: notes.trim(),
     };
 
@@ -215,48 +189,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                   {mode}
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* Split Type */}
-          <div>
-            <label className="text-xs font-semibold text-neutral-500 block mb-1">
-              Split Strategy
-            </label>
-            <div className="grid grid-cols-3 gap-1.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setSplitType('50-50')}
-                className={`py-1.5 rounded-lg border font-medium ${
-                  splitType === '50-50'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold'
-                    : 'border-neutral-200 text-neutral-600'
-                }`}
-              >
-                Shared 50/50
-              </button>
-              <button
-                type="button"
-                onClick={() => setSplitType(authenticatedUser === 'husband' ? 'husband-full' : 'wife-full')}
-                className={`py-1.5 rounded-lg border font-medium ${
-                  splitType === 'husband-full' || splitType === 'wife-full'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold'
-                    : 'border-neutral-200 text-neutral-600'
-                }`}
-              >
-                100% Personal
-              </button>
-              <button
-                type="button"
-                onClick={() => setSplitType('custom')}
-                className={`py-1.5 rounded-lg border font-medium ${
-                  splitType === 'custom'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold'
-                    : 'border-neutral-200 text-neutral-600'
-                }`}
-              >
-                Custom %
-              </button>
             </div>
           </div>
 

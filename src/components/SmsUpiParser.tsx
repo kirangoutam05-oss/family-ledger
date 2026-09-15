@@ -83,7 +83,6 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
       status: parsedPreview.status || 'verified',
       greyAreaReason: parsedPreview.greyAreaReason,
       contextQuestion: parsedPreview.contextQuestion,
-      splitRatio: parsedPreview.splitRatio || { husband: 50, wife: 50 },
       notes: parsedPreview.notes || '',
     };
 

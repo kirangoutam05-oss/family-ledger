@@ -4,7 +4,6 @@ import {
   SpenderId,
   Transaction,
   CategoryId,
-  SplitType,
   SavingsGoal,
   DeviceIdentity,
 } from './types';
@@ -18,7 +17,6 @@ import { BudgetAlerts } from './components/BudgetAlerts';
 import { DeviceSyncModal } from './components/DeviceSyncModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
-import { SettleUpModal } from './components/SettleUpModal';
 import { LiveOnMobileModal } from './components/LiveOnMobileModal';
 import { HouseholdSetupScreen } from './components/HouseholdSetupScreen';
 import { WhoAreYouScreen } from './components/WhoAreYouScreen';
@@ -76,7 +74,6 @@ export default function App() {
 
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showSettleUpModal, setShowSettleUpModal] = useState(false);
   const [showLiveMobileModal, setShowLiveMobileModal] = useState(false);
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -264,13 +261,7 @@ export default function App() {
   };
 
   // Resolve grey area context
-  const handleResolveGreyArea = async (
-    transactionId: string,
-    category: CategoryId,
-    splitType: SplitType,
-    customHusbandPercent?: number,
-    note?: string
-  ) => {
+  const handleResolveGreyArea = async (transactionId: string, category: CategoryId, note?: string) => {
     setIsSyncing(true);
     try {
       const res = await fetch('/api/ledger/resolve-grey', {
@@ -279,8 +270,6 @@ export default function App() {
         body: JSON.stringify({
           transactionId,
           category,
-          splitType,
-          customHusbandPercent,
           note,
         }),
       });
@@ -292,24 +281,10 @@ export default function App() {
         setLedger((prev) => {
           const updatedTxs = prev.transactions.map((t) => {
             if (t.id === transactionId) {
-              let hSplit = 50;
-              let wSplit = 50;
-              if (splitType === 'husband-full') {
-                hSplit = 100;
-                wSplit = 0;
-              } else if (splitType === 'wife-full') {
-                hSplit = 0;
-                wSplit = 100;
-              } else if (splitType === 'custom' && customHusbandPercent !== undefined) {
-                hSplit = customHusbandPercent;
-                wSplit = 100 - customHusbandPercent;
-              }
-
               return {
                 ...t,
                 status: 'resolved' as const,
                 category,
-                splitRatio: { husband: hSplit, wife: wSplit },
                 notes: note ? (t.notes ? `${t.notes} • ${note}` : note) : t.notes,
               };
             }
@@ -466,7 +441,6 @@ export default function App() {
               onSelectSpender={setActiveSpender}
               onResolveGreyArea={handleOpenGreyAreaDirect}
               onEditTransaction={(tx) => setEditingTransaction(tx)}
-              onSettleUp={() => setShowSettleUpModal(true)}
             />
           )}
 
@@ -623,14 +597,6 @@ export default function App() {
           onDelete={handleDeleteTransaction}
         />
       )}
-
-      {/* Settlement Balance Modal */}
-      <SettleUpModal
-        isOpen={showSettleUpModal}
-        onClose={() => setShowSettleUpModal(false)}
-        ledger={ledger}
-        onAddTransaction={handleAddTransaction}
-      />
 
       {/* Live On Mobile & QR Code Modal (invite your partner to install) */}
       <LiveOnMobileModal

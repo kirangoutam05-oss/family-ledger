@@ -1,7 +1,5 @@
 export type SpenderId = 'husband' | 'wife';
 
-export type SplitType = '50-50' | 'husband-full' | 'wife-full' | 'custom';
-
 export type CategoryId =
   | 'dining'
   | 'groceries'
@@ -40,16 +38,9 @@ export interface Transaction {
   greyAreaReason?: string;
   contextQuestion?: string;
   contextResolution?: {
-    splitType: SplitType;
-    customHusbandPercent?: number;
     note?: string;
     resolvedAt?: string;
   };
-  splitRatio: {
-    husband: number; // percentage, e.g. 50
-    wife: number; // percentage, e.g. 50
-  };
-  isSettlement?: boolean;
   notes?: string;
 }
 

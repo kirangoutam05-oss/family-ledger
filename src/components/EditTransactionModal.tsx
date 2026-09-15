@@ -7,11 +7,9 @@ import {
   CheckCircle2,
   ShieldAlert,
   UserCheck,
-  Calendar,
   CreditCard,
   Tag,
   FileText,
-  Percent,
 } from 'lucide-react';
 import { Transaction, Category, SpenderId, CategoryId } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon } from '../utils/helpers';
@@ -54,16 +52,6 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash'>(
     transaction.paymentMode
   );
-  const [splitType, setSplitType] = useState<'50-50' | 'husband-full' | 'wife-full' | 'custom'>(() => {
-    const h = transaction.splitRatio?.husband ?? 50;
-    if (h === 50) return '50-50';
-    if (h === 100) return 'husband-full';
-    if (h === 0) return 'wife-full';
-    return 'custom';
-  });
-  const [customHusbandPercent, setCustomHusbandPercent] = useState<number>(
-    transaction.splitRatio?.husband ?? 50
-  );
   const [notes, setNotes] = useState(transaction.notes || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -77,12 +65,6 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setAmount(transaction.amount);
       setCategory(transaction.category);
       setPaymentMode(transaction.paymentMode);
-      const h = transaction.splitRatio?.husband ?? 50;
-      if (h === 50) setSplitType('50-50');
-      else if (h === 100) setSplitType('husband-full');
-      else if (h === 0) setSplitType('wife-full');
-      else setSplitType('custom');
-      setCustomHusbandPercent(h);
       setNotes(transaction.notes || '');
       setShowDeleteConfirm(false);
       setErrorMsg(null);
@@ -104,21 +86,12 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
 
-    let hSplit = 50;
-    if (splitType === 'husband-full') hSplit = 100;
-    else if (splitType === 'wife-full') hSplit = 0;
-    else if (splitType === 'custom') hSplit = customHusbandPercent;
-
     try {
       await onSave(transaction.id, {
         title: title.trim(),
         amount: Number(amount),
         category,
         paymentMode,
-        splitRatio: {
-          husband: hSplit,
-          wife: 100 - hSplit,
-        },
         notes: notes.trim() || undefined,
       });
       onClose();
@@ -274,81 +247,6 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </div>
             </div>
 
-            {/* Split Ratio */}
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                Split Ratio Between Couple
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setSplitType('50-50')}
-                  className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
-                    splitType === '50-50'
-                      ? 'bg-[#007AFF] border-[#007AFF] text-white shadow-xs'
-                      : 'border-black/[0.08] dark:border-white/[0.08] text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  50 / 50 Shared
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSplitType('husband-full')}
-                  className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
-                    splitType === 'husband-full'
-                      ? 'bg-[#007AFF] border-[#007AFF] text-white shadow-xs'
-                      : 'border-black/[0.08] dark:border-white/[0.08] text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  100% {husbandName}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSplitType('wife-full')}
-                  className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
-                    splitType === 'wife-full'
-                      ? 'bg-[#007AFF] border-[#007AFF] text-white shadow-xs'
-                      : 'border-black/[0.08] dark:border-white/[0.08] text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  100% {wifeName}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSplitType('custom')}
-                  className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
-                    splitType === 'custom'
-                      ? 'bg-[#007AFF] border-[#007AFF] text-white shadow-xs'
-                      : 'border-black/[0.08] dark:border-white/[0.08] text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  Custom %
-                </button>
-              </div>
-
-              {splitType === 'custom' && (
-                <div className="mt-3 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-black/[0.04] dark:border-white/[0.06] space-y-2">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-[#007AFF]">
-                      {husbandName}: {customHusbandPercent}%
-                    </span>
-                    <span className="text-purple-500">
-                      {wifeName}: {100 - customHusbandPercent}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={customHusbandPercent}
-                    onChange={(e) => setCustomHusbandPercent(Number(e.target.value))}
-                    className="w-full accent-[#007AFF]"
-                  />
-                </div>
-              )}
-            </div>
-
             {/* Payment Mode */}
             <div>
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
@@ -471,13 +369,6 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 <div className="flex items-center gap-2 text-neutral-600 dark:text-neutral-300">
                   <Tag className="w-3.5 h-3.5 text-neutral-400" />
                   <span>Category: {currentCategory.name}</span>
-                </div>
-                <div className="flex items-center gap-2 text-neutral-600 dark:text-neutral-300">
-                  <Percent className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>
-                    Split: {husbandName} {transaction.splitRatio?.husband}% / {wifeName}{' '}
-                    {transaction.splitRatio?.wife}%
-                  </span>
                 </div>
                 {transaction.bankName && (
                   <div className="flex items-center gap-2 text-neutral-600 dark:text-neutral-300">

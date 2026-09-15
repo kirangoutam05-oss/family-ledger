@@ -58,7 +58,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl overflow-hidden shadow-xs border border-black/[0.08] dark:border-white/[0.1] shrink-0 flex items-center justify-center">
               <img
-                src="/app-logo.jpg?v=3"
+                src="/app-logo.jpg?v=4"
                 alt="Couple Ledger Logo"
                 className="w-full h-full object-cover object-center block"
                 referrerPolicy="no-referrer"

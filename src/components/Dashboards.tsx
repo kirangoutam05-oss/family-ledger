@@ -7,16 +7,14 @@ import {
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon } from '../utils/helpers';
 import {
   TrendingDown,
-  Scale,
+  Users,
   CheckCircle2,
   HelpCircle,
   ArrowRight,
   Search,
-  SlidersHorizontal,
   X,
   Lock,
   Edit3,
-  ShieldCheck,
 } from 'lucide-react';
 
 interface DashboardsProps {
@@ -26,7 +24,6 @@ interface DashboardsProps {
   onSelectSpender: (spender: SpenderId | 'shared') => void;
   onResolveGreyArea: (transactionId: string) => void;
   onEditTransaction: (transaction: Transaction) => void;
-  onSettleUp: () => void;
 }
 
 export const Dashboards: React.FC<DashboardsProps> = ({
@@ -35,7 +32,6 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   authenticatedUser,
   onResolveGreyArea,
   onEditTransaction,
-  onSettleUp,
 }) => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,40 +49,15 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     .filter((t) => t.type === 'debit')
     .reduce((sum, t) => sum + t.amount, 0);
 
-  // Shared vs Individual split calculation
-  let husbandPaidForShared = 0;
-  let wifePaidForShared = 0;
-  let husbandShareOwed = 0;
-  let wifeShareOwed = 0;
-  let settledFromWife = 0;
-  let settledFromHusband = 0;
-
-  transactions.forEach((tx) => {
-    if (tx.type !== 'debit') return;
-
-    if (tx.isSettlement) {
-      if (tx.spender === 'wife') settledFromWife += tx.amount;
-      else settledFromHusband += tx.amount;
-      return;
-    }
-
-    const hPercent = tx.splitRatio.husband;
-    const wPercent = tx.splitRatio.wife;
-
-    // Shared expense
-    if (!(hPercent === 100 && wPercent === 0) && !(wPercent === 100 && hPercent === 0)) {
-      if (tx.spender === 'husband') {
-        husbandPaidForShared += tx.amount;
-      } else {
-        wifePaidForShared += tx.amount;
-      }
-      husbandShareOwed += (tx.amount * hPercent) / 100;
-      wifeShareOwed += (tx.amount * wPercent) / 100;
-    }
-  });
-
-  // Settlement: Husband net = (husbandPaidForShared - husbandShareOwed) - settledFromWife + settledFromHusband
-  const husbandNet = (husbandPaidForShared - husbandShareOwed) - settledFromWife + settledFromHusband;
+  // Household spending breakdown by partner (informational — not a debt/balance)
+  const husbandSpent = transactions
+    .filter((t) => t.type === 'debit' && t.spender === 'husband')
+    .reduce((sum, t) => sum + t.amount, 0);
+  const wifeSpent = transactions
+    .filter((t) => t.type === 'debit' && t.spender === 'wife')
+    .reduce((sum, t) => sum + t.amount, 0);
+  const householdTotal = husbandSpent + wifeSpent;
+  const husbandSharePercent = householdTotal > 0 ? Math.round((husbandSpent / householdTotal) * 100) : 50;
 
   // Category breakdown
   const categoryTotals: Record<string, { total: number; count: number }> = {};
@@ -142,45 +113,34 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           </div>
         </div>
 
-        {/* Shared Settlement Card */}
+        {/* Household Spending Breakdown Card */}
         <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            <span>Shared Settlement</span>
+            <span>Household Spending</span>
             <span className="p-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-              <Scale className="w-3.5 h-3.5" />
+              <Users className="w-3.5 h-3.5" />
             </span>
           </div>
 
-          <div className="my-2">
-            {Math.abs(husbandNet) < 1 ? (
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="w-5 h-5" />
-                <span className="text-lg font-medium">All Settled 50/50</span>
-              </div>
-            ) : (
-              <div>
-                <div className="text-xs text-neutral-500">
-                  {husbandNet > 0 ? `${wifeName} owes ${husbandName}` : `${husbandName} owes ${wifeName}`}
-                </div>
-                <div className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white mt-0.5">
-                  {formatCurrency(Math.abs(husbandNet), currency)}
-                </div>
-              </div>
-            )}
+          <div className="my-2 space-y-2">
+            <div className="w-full h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden flex">
+              <div className="h-full bg-blue-500" style={{ width: `${husbandSharePercent}%` }} />
+              <div className="h-full bg-purple-500" style={{ width: `${100 - husbandSharePercent}%` }} />
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                {husbandName}: {formatCurrency(husbandSpent, currency)}
+              </span>
+              <span className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                {wifeName}: {formatCurrency(wifeSpent, currency)}
+              </span>
+            </div>
           </div>
 
           <div className="pt-1">
-            {Math.abs(husbandNet) >= 1 ? (
-              <button
-                onClick={onSettleUp}
-                className="text-xs font-medium text-[#007AFF] hover:text-blue-700 flex items-center gap-1 transition-colors"
-              >
-                <span>Record Settlement</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            ) : (
-              <span className="text-xs text-neutral-400">No pending balance</span>
-            )}
+            <span className="text-xs text-neutral-400">Combined household total, no balance owed</span>
           </div>
         </div>
 

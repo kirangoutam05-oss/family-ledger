@@ -233,7 +233,6 @@ function parseSmsHeuristic(
     greyAreaReason,
     contextQuestion,
     spender: defaultSpender,
-    splitRatio: { husband: 50, wife: 50 },
     date: new Date().toISOString(),
   };
 }
@@ -306,9 +305,6 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
         ? (rawTx.paymentMode as any)
         : 'UPI';
 
-    const hPercent = Math.max(0, Math.min(100, Math.round(Number(rawTx.splitRatio?.husband ?? 50))));
-    const wPercent = 100 - hPercent;
-
     const tx: Transaction = {
       id: rawTx.id && typeof rawTx.id === 'string' ? sanitizeString(rawTx.id, 50) : `tx-${Date.now()}`,
       title: cleanTitle,
@@ -324,8 +320,6 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
       status: rawTx.status === 'grey_area' ? 'grey_area' : rawTx.status === 'resolved' ? 'resolved' : 'verified',
       greyAreaReason: sanitizeString(rawTx.greyAreaReason, 150) || undefined,
       contextQuestion: sanitizeString(rawTx.contextQuestion, 200) || undefined,
-      splitRatio: { husband: hPercent, wife: wPercent },
-      isSettlement: Boolean(rawTx.isSettlement),
       notes: sanitizeString(rawTx.notes, 250) || undefined,
     };
 
@@ -389,7 +383,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
 // Resolve grey area context
 app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
   try {
-    const { transactionId, category, splitType, customHusbandPercent, note } = req.body;
+    const { transactionId, category, note } = req.body;
     if (!transactionId || typeof transactionId !== 'string') {
       return res.status(400).json({ error: 'Valid transactionId is required' });
     }
@@ -408,24 +402,8 @@ app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
 
     tx.status = 'resolved';
 
-    let hSplit = 50;
-    let wSplit = 50;
-    if (splitType === 'husband-full') {
-      hSplit = 100;
-      wSplit = 0;
-    } else if (splitType === 'wife-full') {
-      hSplit = 0;
-      wSplit = 100;
-    } else if (splitType === 'custom' && typeof customHusbandPercent === 'number') {
-      hSplit = Math.max(0, Math.min(100, Math.round(customHusbandPercent)));
-      wSplit = 100 - hSplit;
-    }
-
-    tx.splitRatio = { husband: hSplit, wife: wSplit };
     const cleanNote = sanitizeString(note, 200);
     tx.contextResolution = {
-      splitType,
-      customHusbandPercent: hSplit,
       note: cleanNote,
       resolvedAt: new Date().toISOString(),
     };
@@ -489,10 +467,6 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
         if (['UPI', 'Card', 'NetBanking', 'Cash'].includes(updates.paymentMode)) {
           tx.paymentMode = updates.paymentMode;
         }
-      }
-      if (updates.splitRatio && typeof updates.splitRatio === 'object') {
-        const h = Math.max(0, Math.min(100, Math.round(Number(updates.splitRatio.husband ?? 50))));
-        tx.splitRatio = { husband: h, wife: 100 - h };
       }
       if (updates.notes !== undefined) {
         tx.notes = sanitizeString(updates.notes, 250) || undefined;
@@ -705,8 +679,7 @@ Determine:
 7. upiRef: UPI reference or transaction ID if present
 8. isGreyArea: boolean (true if payee is an individual or ATM or ambiguous transfer)
 9. greyAreaReason: why context is needed
-10. contextQuestion: A polite, natural question addressing ${safeSpender === 'husband' ? safeHusbandName : safeWifeName} asking for the exact nature of the spend (e.g. household repair vs personal loan).
-11. suggestedSplit: "50-50" | "husband-full" | "wife-full"`;
+10. contextQuestion: A polite, natural question addressing ${safeSpender === 'husband' ? safeHusbandName : safeWifeName} asking for the exact nature of the spend (e.g. household repair vs personal loan).`;
 
       const geminiResponse = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -726,7 +699,6 @@ Determine:
               isGreyArea: { type: Type.BOOLEAN },
               greyAreaReason: { type: Type.STRING },
               contextQuestion: { type: Type.STRING },
-              suggestedSplit: { type: Type.STRING },
             },
             required: ['title', 'amount', 'type', 'category', 'isGreyArea'],
           },
@@ -764,11 +736,6 @@ Determine:
         greyAreaReason: sanitizeString(parsedJson.greyAreaReason, 150) || '',
         contextQuestion: sanitizeString(parsedJson.contextQuestion, 200) || '',
         spender: safeSpender,
-        splitRatio: parsedJson.suggestedSplit === 'husband-full'
-          ? { husband: 100, wife: 0 }
-          : parsedJson.suggestedSplit === 'wife-full'
-          ? { husband: 0, wife: 100 }
-          : { husband: 50, wife: 50 },
         date: new Date().toISOString(),
       };
 

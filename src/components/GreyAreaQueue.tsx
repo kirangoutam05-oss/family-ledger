@@ -2,24 +2,15 @@ import React, { useState } from 'react';
 import {
   HelpCircle,
   CheckCircle2,
-  Users,
-  User,
-  Sliders,
   Lock,
 } from 'lucide-react';
-import { Transaction, CategoryId, SplitType, LedgerState, SpenderId } from '../types';
+import { Transaction, CategoryId, LedgerState, SpenderId } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon } from '../utils/helpers';
 
 interface GreyAreaQueueProps {
   ledger: LedgerState;
   authenticatedUser: SpenderId;
-  onResolve: (
-    transactionId: string,
-    category: CategoryId,
-    splitType: SplitType,
-    customHusbandPercent?: number,
-    note?: string
-  ) => Promise<void>;
+  onResolve: (transactionId: string, category: CategoryId, note?: string) => Promise<void>;
   focusedTransactionId?: string | null;
 }
 
@@ -40,8 +31,6 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
   );
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('bills');
-  const [selectedSplitType, setSelectedSplitType] = useState<SplitType>('50-50');
-  const [customPercent, setCustomPercent] = useState<number>(50);
   const [contextNote, setContextNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -51,7 +40,6 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
     setActiveTxId(tx.id);
     setSelectedCategory(tx.category !== 'grey_area' ? tx.category : 'bills');
     setContextNote(tx.notes || '');
-    setSelectedSplitType('50-50');
   };
 
   const handleConfirmResolve = async () => {
@@ -59,13 +47,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onResolve(
-        activeTx.id,
-        selectedCategory,
-        selectedSplitType,
-        customPercent,
-        contextNote
-      );
+      await onResolve(activeTx.id, selectedCategory, contextNote);
       const remaining = greyAreaTransactions.filter((t) => t.id !== activeTx.id);
       setActiveTxId(remaining[0]?.id || null);
     } catch (err) {
@@ -185,84 +167,6 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                   <p className="text-xs italic text-neutral-800 dark:text-neutral-200">
                     "{activeTx.contextQuestion || 'How should this transaction be categorized and split?'}"
                   </p>
-                </div>
-
-                {/* Split Option */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300 block">
-                    Split Method
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSplitType('50-50')}
-                      className={`p-2.5 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
-                        selectedSplitType === '50-50'
-                          ? 'border-[#007AFF] bg-blue-50/40 dark:bg-blue-950/20 text-[#007AFF] font-semibold'
-                          : 'border-black/[0.04] dark:border-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:bg-black/[0.02]'
-                      }`}
-                    >
-                      <Users className="w-4 h-4" />
-                      <span>50/50 Shared</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSplitType('husband-full')}
-                      className={`p-2.5 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
-                        selectedSplitType === 'husband-full'
-                          ? 'border-[#007AFF] bg-blue-50/40 dark:bg-blue-950/20 text-[#007AFF] font-semibold'
-                          : 'border-black/[0.04] dark:border-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:bg-black/[0.02]'
-                      }`}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>100% {husbandName}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSplitType('wife-full')}
-                      className={`p-2.5 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
-                        selectedSplitType === 'wife-full'
-                          ? 'border-[#007AFF] bg-blue-50/40 dark:bg-blue-950/20 text-[#007AFF] font-semibold'
-                          : 'border-black/[0.04] dark:border-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:bg-black/[0.02]'
-                      }`}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>100% {wifeName}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSplitType('custom')}
-                      className={`p-2.5 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
-                        selectedSplitType === 'custom'
-                          ? 'border-[#007AFF] bg-blue-50/40 dark:bg-blue-950/20 text-[#007AFF] font-semibold'
-                          : 'border-black/[0.04] dark:border-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:bg-black/[0.02]'
-                      }`}
-                    >
-                      <Sliders className="w-4 h-4" />
-                      <span>Custom %</span>
-                    </button>
-                  </div>
-
-                  {selectedSplitType === 'custom' && (
-                    <div className="p-3 bg-black/[0.02] dark:bg-white/[0.04] rounded-xl space-y-2 mt-2">
-                      <div className="flex items-center justify-between text-xs font-medium">
-                        <span>{husbandName}: {customPercent}%</span>
-                        <span>{wifeName}: {100 - customPercent}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="5"
-                        value={customPercent}
-                        onChange={(e) => setCustomPercent(Number(e.target.value))}
-                        className="w-full accent-[#007AFF]"
-                      />
-                    </div>
-                  )}
                 </div>
 
                 {/* Category Picker */}

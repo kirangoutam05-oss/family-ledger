@@ -11,8 +11,8 @@
   "background_color": "#F2F2F7",
   "icons": [
     {
-      "src": "/app-logo.jpg",
-      "sizes": "512x512",
+      "src": "/app-logo.jpg?v=4",
+      "sizes": "768x768",
       "type": "image/jpeg",
       "purpose": "any maskable"
     },

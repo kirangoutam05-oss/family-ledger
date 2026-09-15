@@ -87,7 +87,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shadow-xs border border-black/[0.08] dark:border-white/[0.12] shrink-0 flex items-center justify-center">
             <img
-              src="/app-logo.jpg?v=3"
+              src="/app-logo.jpg?v=4"
               alt="Couple Ledger Logo"
               className="w-full h-full object-cover object-center block"
               referrerPolicy="no-referrer"

@@ -65,7 +65,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
           <div className="flex flex-col items-center text-center space-y-3">
             <div className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
               <img
-                src="/app-logo.jpg?v=3"
+                src="/app-logo.jpg?v=4"
                 alt="Family Ledger Logo"
                 className="w-full h-full object-cover object-center block"
                 referrerPolicy="no-referrer"
