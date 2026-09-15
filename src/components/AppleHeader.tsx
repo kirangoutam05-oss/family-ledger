@@ -5,7 +5,6 @@ import {
   ChevronDown,
   Check,
   Plus,
-  UserPlus,
   Lock,
 } from 'lucide-react';
 import { SpenderId } from '../types';
@@ -24,7 +23,6 @@ interface AppleHeaderProps {
   onOpenAddModal: () => void;
   isSyncing: boolean;
   lastSyncTime: string;
-  onOpenLiveMobile?: () => void;
   onLockLedger?: () => void;
   onSwitchUser?: () => void;
 }
@@ -42,14 +40,10 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
   onOpenSyncModal,
   onOpenAddModal,
   isSyncing,
-  onOpenLiveMobile,
   onLockLedger,
   onSwitchUser,
 }) => {
   const [spenderMenuOpen, setSpenderMenuOpen] = useState(false);
-
-  const activeDotClass =
-    activeSpender === 'husband' ? 'bg-blue-500' : activeSpender === 'wife' ? 'bg-purple-500' : 'bg-neutral-400';
 
   return (
     <header
@@ -77,12 +71,11 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
 
               <button
                 onClick={() => setSpenderMenuOpen((v) => !v)}
-                className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-0.5 transition-colors active:scale-90 shrink-0"
+                className="p-2 rounded-full bg-black/[0.06] dark:bg-white/[0.1] hover:bg-black/[0.1] dark:hover:bg-white/[0.16] flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1"
                 title="Switch between Kiran and Mageswari"
               >
-                <span className={`w-2 h-2 rounded-full ${activeDotClass}`} />
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 sm:w-5 sm:h-5 text-neutral-600 dark:text-neutral-300 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
@@ -148,17 +141,6 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {onOpenLiveMobile && (
-            <button
-              onClick={onOpenLiveMobile}
-              className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-black/[0.05] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-neutral-800 dark:text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 shadow-xs"
-              title="Invite your partner to install this app"
-            >
-              <UserPlus className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#007AFF]" />
-              <span className="hidden lg:inline">Invite Partner</span>
-            </button>
-          )}
-
           <button
             onClick={onOpenNotifications}
             className="relative p-2 rounded-xl text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-90"

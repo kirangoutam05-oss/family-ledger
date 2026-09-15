@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserCog, Save, CheckCircle2, LogOut, Smartphone } from 'lucide-react';
+import { UserCog, Save, CheckCircle2, LogOut, Smartphone, UserPlus } from 'lucide-react';
 import { LedgerState, SpenderId } from '../types';
 
 interface AccountSettingsProps {
@@ -13,6 +13,7 @@ interface AccountSettingsProps {
   }) => Promise<void>;
   onSwitchUser: () => void;
   onOpenSyncModal: () => void;
+  onOpenLiveMobile: () => void;
 }
 
 const CURRENCIES = [
@@ -28,6 +29,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   onUpdateHousehold,
   onSwitchUser,
   onOpenSyncModal,
+  onOpenLiveMobile,
 }) => {
   const [familyName, setFamilyName] = useState(ledger.familyName);
   const [husbandName, setHusbandName] = useState(ledger.husbandName);
@@ -196,6 +198,25 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           )}
         </button>
       </form>
+
+      {/* Invite partner shortcut */}
+      <button
+        type="button"
+        onClick={onOpenLiveMobile}
+        className="w-full p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex items-center justify-between gap-3 hover:border-[#007AFF] transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-[#007AFF] shrink-0">
+            <UserPlus className="w-5 h-5" />
+          </div>
+          <div className="text-left">
+            <div className="text-sm font-semibold text-neutral-900 dark:text-white">Invite Partner</div>
+            <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
+              Get a QR code to install this app on their phone
+            </div>
+          </div>
+        </div>
+      </button>
 
       {/* Devices & sync shortcut */}
       <button

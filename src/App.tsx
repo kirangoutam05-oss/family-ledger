@@ -529,7 +529,7 @@ export default function App() {
   // Wait for the initial fetch before deciding which screen to show, so a
   // returning user doesn't flash the setup screen while the real ledger loads.
   if (!isLedgerLoaded) {
-    return <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#000000]" />;
+    return <div className="min-h-screen bg-gradient-to-b from-[#F7F7FB] to-[#EBEBF0] dark:from-[#0A0A0C] dark:to-[#000000]" />;
   }
 
   if (!ledger.setupComplete) {
@@ -548,7 +548,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white flex flex-col font-sans transition-colors selection:bg-blue-500/20">
+    <div className="min-h-screen bg-gradient-to-b from-[#F7F7FB] to-[#EBEBF0] dark:from-[#0A0A0C] dark:to-[#000000] text-neutral-900 dark:text-white flex flex-col font-sans transition-colors selection:bg-blue-500/20">
       <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col">
         {/* Apple Top Navigation Bar */}
         <AppleHeader
@@ -565,7 +565,6 @@ export default function App() {
           onOpenAddModal={() => setShowAddModal(true)}
           isSyncing={isSyncing}
           lastSyncTime={ledger.lastSyncTime}
-          onOpenLiveMobile={() => setShowLiveMobileModal(true)}
           onLockLedger={handleSwitchUser}
           onSwitchUser={handleSwitchUser}
         />
@@ -641,6 +640,7 @@ export default function App() {
                   onUpdateHousehold={handleUpdateHousehold}
                   onSwitchUser={handleSwitchUser}
                   onOpenSyncModal={() => setShowSyncModal(true)}
+                  onOpenLiveMobile={() => setShowLiveMobileModal(true)}
                 />
               )}
             </motion.div>
