@@ -50,7 +50,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [title, setTitle] = useState(transaction.title);
   const [amount, setAmount] = useState<number | ''>(transaction.amount);
   const [category, setCategory] = useState<CategoryId>(transaction.category);
-  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash'>(
+  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater'>(
     transaction.paymentMode
   );
   const [notes, setNotes] = useState(transaction.notes || '');
@@ -267,7 +267,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 Payment Mode
               </label>
               <div className="grid grid-cols-2 gap-2">
-                {(['UPI', 'Card', 'NetBanking', 'Cash'] as const).map((mode) => (
+                {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"

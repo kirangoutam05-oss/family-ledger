@@ -128,14 +128,20 @@ export function getPaymentModeIcon(mode: string, className = 'w-4 h-4') {
     case 'Cash':
       return React.createElement(Banknote, { className });
     case 'NetBanking':
+    case 'AmazonPayLater':
     default:
       return React.createElement(Wallet, { className });
   }
 }
 
-// The stored value stays 'Card' (matches existing data, the SMS/Gemini parser
-// schema, and server-side validation) — only the label shown to people says
-// "Credit Card".
+// The stored values stay 'Card' / 'AmazonPayLater' (matches existing data,
+// the SMS/Gemini parser schema, and server-side validation) — only the
+// label shown to people is spelled out.
+const PAYMENT_MODE_LABELS: Record<string, string> = {
+  Card: 'Credit Card',
+  AmazonPayLater: 'Amazon Pay Later',
+};
+
 export function getPaymentModeLabel(mode: string): string {
-  return mode === 'Card' ? 'Credit Card' : mode;
+  return PAYMENT_MODE_LABELS[mode] || mode;
 }

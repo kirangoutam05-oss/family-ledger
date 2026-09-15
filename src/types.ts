@@ -56,7 +56,7 @@ export interface Transaction {
   date: string; // ISO string or YYYY-MM-DD HH:mm
   spender: SpenderId;
   category: CategoryId;
-  paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash';
+  paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater';
   upiRef?: string;
   bankName?: string;
   rawSms?: string;

@@ -25,7 +25,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<CategoryId>('groceries');
-  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash'>('UPI');
+  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater'>('UPI');
   const [notes, setNotes] = useState('');
   const [dateStr, setDateStr] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
   const [timeStr, setTimeStr] = useState(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
@@ -217,7 +217,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               Payment Mode
             </label>
             <div className="grid grid-cols-2 gap-1.5">
-              {(['UPI', 'Card', 'NetBanking', 'Cash'] as const).map((mode) => (
+              {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"

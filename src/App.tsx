@@ -602,7 +602,6 @@ export default function App() {
                   ledger={ledger}
                   activeSpender={activeSpender}
                   onAddTransaction={handleAddTransaction}
-                  onResolveGreyArea={handleOpenGreyAreaDirect}
                 />
               )}
 

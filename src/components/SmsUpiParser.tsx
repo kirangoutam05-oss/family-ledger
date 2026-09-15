@@ -4,22 +4,21 @@ import {
   CheckCircle2,
   HelpCircle,
   RefreshCw,
+  Clock,
 } from 'lucide-react';
-import { Transaction, SpenderId, LedgerState } from '../types';
+import { Transaction, SpenderId, LedgerState, CategoryId } from '../types';
 import { formatCurrency, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
 interface SmsUpiParserProps {
   ledger: LedgerState;
   activeSpender: SpenderId | 'shared';
   onAddTransaction: (transaction: Transaction) => Promise<void>;
-  onResolveGreyArea: (transactionId: string) => void;
 }
 
 export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   ledger,
   activeSpender,
   onAddTransaction,
-  onResolveGreyArea,
 }) => {
   const [smsInput, setSmsInput] = useState('');
   const [selectedSpender, setSelectedSpender] = useState<SpenderId>(
@@ -29,6 +28,12 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   const [parsedPreview, setParsedPreview] = useState<Partial<Transaction> | null>(null);
   const [parseSource, setParseSource] = useState<'gemini' | 'heuristic' | null>(null);
   const [addedSuccess, setAddedSuccess] = useState(false);
+
+  // When the parse comes back ambiguous, its context is resolved right here
+  // in the same card instead of forcing a save-then-jump-to-Grey-Areas round
+  // trip — this is what the category picker/note below feed.
+  const [inlineCategory, setInlineCategory] = useState<CategoryId>('bills');
+  const [inlineNote, setInlineNote] = useState('');
 
   const { categories, husbandName, wifeName, currency } = ledger;
 
@@ -56,6 +61,14 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
       if (data.success && data.transaction) {
         setParsedPreview(data.transaction);
         setParseSource(data.source);
+        if (data.transaction.status === 'grey_area') {
+          setInlineCategory(
+            data.transaction.category && data.transaction.category !== 'grey_area'
+              ? data.transaction.category
+              : 'bills'
+          );
+          setInlineNote('');
+        }
       }
     } catch (err) {
       console.error('Failed to parse SMS:', err);
@@ -64,7 +77,11 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
     }
   };
 
-  // Add parsed transaction to ledger
+  const isGreyArea = parsedPreview?.status === 'grey_area';
+
+  // Add parsed transaction to ledger — an ambiguous ("grey area") parse is
+  // resolved with the inline category/note right now, so it saves already
+  // categorized instead of needing a second trip through Grey Areas.
   const handleConfirmAndAdd = async () => {
     if (!parsedPreview) return;
 
@@ -75,32 +92,54 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
       type: parsedPreview.type || 'debit',
       date: parsedPreview.date || new Date().toISOString(),
       spender: selectedSpender,
-      category: parsedPreview.category || 'bills',
+      category: isGreyArea ? inlineCategory : parsedPreview.category || 'bills',
       paymentMode: parsedPreview.paymentMode || 'UPI',
       upiRef: parsedPreview.upiRef,
       bankName: parsedPreview.bankName,
       rawSms: smsInput,
-      status: parsedPreview.status || 'verified',
-      greyAreaReason: parsedPreview.greyAreaReason,
-      contextQuestion: parsedPreview.contextQuestion,
-      notes: parsedPreview.notes || '',
+      status: isGreyArea ? 'verified' : parsedPreview.status || 'verified',
+      notes: isGreyArea ? inlineNote.trim() : parsedPreview.notes || '',
     };
 
     await onAddTransaction(newTx);
     setAddedSuccess(true);
     setParsedPreview(null);
     setSmsInput('');
+  };
 
-    // If it was a grey area, auto-trigger the context modal
-    if (newTx.status === 'grey_area') {
-      setTimeout(() => {
-        onResolveGreyArea(newTx.id);
-      }, 400);
-    }
+  // Escape hatch for genuine ambiguity (e.g. needs the partner's input) —
+  // saves it into the Grey Areas queue to resolve later instead of forcing
+  // a category choice right now.
+  const handleSaveForLater = async () => {
+    if (!parsedPreview) return;
+
+    const newTx: Transaction = {
+      id: `tx-${Date.now()}`,
+      title: parsedPreview.title || 'UPI Transaction',
+      amount: parsedPreview.amount || 0,
+      type: parsedPreview.type || 'debit',
+      date: parsedPreview.date || new Date().toISOString(),
+      spender: selectedSpender,
+      category: 'grey_area',
+      paymentMode: parsedPreview.paymentMode || 'UPI',
+      upiRef: parsedPreview.upiRef,
+      bankName: parsedPreview.bankName,
+      rawSms: smsInput,
+      status: 'grey_area',
+      greyAreaReason: parsedPreview.greyAreaReason,
+      contextQuestion: parsedPreview.contextQuestion,
+      notes: '',
+    };
+
+    await onAddTransaction(newTx);
+    setAddedSuccess(true);
+    setParsedPreview(null);
+    setSmsInput('');
   };
 
   const previewCat =
-    categories.find((c) => c.id === parsedPreview?.category) || categories[0];
+    categories.find((c) => c.id === (isGreyArea ? inlineCategory : parsedPreview?.category)) ||
+    categories[0];
 
   return (
     <div className="space-y-6">
@@ -201,10 +240,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             <div className="flex items-center gap-3">
               <div
                 className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0"
-                style={{
-                  backgroundColor:
-                    parsedPreview.status === 'grey_area' ? '#FF9500' : previewCat.color,
-                }}
+                style={{ backgroundColor: previewCat.color }}
               >
                 {getCategoryIcon(previewCat.icon, 'w-5 h-5')}
               </div>
@@ -266,13 +302,60 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             </div>
           </div>
 
-          {/* Grey Area Alert Callout */}
-          {parsedPreview.status === 'grey_area' && (
-            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <div>
-                <span className="font-semibold">Context Required: </span>
-                <span>{parsedPreview.contextQuestion || 'Ambiguous payment. You can provide context after adding.'}</span>
+          {/* Clarify inline, right here, instead of saving first and
+              resolving on a separate Grey Areas screen. */}
+          {isGreyArea && (
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 space-y-3">
+              <div className="flex items-center gap-2 text-xs text-amber-900 dark:text-amber-200">
+                <HelpCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-semibold">Context needed: </span>
+                  <span>{parsedPreview.contextQuestion || 'This looks like an ambiguous transfer — pick the real category below.'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-amber-900 dark:text-amber-200 block">
+                  Assign Category
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {categories
+                    .filter((c) => c.id !== 'grey_area')
+                    .map((cat) => {
+                      const isChosen = inlineCategory === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setInlineCategory(cat.id)}
+                          className={`p-2 rounded-xl border text-xs flex items-center gap-1.5 bg-white transition-all ${
+                            isChosen ? 'ring-2 ring-blue-500 border-blue-200' : 'border-neutral-200 hover:border-neutral-300'
+                          }`}
+                        >
+                          <div
+                            className="w-4 h-4 rounded-md flex items-center justify-center text-white shrink-0"
+                            style={{ backgroundColor: cat.color }}
+                          >
+                            {getCategoryIcon(cat.icon, 'w-2.5 h-2.5')}
+                          </div>
+                          <span className="truncate min-w-0 text-left text-neutral-900 font-medium">{cat.name}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-amber-900 dark:text-amber-200 block">
+                  Context Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={inlineNote}
+                  onChange={(e) => setInlineNote(e.target.value)}
+                  placeholder="e.g., Home maintenance, Electrician repair"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-amber-200 dark:border-amber-900/40 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                />
               </div>
             </div>
           )}
@@ -284,6 +367,16 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             >
               Cancel
             </button>
+            {isGreyArea && (
+              <button
+                onClick={handleSaveForLater}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-1.5 transition-colors"
+                title="Not sure yet? Save it to Grey Areas and resolve it later."
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Not Sure — Save for Later</span>
+              </button>
+            )}
             <button
               onClick={handleConfirmAndAdd}
               className="px-4 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
