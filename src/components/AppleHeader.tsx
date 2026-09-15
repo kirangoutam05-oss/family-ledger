@@ -52,8 +52,11 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
     activeSpender === 'husband' ? 'bg-blue-500' : activeSpender === 'wife' ? 'bg-purple-500' : 'bg-neutral-400';
 
   return (
-    <header className="glass-nav sticky top-0 z-30 border-b border-black/[0.05] dark:border-white/[0.08] transition-colors">
-      <div className="max-w-5xl mx-auto px-3 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
+    <header
+      className="glass-nav sticky top-0 z-30 border-b border-black/[0.05] dark:border-white/[0.08] transition-colors"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
+      <div className="relative max-w-5xl mx-auto px-3 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Brand mark + household name/spender picker */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <img
@@ -72,60 +75,16 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
                 {familyName}
               </button>
 
-              <div className="relative shrink-0">
-                <button
-                  onClick={() => setSpenderMenuOpen((v) => !v)}
-                  className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-0.5 transition-colors active:scale-90"
-                  title="Switch between Kiran and Mageswari"
-                >
-                  <span className={`w-2 h-2 rounded-full ${activeDotClass}`} />
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
-                  />
-                </button>
-
-                <AnimatePresence>
-                  {spenderMenuOpen && (
-                    <>
-                      <button
-                        className="fixed inset-0 z-40 cursor-default"
-                        onClick={() => setSpenderMenuOpen(false)}
-                        aria-label="Close menu"
-                      />
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: -6 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.96, y: -4 }}
-                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                        className="glass-sheet absolute left-0 top-full mt-2 w-44 rounded-2xl border border-black/[0.06] dark:border-white/[0.1] p-1.5 z-50"
-                      >
-                        <button
-                          onClick={() => {
-                            onSelectSpender('husband');
-                            setSpenderMenuOpen(false);
-                          }}
-                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                          <span className="truncate min-w-0 flex-1 text-left">{husbandName}</span>
-                          {activeSpender === 'husband' && <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
-                        </button>
-                        <button
-                          onClick={() => {
-                            onSelectSpender('wife');
-                            setSpenderMenuOpen(false);
-                          }}
-                          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
-                          <span className="truncate min-w-0 flex-1 text-left">{wifeName}</span>
-                          {activeSpender === 'wife' && <Check className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
-                        </button>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
+              <button
+                onClick={() => setSpenderMenuOpen((v) => !v)}
+                className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center gap-0.5 transition-colors active:scale-90 shrink-0"
+                title="Switch between Kiran and Mageswari"
+              >
+                <span className={`w-2 h-2 rounded-full ${activeDotClass}`} />
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
 
               <button
                 onClick={onOpenSyncModal}
@@ -141,6 +100,51 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
             </p>
           </div>
         </div>
+
+        {/* Spender picker dropdown — left-aligned to the screen's content edge
+            (the row's own padding), not to the small chevron trigger, so it
+            doesn't float awkwardly mid-header. */}
+        <AnimatePresence>
+          {spenderMenuOpen && (
+            <>
+              <button
+                className="fixed inset-0 z-40 cursor-default"
+                onClick={() => setSpenderMenuOpen(false)}
+                aria-label="Close menu"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                className="glass-sheet absolute left-3 sm:left-6 top-full mt-2 w-44 rounded-2xl border border-black/[0.06] dark:border-white/[0.1] p-1.5 z-50"
+              >
+                <button
+                  onClick={() => {
+                    onSelectSpender('husband');
+                    setSpenderMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                  <span className="truncate min-w-0 flex-1 text-left">{husbandName}</span>
+                  {activeSpender === 'husband' && <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                </button>
+                <button
+                  onClick={() => {
+                    onSelectSpender('wife');
+                    setSpenderMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                  <span className="truncate min-w-0 flex-1 text-left">{wifeName}</span>
+                  {activeSpender === 'wife' && <Check className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+                </button>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">

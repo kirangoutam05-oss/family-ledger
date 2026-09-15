@@ -8,14 +8,14 @@ import {
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel } from '../utils/helpers';
 import {
   TrendingDown,
+  TrendingUp,
   Users,
-  CheckCircle2,
   HelpCircle,
-  ArrowRight,
   Search,
   X,
   Lock,
   Edit3,
+  BarChart3,
 } from 'lucide-react';
 
 interface DashboardsProps {
@@ -38,6 +38,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 }) => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [trendGranularity, setTrendGranularity] = useState<'day' | 'week' | 'month'>('day');
 
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
@@ -88,20 +89,109 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     return matchesCat && matchesSearch;
   });
 
-  const greyAreaCount = transactions.filter((t) => t.status === 'grey_area').length;
+  const isShared = activeSpender === 'shared';
+
+  // Per-person category totals — the Overview chart overlays both partners'
+  // bars per category; an individual view only ever needed its own total,
+  // already isolated above via relevantTransactions/categoryTotals.
+  const categoryPersonTotals: Record<string, { husband: number; wife: number }> = {};
+  categories.forEach((cat) => {
+    categoryPersonTotals[cat.id] = { husband: 0, wife: 0 };
+  });
+  transactions.forEach((tx) => {
+    if (tx.type === 'debit') {
+      if (!categoryPersonTotals[tx.category]) categoryPersonTotals[tx.category] = { husband: 0, wife: 0 };
+      categoryPersonTotals[tx.category][tx.spender] += tx.amount;
+    }
+  });
 
   // Ranked category spend for the bar chart — highest first, system grey-area bucket excluded
   const categoryBarData = categories
     .filter((cat) => cat.id !== 'grey_area')
-    .map((cat) => ({ cat, spent: categoryTotals[cat.id]?.total || 0 }))
+    .map((cat) => {
+      const split = categoryPersonTotals[cat.id] || { husband: 0, wife: 0 };
+      const spent = isShared ? split.husband + split.wife : categoryTotals[cat.id]?.total || 0;
+      return { cat, spent, husband: split.husband, wife: split.wife };
+    })
     .filter((row) => row.spent > 0)
     .sort((a, b) => b.spent - a.spent);
-  const maxCategorySpend = Math.max(...categoryBarData.map((row) => row.spent), 1);
+  const maxCategorySpend = isShared
+    ? Math.max(...categoryBarData.map((row) => Math.max(row.husband, row.wife)), 1)
+    : Math.max(...categoryBarData.map((row) => row.spent), 1);
+
+  // Spending Trends — the Day/Week/Month filter drives an auto-generated bar
+  // chart of a rolling window (7 days / 6 weeks / 6 months), scoped to
+  // whichever spender is active, same as the rest of this screen.
+  function buildTrendBuckets(txs: Transaction[], granularity: 'day' | 'week' | 'month') {
+    const debits = txs.filter((t) => t.type === 'debit');
+    const now = new Date();
+    const buckets: { key: string; label: string; amount: number }[] = [];
+
+    if (granularity === 'day') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        buckets.push({
+          key: d.toISOString().slice(0, 10),
+          label: d.toLocaleDateString('en-IN', { weekday: 'short' }),
+          amount: 0,
+        });
+      }
+      debits.forEach((tx) => {
+        const key = tx.date.slice(0, 10);
+        const bucket = buckets.find((b) => b.key === key);
+        if (bucket) bucket.amount += tx.amount;
+      });
+    } else if (granularity === 'week') {
+      const mondayOf = (d: Date) => {
+        const monday = new Date(d);
+        const day = monday.getDay();
+        monday.setDate(monday.getDate() + (day === 0 ? -6 : 1 - day));
+        monday.setHours(0, 0, 0, 0);
+        return monday;
+      };
+      for (let i = 5; i >= 0; i--) {
+        const ref = new Date(now);
+        ref.setDate(ref.getDate() - i * 7);
+        const monday = mondayOf(ref);
+        buckets.push({
+          key: monday.toISOString().slice(0, 10),
+          label: `${monday.getDate()}/${monday.getMonth() + 1}`,
+          amount: 0,
+        });
+      }
+      debits.forEach((tx) => {
+        const key = mondayOf(new Date(tx.date)).toISOString().slice(0, 10);
+        const bucket = buckets.find((b) => b.key === key);
+        if (bucket) bucket.amount += tx.amount;
+      });
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        buckets.push({
+          key: `${d.getFullYear()}-${d.getMonth()}`,
+          label: d.toLocaleDateString('en-IN', { month: 'short' }),
+          amount: 0,
+        });
+      }
+      debits.forEach((tx) => {
+        const txDate = new Date(tx.date);
+        const key = `${txDate.getFullYear()}-${txDate.getMonth()}`;
+        const bucket = buckets.find((b) => b.key === key);
+        if (bucket) bucket.amount += tx.amount;
+      });
+    }
+
+    return buckets;
+  }
+
+  const trendBuckets = buildTrendBuckets(relevantTransactions, trendGranularity);
+  const maxTrendAmount = Math.max(...trendBuckets.map((b) => b.amount), 1);
 
   return (
     <div className="space-y-6">
-      {/* 3 Clean Summary KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Outflow Card */}
         <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400">
@@ -164,54 +254,24 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             <span className="text-xs text-neutral-400">Combined household total, no balance owed</span>
           </div>
         </div>
-
-        {/* Grey Area Prompt Card */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            <span>Context Queue</span>
-            <span
-              className={`p-1 rounded-md ${
-                greyAreaCount > 0
-                  ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400'
-                  : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400'
-              }`}
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-            </span>
-          </div>
-
-          <div className="my-2">
-            <div className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">
-              {greyAreaCount === 0 ? 'All Clear' : `${greyAreaCount} to Verify`}
-            </div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              {greyAreaCount === 0
-                ? 'All transactions accurately categorized.'
-                : 'Ambiguous UPI transfers waiting for your input.'}
-            </p>
-          </div>
-
-          <div className="pt-1">
-            {greyAreaCount > 0 ? (
-              <button
-                onClick={() => onResolveGreyArea(transactions.find((t) => t.status === 'grey_area')?.id || '')}
-                className="text-xs font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 flex items-center gap-1 transition-colors"
-              >
-                <span>Review Transactions</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            ) : (
-              <span className="text-xs text-neutral-400">No action required</span>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* Spending by Category — ranked bar chart */}
+      {/* Amount vs Category — Overview overlays both partners' bars per
+          category; an individual view (Kiran/Mageswari) shows only that
+          person's bars. */}
       <div className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 px-1">
-          Spending by Category
-        </h2>
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Amount vs Category</span>
+          </h2>
+          {isShared && (
+            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-neutral-400">
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{husbandName}</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-purple-500" />{wifeName}</span>
+            </div>
+          )}
+        </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs">
           {categoryBarData.length === 0 ? (
@@ -219,9 +279,8 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               No expenses recorded yet. Bars will appear here once you log some.
             </p>
           ) : (
-            <div className="space-y-3">
-              {categoryBarData.map(({ cat, spent }, index) => {
-                const widthPercent = Math.max((spent / maxCategorySpend) * 100, 3);
+            <div className="space-y-4">
+              {categoryBarData.map(({ cat, spent, husband, wife }, index) => {
                 const shareOfTotal = totalDebits > 0 ? Math.round((spent / totalDebits) * 100) : 0;
                 return (
                   <div
@@ -244,21 +303,111 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         <span className="hidden sm:inline text-neutral-400 font-normal"> ({shareOfTotal}%)</span>
                       </span>
                     </div>
-                    <div
-                      className="w-full h-2 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
-                      title={`${cat.name}: ${formatCurrency(spent, currency)} (${shareOfTotal}% of total spend)`}
-                    >
-                      <motion.div
-                        className="h-full rounded-full group-hover:opacity-80 transition-opacity"
-                        style={{ backgroundColor: cat.color }}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${widthPercent}%` }}
-                        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
-                      />
-                    </div>
+
+                    {isShared ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="flex-1 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
+                            title={`${husbandName}: ${formatCurrency(husband, currency)}`}
+                          >
+                            <motion.div
+                              className="h-full rounded-full bg-blue-500"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.max((husband / maxCategorySpend) * 100, husband > 0 ? 3 : 0)}%` }}
+                              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-neutral-400 w-16 text-right shrink-0">
+                            {formatCurrency(husband, currency)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="flex-1 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
+                            title={`${wifeName}: ${formatCurrency(wife, currency)}`}
+                          >
+                            <motion.div
+                              className="h-full rounded-full bg-purple-500"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.max((wife / maxCategorySpend) * 100, wife > 0 ? 3 : 0)}%` }}
+                              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-neutral-400 w-16 text-right shrink-0">
+                            {formatCurrency(wife, currency)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="w-full h-2 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
+                        title={`${cat.name}: ${formatCurrency(spent, currency)} (${shareOfTotal}% of total spend)`}
+                      >
+                        <motion.div
+                          className="h-full rounded-full group-hover:opacity-80 transition-opacity"
+                          style={{ backgroundColor: cat.color }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.max((spent / maxCategorySpend) * 100, 3)}%` }}
+                          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Spending Trends — Day/Week/Month filter drives an auto-generated bar chart */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Spending Trends</span>
+          </h2>
+          <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.06] p-0.5 rounded-lg text-[11px] font-medium">
+            {(['day', 'week', 'month'] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setTrendGranularity(g)}
+                className={`px-2.5 py-1 rounded-md capitalize transition-colors ${
+                  trendGranularity === g
+                    ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
+                    : 'text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs">
+          {trendBuckets.every((b) => b.amount === 0) ? (
+            <p className="text-xs text-neutral-400 py-6 text-center">
+              No expenses recorded yet. This chart fills in as you log some.
+            </p>
+          ) : (
+            <div className="flex items-end justify-between gap-1.5 sm:gap-2">
+              {trendBuckets.map((b, index) => (
+                <div key={b.key} className="flex-1 flex flex-col items-center min-w-0">
+                  <span className="text-[9px] font-semibold text-neutral-600 dark:text-neutral-300 mb-1 truncate w-full text-center">
+                    {b.amount > 0 ? formatCurrency(b.amount, currency) : ''}
+                  </span>
+                  <div className="w-full h-24 flex items-end">
+                    <motion.div
+                      className="w-full rounded-t-md bg-[#0A84FF]"
+                      initial={{ height: 0 }}
+                      animate={{ height: `${Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0)}%` }}
+                      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-neutral-400 mt-1 truncate w-full text-center">{b.label}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>

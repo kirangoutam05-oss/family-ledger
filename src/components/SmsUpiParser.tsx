@@ -73,7 +73,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
       title: parsedPreview.title || 'UPI Transaction',
       amount: parsedPreview.amount || 0,
       type: parsedPreview.type || 'debit',
-      date: new Date().toISOString(),
+      date: parsedPreview.date || new Date().toISOString(),
       spender: selectedSpender,
       category: parsedPreview.category || 'bills',
       paymentMode: parsedPreview.paymentMode || 'UPI',

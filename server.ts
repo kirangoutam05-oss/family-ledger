@@ -179,6 +179,56 @@ function getGenAI(): GoogleGenAI | null {
   return genAIClient;
 }
 
+// Bank/UPI SMS usually carry the actual transaction date & time in the text
+// itself (e.g. "on 15-09-26", "15-Sep-2026 19:06:23", "at 07:06 PM") rather
+// than arriving the moment the spend happened — so a naive "date: now" loses
+// that. Pull it out of the raw text with regex instead of trusting an LLM to
+// do date arithmetic; falls back to null (caller uses "now") if nothing matches.
+const MONTH_ABBR: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
+function extractDateTimeFromSms(sms: string): string | null {
+  const dateMatch = sms.match(/\b(\d{1,2})[-\/]([A-Za-z]{3,}|\d{1,2})[-\/](\d{2,4})\b/);
+  if (!dateMatch) return null;
+
+  const day = parseInt(dateMatch[1], 10);
+  const monthPart = dateMatch[2];
+  const month = /^\d+$/.test(monthPart)
+    ? parseInt(monthPart, 10) - 1
+    : MONTH_ABBR[monthPart.slice(0, 3).toLowerCase()];
+  let year = parseInt(dateMatch[3], 10);
+  if (year < 100) year += 2000;
+
+  if (month === undefined || month < 0 || month > 11 || day < 1 || day > 31) return null;
+
+  let hours = 12;
+  let minutes = 0;
+  let seconds = 0;
+  const timeMatch = sms.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/);
+  if (timeMatch) {
+    hours = parseInt(timeMatch[1], 10);
+    minutes = parseInt(timeMatch[2], 10);
+    seconds = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0;
+    const meridiem = timeMatch[4]?.toLowerCase();
+    if (meridiem === 'pm' && hours < 12) hours += 12;
+    if (meridiem === 'am' && hours === 12) hours = 0;
+  }
+
+  const parsed = new Date(year, month, day, hours, minutes, seconds);
+  if (isNaN(parsed.getTime())) return null;
+
+  // Guard against false-positive matches (e.g. a card number fragment) that
+  // resolve to a date implausibly far in the future or past.
+  const now = Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const fiveYearsMs = 5 * 365 * oneDayMs;
+  if (parsed.getTime() > now + oneDayMs || parsed.getTime() < now - fiveYearsMs) return null;
+
+  return parsed.toISOString();
+}
+
 // Heuristic fallback SMS parser
 function parseSmsHeuristic(
   sms: string,
@@ -293,7 +343,7 @@ function parseSmsHeuristic(
     greyAreaReason,
     contextQuestion,
     spender: defaultSpender,
-    date: new Date().toISOString(),
+    date: extractDateTimeFromSms(cleanSms) || new Date().toISOString(),
   };
 }
 
@@ -648,6 +698,35 @@ app.post('/api/household/setup', (req, res) => {
   }
 });
 
+// Update household/partner names or currency after initial setup — same
+// validation as /api/household/setup, but doesn't touch setupComplete and
+// doesn't require myRole (this isn't a "which phone is this" flow).
+app.post('/api/household/update', (req, res) => {
+  try {
+    const { familyName, husbandName, wifeName, currency } = req.body;
+
+    const cleanFamilyName = sanitizeString(familyName, 60);
+    const cleanHusbandName = sanitizeString(husbandName, 40);
+    const cleanWifeName = sanitizeString(wifeName, 40);
+    const cleanCurrency = typeof currency === 'string' && currency.trim() ? currency.trim().slice(0, 3) : currentLedgerState.currency;
+
+    if (!cleanFamilyName || !cleanHusbandName || !cleanWifeName) {
+      return res.status(400).json({ error: 'Household name and both partner names are required' });
+    }
+
+    currentLedgerState.familyName = cleanFamilyName;
+    currentLedgerState.husbandName = cleanHusbandName;
+    currentLedgerState.wifeName = cleanWifeName;
+    currentLedgerState.currency = cleanCurrency;
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+
+    res.json({ success: true, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while updating the household.' });
+  }
+});
+
 // Register a device's real per-device identity (which role picked this phone)
 app.post('/api/ledger/register-device', (req, res) => {
   try {
@@ -897,7 +976,7 @@ Determine:
         greyAreaReason: sanitizeString(parsedJson.greyAreaReason, 150) || '',
         contextQuestion: sanitizeString(parsedJson.contextQuestion, 200) || '',
         spender: safeSpender,
-        date: new Date().toISOString(),
+        date: extractDateTimeFromSms(cleanSms) || new Date().toISOString(),
       };
 
       return res.json({

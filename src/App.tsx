@@ -17,6 +17,7 @@ import { GreyAreaQueue } from './components/GreyAreaQueue';
 import { SavingsGoals } from './components/SavingsGoals';
 import { BudgetAlerts } from './components/BudgetAlerts';
 import { CategoryManager } from './components/CategoryManager';
+import { AccountSettings } from './components/AccountSettings';
 import { DeviceSyncModal } from './components/DeviceSyncModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
@@ -28,10 +29,11 @@ import {
   Sparkles,
   HelpCircle,
   Target,
+  UserCog,
   X,
 } from 'lucide-react';
 
-type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts';
+type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts' | 'account';
 const SPENDER_ORDER: (SpenderId | 'shared')[] = ['shared', 'husband', 'wife'];
 
 // Bottom-nav tab switches (Overview/Grey Areas/Import SMS/Goals) get a plain fade.
@@ -185,6 +187,25 @@ export default function App() {
     setIdentity({ role: details.myRole, setAt: new Date().toISOString() });
     setActiveSpender('shared');
     await registerDevice(details.myRole);
+  };
+
+  const handleUpdateHousehold = async (details: {
+    familyName: string;
+    husbandName: string;
+    wifeName: string;
+    currency: string;
+  }) => {
+    const res = await fetch('/api/household/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to update household');
+    }
+    const data = await res.json();
+    if (data.ledger) setLedger(data.ledger);
   };
 
   const handleWhoAreYou = async (role: SpenderId) => {
@@ -612,6 +633,16 @@ export default function App() {
                   onResolveGreyArea={handleOpenGreyAreaDirect}
                 />
               )}
+
+              {activeTab === 'account' && (
+                <AccountSettings
+                  ledger={ledger}
+                  authenticatedUser={authenticatedUser}
+                  onUpdateHousehold={handleUpdateHousehold}
+                  onSwitchUser={handleSwitchUser}
+                  onOpenSyncModal={() => setShowSyncModal(true)}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -681,6 +712,18 @@ export default function App() {
             >
               <Target className="w-5 h-5" />
               <span className="text-[10px] font-medium tracking-tight">Goals</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('account')}
+              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
+                activeTab === 'account'
+                  ? 'text-[#007AFF]'
+                  : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+              }`}
+            >
+              <UserCog className="w-5 h-5" />
+              <span className="text-[10px] font-medium tracking-tight">Account</span>
             </button>
           </div>
         </nav>
