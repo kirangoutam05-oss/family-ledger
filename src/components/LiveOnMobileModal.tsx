@@ -63,7 +63,7 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-        className="glass-sheet rounded-[28px] max-w-lg w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-5 relative"
+        className="glass-sheet rounded-[28px] max-w-lg w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-5 relative max-h-[92dvh] overflow-y-auto"
       >
         {/* Close Button */}
         <button

@@ -40,8 +40,17 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   onUpdateCategory,
   onDeleteCategory,
 }) => {
-  const { categories, currency } = ledger;
+  const { categories, transactions, currency } = ledger;
   const manageableCategories = categories.filter((c) => c.id !== 'grey_area');
+
+  // Spend-vs-budget, moved here from the Overview screen so budget tracking
+  // lives alongside the categories themselves.
+  const categorySpend: Record<string, number> = {};
+  transactions.forEach((tx) => {
+    if (tx.type === 'debit') {
+      categorySpend[tx.category] = (categorySpend[tx.category] || 0) + tx.amount;
+    }
+  });
 
   const [formMode, setFormMode] = useState<'add' | 'edit' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -125,22 +134,43 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       </div>
 
       <div className="rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs divide-y divide-black/[0.04] dark:divide-white/[0.04] overflow-hidden">
-        {manageableCategories.map((cat, index) => (
+        {manageableCategories.map((cat, index) => {
+          const spent = categorySpend[cat.id] || 0;
+          const budget = cat.budgetMonthly || 1;
+          const percent = Math.min(Math.round((spent / budget) * 100), 100);
+          const isOverBudget = spent > cat.budgetMonthly;
+
+          return (
           <div key={cat.id} className="animate-fade-slide-up" style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}>
             <div className="p-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
                   style={{ backgroundColor: cat.color }}
                 >
                   {getCategoryIcon(cat.icon, 'w-4 h-4')}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-neutral-900 dark:text-white truncate min-w-0">
-                    {cat.name}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-sm font-medium text-neutral-900 dark:text-white truncate min-w-0">
+                      {cat.name}
+                    </span>
+                    <span className={`text-[11px] font-semibold shrink-0 ${isOverBudget ? 'text-red-500' : 'text-neutral-400'}`}>
+                      {percent}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden mb-1">
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: isOverBudget ? '#FF3B30' : cat.color }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percent}%` }}
+                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
+                    />
                   </div>
                   <div className="text-xs text-neutral-400">
-                    Budget: {formatCurrency(cat.budgetMonthly, currency)}/mo
+                    {formatCurrency(spent, currency)} of {formatCurrency(cat.budgetMonthly, currency)}/mo
+                    {isOverBudget && <span className="text-red-500 font-medium"> (over)</span>}
                   </div>
                 </div>
               </div>
@@ -199,7 +229,8 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
               )}
             </AnimatePresence>
           </div>
-        ))}
+          );
+        })}
 
         {manageableCategories.length === 0 && (
           <div className="p-12 text-center space-y-2">
@@ -226,7 +257,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ type: 'spring', stiffness: 400, damping: 32 }}
             onSubmit={handleSubmit}
-            className="glass-sheet rounded-[24px] max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4 max-h-[88vh] overflow-y-auto"
+            className="glass-sheet rounded-[24px] max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4 max-h-[88dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">

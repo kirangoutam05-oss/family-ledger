@@ -6,13 +6,13 @@ import {
   LedgerState,
 } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel } from '../utils/helpers';
+import { ExportSection } from './ExportSection';
 import {
   TrendingDown,
   TrendingUp,
   Users,
   HelpCircle,
   Search,
-  X,
   Lock,
   Edit3,
   BarChart3,
@@ -25,7 +25,6 @@ interface DashboardsProps {
   onSelectSpender: (spender: SpenderId | 'shared') => void;
   onResolveGreyArea: (transactionId: string) => void;
   onEditTransaction: (transaction: Transaction) => void;
-  onOpenCategoryManager: () => void;
 }
 
 export const Dashboards: React.FC<DashboardsProps> = ({
@@ -34,9 +33,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   authenticatedUser,
   onResolveGreyArea,
   onEditTransaction,
-  onOpenCategoryManager,
 }) => {
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [trendGranularity, setTrendGranularity] = useState<'day' | 'week' | 'month'>('day');
 
@@ -81,12 +78,11 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 
   // Filtered transactions for the list
   const displayTransactions = relevantTransactions.filter((tx) => {
-    const matchesCat = selectedCategoryFilter === 'all' || tx.category === selectedCategoryFilter;
-    const matchesSearch =
+    return (
       tx.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (tx.notes && tx.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (tx.upiRef && tx.upiRef.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCat && matchesSearch;
+      (tx.upiRef && tx.upiRef.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
   });
 
   const isShared = activeSpender === 'shared';
@@ -166,17 +162,25 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         if (bucket) bucket.amount += tx.amount;
       });
     } else {
+      // "Month" here tracks the household's actual billing cycle — the 21st
+      // of one month through the 20th of the next — not the calendar month.
+      const cycleStartFor = (d: Date) => {
+        const start = new Date(d.getFullYear(), d.getMonth() - (d.getDate() < 21 ? 1 : 0), 21);
+        start.setHours(0, 0, 0, 0);
+        return start;
+      };
+      const currentCycleStart = cycleStartFor(now);
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const cycleStart = new Date(currentCycleStart.getFullYear(), currentCycleStart.getMonth() - i, 21);
         buckets.push({
-          key: `${d.getFullYear()}-${d.getMonth()}`,
-          label: d.toLocaleDateString('en-IN', { month: 'short' }),
+          key: `${cycleStart.getFullYear()}-${cycleStart.getMonth()}`,
+          label: cycleStart.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
           amount: 0,
         });
       }
       debits.forEach((tx) => {
-        const txDate = new Date(tx.date);
-        const key = `${txDate.getFullYear()}-${txDate.getMonth()}`;
+        const cycleStart = cycleStartFor(new Date(tx.date));
+        const key = `${cycleStart.getFullYear()}-${cycleStart.getMonth()}`;
         const bucket = buckets.find((b) => b.key === key);
         if (bucket) bucket.amount += tx.amount;
       });
@@ -187,6 +191,10 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 
   const trendBuckets = buildTrendBuckets(relevantTransactions, trendGranularity);
   const maxTrendAmount = Math.max(...trendBuckets.map((b) => b.amount), 1);
+  const trendTotal = trendBuckets.reduce((sum, b) => sum + b.amount, 0);
+  const trendAverage = Math.round(trendTotal / trendBuckets.length);
+  const trendPeak = trendBuckets.reduce((peak, b) => (b.amount > peak.amount ? b : peak), trendBuckets[0]);
+  const trendPeriodLabel = trendGranularity === 'day' ? 'day' : trendGranularity === 'week' ? 'week' : 'cycle';
 
   return (
     <div className="space-y-6">
@@ -361,7 +369,10 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         </div>
       </div>
 
-      {/* Spending Trends — Day/Week/Month filter drives an auto-generated bar chart */}
+      {/* Spending Trends — Day/Week/Month filter drives an auto-generated bar
+          chart. This is the primary chart on the page now that Category
+          Budgets moved to the Category tab, so it runs bigger and carries
+          summary stats alongside the bars. */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
@@ -385,120 +396,75 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs">
+        <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs space-y-5">
+          {trendGranularity === 'month' && (
+            <p className="text-[11px] text-neutral-400 -mt-1">
+              Tracked as a billing cycle — the 21st of one month through the 20th of the next.
+            </p>
+          )}
+
           {trendBuckets.every((b) => b.amount === 0) ? (
-            <p className="text-xs text-neutral-400 py-6 text-center">
+            <p className="text-xs text-neutral-400 py-10 text-center">
               No expenses recorded yet. This chart fills in as you log some.
             </p>
           ) : (
-            <div className="flex items-end justify-between gap-1.5 sm:gap-2">
-              {trendBuckets.map((b, index) => (
-                <div key={b.key} className="flex-1 flex flex-col items-center min-w-0">
-                  <span className="text-[9px] font-semibold text-neutral-600 dark:text-neutral-300 mb-1 truncate w-full text-center">
-                    {b.amount > 0 ? formatCurrency(b.amount, currency) : ''}
-                  </span>
-                  <div className="w-full h-24 flex items-end">
-                    <motion.div
-                      className="w-full rounded-t-md bg-[#0A84FF]"
-                      initial={{ height: 0 }}
-                      animate={{ height: `${Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0)}%` }}
-                      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
-                    />
+            <>
+              {/* Summary stat row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.04]">
+                  <div className="text-[10px] uppercase tracking-wide text-neutral-400">Total</div>
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white mt-0.5">
+                    {formatCurrency(trendTotal, currency)}
                   </div>
-                  <span className="text-[9px] text-neutral-400 mt-1 truncate w-full text-center">{b.label}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+                <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.04]">
+                  <div className="text-[10px] uppercase tracking-wide text-neutral-400">Avg / {trendPeriodLabel}</div>
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white mt-0.5">
+                    {formatCurrency(trendAverage, currency)}
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.04]">
+                  <div className="text-[10px] uppercase tracking-wide text-neutral-400">Peak</div>
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white mt-0.5 truncate" title={trendPeak.label}>
+                    {formatCurrency(trendPeak.amount, currency)}
+                  </div>
+                </div>
+              </div>
 
-      {/* Category Budgets - Apple Style Compact Clean Bar */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
-            <span>Category Budgets</span>
-            <button
-              onClick={onOpenCategoryManager}
-              className="p-1 rounded-md text-neutral-400 hover:text-[#007AFF] hover:bg-black/5 dark:hover:bg-white/5 transition-colors normal-case tracking-normal"
-              title="Add or edit categories"
-            >
-              <Edit3 className="w-3 h-3" />
-            </button>
-          </h2>
-          {selectedCategoryFilter !== 'all' && (
-            <button
-              onClick={() => setSelectedCategoryFilter('all')}
-              className="text-xs text-[#007AFF] hover:underline flex items-center gap-1"
-            >
-              <X className="w-3 h-3" />
-              <span>Reset filter</span>
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {categories
-            .filter((cat) => cat.id !== 'grey_area')
-            .map((cat, index) => {
-              const spent = categoryTotals[cat.id]?.total || 0;
-              const budget = cat.budgetMonthly || 1;
-              const percent = Math.min(Math.round((spent / budget) * 100), 100);
-              const isSelected = selectedCategoryFilter === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() =>
-                    setSelectedCategoryFilter(isSelected ? 'all' : cat.id)
-                  }
-                  className={`animate-fade-slide-up p-3 rounded-xl border text-left transition-all active:scale-[0.97] ${
-                    isSelected
-                      ? 'border-[#007AFF] bg-blue-50/40 dark:bg-blue-950/20'
-                      : 'border-black/[0.04] dark:border-white/[0.06] bg-white dark:bg-neutral-900 hover:border-black/[0.1] dark:hover:border-white/[0.1]'
-                  }`}
-                  style={{ animationDelay: `${Math.min(index * 40, 320)}ms` }}
-                >
-                  <div className="flex items-center justify-between mb-2 gap-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0"
-                        style={{ backgroundColor: cat.color }}
-                      >
-                        {getCategoryIcon(cat.icon, 'w-3.5 h-3.5')}
-                      </div>
-                      <span className="text-xs font-medium text-neutral-800 dark:text-neutral-200 truncate min-w-0">
-                        {cat.name}
-                      </span>
+              {/* Bar chart */}
+              <div className="flex items-end justify-between gap-1.5 sm:gap-3">
+                {trendBuckets.map((b, index) => (
+                  <div
+                    key={b.key}
+                    className="flex-1 flex flex-col items-center min-w-0"
+                    title={`${b.label}: ${formatCurrency(b.amount, currency)}`}
+                  >
+                    <span className="text-[9px] sm:text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 mb-1 truncate w-full text-center">
+                      {b.amount > 0 ? formatCurrency(b.amount, currency) : ''}
+                    </span>
+                    <div className="w-full h-40 sm:h-48 flex items-end">
+                      <motion.div
+                        className={`w-full rounded-t-md ${
+                          b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
+                        }`}
+                        initial={{ height: 0 }}
+                        animate={{ height: `${Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0)}%` }}
+                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
+                      />
                     </div>
-                    <span className="text-[10px] font-semibold text-neutral-400 shrink-0">
-                      {percent}%
+                    <span className="text-[9px] sm:text-[10px] text-neutral-400 mt-1 truncate w-full text-center">
+                      {b.label}
                     </span>
                   </div>
-
-                  <div className="w-full h-1 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden mb-1.5">
-                    <motion.div
-                      className="h-full rounded-full"
-                      style={{ backgroundColor: spent > budget ? '#FF3B30' : cat.color }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${percent}%` }}
-                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
-                    <span className="font-semibold text-neutral-900 dark:text-white">
-                      {formatCurrency(spent, currency)}
-                    </span>
-                    <span className="text-[10px] text-neutral-400">
-                      / {formatCurrency(cat.budgetMonthly, currency)}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Export — CSV/XLSX/PDF/DOC of the transaction list, plus the charts above */}
+      <ExportSection ledger={ledger} activeSpender={activeSpender} relevantTransactions={relevantTransactions} trendBuckets={trendBuckets} trendGranularity={trendGranularity} categoryBarData={categoryBarData} />
 
       {/* Transaction List - Apple Wallet Grouped View */}
       <div className="space-y-3">

@@ -138,7 +138,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-        className="glass-sheet rounded-[28px] max-w-lg w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-5 max-h-[92vh] overflow-y-auto"
+        className="glass-sheet rounded-[28px] max-w-lg w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-5 max-h-[92dvh] overflow-y-auto"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-black/[0.05] dark:border-white/[0.08]">
@@ -237,13 +237,13 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                 Category
               </label>
-              <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-2">
                 {categories.map((cat) => (
                   <button
                     key={cat.id}
                     type="button"
                     onClick={() => setCategory(cat.id)}
-                    className={`p-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white transition-all ${
+                    className={`min-h-[48px] p-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white transition-all ${
                       category === cat.id
                         ? 'ring-2 ring-[#007AFF] border-blue-200 text-[#007AFF]'
                         : 'border-neutral-200 text-neutral-900 hover:border-neutral-300'

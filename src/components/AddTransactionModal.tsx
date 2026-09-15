@@ -78,7 +78,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-        className="glass-sheet rounded-[28px] max-w-md w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4"
+        className="glass-sheet rounded-[28px] max-w-md w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4 max-h-[92dvh] overflow-y-auto"
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
@@ -120,11 +120,13 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               placeholder="e.g. Blue Tokai Coffee, DMart Weekly, Wifi Bill"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-xs font-medium px-3.5 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full h-11 text-xs font-medium px-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* Date & Time */}
+          {/* Date & Time — explicit h-11 rather than relying on padding
+              alone, since iOS Safari's native date/time picker controls
+              don't size the same way a text input's padding does. */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-neutral-500 block mb-1">Date</label>
@@ -133,7 +135,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 required
                 value={dateStr}
                 onChange={(e) => setDateStr(e.target.value)}
-                className="w-full text-xs font-medium px-3.5 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-11 text-xs font-medium px-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -143,7 +145,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 required
                 value={timeStr}
                 onChange={(e) => setTimeStr(e.target.value)}
-                className="w-full text-xs font-medium px-3.5 py-2 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-11 text-xs font-medium px-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -177,10 +179,10 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
           {/* Category Selector Grid */}
           <div>
-            <label className="text-xs font-semibold text-neutral-500 block mb-1">
+            <label className="text-xs font-semibold text-neutral-500 block mb-2">
               Category
             </label>
-            <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-2">
               {categories
                 .filter((c) => c.id !== 'grey_area')
                 .map((cat) => {
@@ -190,7 +192,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       key={cat.id}
                       type="button"
                       onClick={() => setCategory(cat.id)}
-                      className={`p-2 rounded-xl border text-left flex items-center gap-2 bg-white transition-all ${
+                      className={`min-h-[48px] p-2.5 rounded-xl border text-left flex items-center gap-2 bg-white transition-all ${
                         isSelected
                           ? 'ring-2 ring-blue-500 border-blue-200 shadow-xs'
                           : 'border-neutral-200 hover:border-neutral-300'
