@@ -27,11 +27,11 @@ import {
   Sparkles,
   HelpCircle,
   Target,
-  Bell,
-  Tags,
+  X,
 } from 'lucide-react';
 
-type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts' | 'categories';
+type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts';
+const SPENDER_ORDER: (SpenderId | 'shared')[] = ['shared', 'husband', 'wife'];
 
 const IDENTITY_STORAGE_KEY = 'family-ledger:identity';
 
@@ -78,8 +78,28 @@ export default function App() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showLiveMobileModal, setShowLiveMobileModal] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  // Swipe left/right on the main content to move between Shared / Kiran / Mageswari
+  const touchStartX = React.useRef<number | null>(null);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(deltaX) < 60) return;
+
+    const currentIndex = SPENDER_ORDER.indexOf(activeSpender);
+    if (deltaX < 0 && currentIndex < SPENDER_ORDER.length - 1) {
+      setActiveSpender(SPENDER_ORDER[currentIndex + 1]);
+    } else if (deltaX > 0 && currentIndex > 0) {
+      setActiveSpender(SPENDER_ORDER[currentIndex - 1]);
+    }
+  };
 
   const registerDevice = async (role: SpenderId) => {
     try {
@@ -483,7 +503,11 @@ export default function App() {
         />
 
         {/* Main Body Content */}
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28">
+        <main
+          className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           {activeTab === 'dashboards' && (
             <Dashboards
               ledger={ledger}
@@ -492,6 +516,7 @@ export default function App() {
               onSelectSpender={setActiveSpender}
               onResolveGreyArea={handleOpenGreyAreaDirect}
               onEditTransaction={(tx) => setEditingTransaction(tx)}
+              onOpenCategoryManager={() => setShowCategoryManager(true)}
             />
           )}
 
@@ -530,18 +555,9 @@ export default function App() {
               onResolveGreyArea={handleOpenGreyAreaDirect}
             />
           )}
-
-          {activeTab === 'categories' && (
-            <CategoryManager
-              ledger={ledger}
-              onAddCategory={handleAddCategory}
-              onUpdateCategory={handleUpdateCategory}
-              onDeleteCategory={handleDeleteCategory}
-            />
-          )}
         </main>
 
-        {/* Clean Apple iOS Tab Bar */}
+        {/* Clean Apple iOS Tab Bar, with Import SMS raised as the highlighted center action */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-xl border-t border-black/[0.06] dark:border-white/[0.08] pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] px-4 transition-all">
           <div className="max-w-md mx-auto flex items-center justify-around">
             <button
@@ -554,18 +570,6 @@ export default function App() {
             >
               <LayoutDashboard className="w-5 h-5" />
               <span className="text-[10px] font-medium tracking-tight">Overview</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('auto_parser')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
-                activeTab === 'auto_parser'
-                  ? 'text-[#007AFF]'
-                  : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
-              }`}
-            >
-              <Sparkles className="w-5 h-5" />
-              <span className="text-[10px] font-medium tracking-tight">Import SMS</span>
             </button>
 
             <button
@@ -587,6 +591,26 @@ export default function App() {
               <span className="text-[10px] font-medium tracking-tight">Grey Areas</span>
             </button>
 
+            {/* Import SMS — elevated, highlighted center action */}
+            <div className="flex-1 flex flex-col items-center">
+              <button
+                onClick={() => setActiveTab('auto_parser')}
+                className={`-mt-7 w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/30 ring-4 ring-white dark:ring-[#1C1C1E] transition-transform active:scale-95 ${
+                  activeTab === 'auto_parser' ? 'scale-105' : ''
+                }`}
+                style={{ background: 'linear-gradient(135deg, #0A84FF, #5856D6)' }}
+              >
+                <Sparkles className="w-6 h-6 text-white" />
+              </button>
+              <span
+                className={`text-[10px] font-medium tracking-tight mt-0.5 ${
+                  activeTab === 'auto_parser' ? 'text-[#007AFF]' : 'text-neutral-400 dark:text-neutral-500'
+                }`}
+              >
+                Import SMS
+              </span>
+            </div>
+
             <button
               onClick={() => setActiveTab('savings_goals')}
               className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
@@ -597,37 +621,6 @@ export default function App() {
             >
               <Target className="w-5 h-5" />
               <span className="text-[10px] font-medium tracking-tight">Goals</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('budget_alerts')}
-              className={`relative flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
-                activeTab === 'budget_alerts'
-                  ? 'text-[#007AFF]'
-                  : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
-              }`}
-            >
-              <div className="relative">
-                <Bell className="w-5 h-5" />
-                {unreadAlertsCount > 0 && (
-                  <span className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
-                    {unreadAlertsCount}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-medium tracking-tight">Alerts</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('categories')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
-                activeTab === 'categories'
-                  ? 'text-[#007AFF]'
-                  : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
-              }`}
-            >
-              <Tags className="w-5 h-5" />
-              <span className="text-[10px] font-medium tracking-tight">Categories</span>
             </button>
           </div>
         </nav>
@@ -641,6 +634,11 @@ export default function App() {
         onTriggerSync={fetchLedger}
         isSyncing={isSyncing}
         onResetHousehold={handleResetHousehold}
+        authenticatedUser={authenticatedUser}
+        onSwitchUser={() => {
+          setShowSyncModal(false);
+          handleSwitchUser();
+        }}
       />
 
       {/* Manual Add Expense Modal */}
@@ -675,6 +673,28 @@ export default function App() {
         isOpen={showLiveMobileModal}
         onClose={() => setShowLiveMobileModal(false)}
       />
+
+      {/* Category Manager Modal */}
+      {showCategoryManager && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end sm:items-center justify-center">
+          <div className="bg-[#F2F2F7] dark:bg-[#1C1C1E] rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6 animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+            <div className="flex items-center justify-end mb-1">
+              <button
+                onClick={() => setShowCategoryManager(false)}
+                className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-600 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <CategoryManager
+              ledger={ledger}
+              onAddCategory={handleAddCategory}
+              onUpdateCategory={handleUpdateCategory}
+              onDeleteCategory={handleDeleteCategory}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

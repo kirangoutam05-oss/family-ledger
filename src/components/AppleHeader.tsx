@@ -101,7 +101,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
               <button
                 onClick={onOpenSyncModal}
                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium transition-colors shrink-0"
-                title="Family sync status. Tap to see paired devices."
+                title="Family sync status. Tap to see paired devices or switch who's using this phone."
               >
                 <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isSyncing ? 'animate-ping' : ''}`} />
                 <span className="hidden sm:inline">Synced</span>
@@ -140,18 +140,9 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
             )}
           </button>
 
-          {/* Authenticated Account: compact avatar-only on mobile, full pill on larger screens */}
-          <button
-            onClick={onSwitchUser || onLockLedger}
-            className="sm:hidden w-8 h-8 rounded-full border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-800 flex items-center justify-center shrink-0 shadow-xs"
-            title={`Signed in as ${authenticatedUser === 'husband' ? husbandName : wifeName} • Tap to switch identity on this device`}
-          >
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                authenticatedUser === 'husband' ? 'bg-blue-500' : 'bg-purple-500'
-              }`}
-            />
-          </button>
+          {/* Authenticated Account: full pill with name, shown on larger screens. On mobile, switching
+              identity lives in the sync/devices popup instead (tap the "Synced" pill) — a bare
+              unlabeled dot here was confusing on a touch screen with no hover to reveal its title. */}
           <button
             onClick={onSwitchUser || onLockLedger}
             className="hidden sm:flex px-2.5 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-800 text-xs font-semibold items-center gap-1.5 shadow-xs hover:border-[#007AFF] hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-all cursor-pointer"

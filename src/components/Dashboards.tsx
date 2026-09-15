@@ -24,6 +24,7 @@ interface DashboardsProps {
   onSelectSpender: (spender: SpenderId | 'shared') => void;
   onResolveGreyArea: (transactionId: string) => void;
   onEditTransaction: (transaction: Transaction) => void;
+  onOpenCategoryManager: () => void;
 }
 
 export const Dashboards: React.FC<DashboardsProps> = ({
@@ -32,6 +33,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   authenticatedUser,
   onResolveGreyArea,
   onEditTransaction,
+  onOpenCategoryManager,
 }) => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -247,8 +249,15 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       {/* Category Budgets - Apple Style Compact Clean Bar */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-            Category Budgets
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
+            <span>Category Budgets</span>
+            <button
+              onClick={onOpenCategoryManager}
+              className="p-1 rounded-md text-neutral-400 hover:text-[#007AFF] hover:bg-black/5 dark:hover:bg-white/5 transition-colors normal-case tracking-normal"
+              title="Add or edit categories"
+            >
+              <Edit3 className="w-3 h-3" />
+            </button>
           </h2>
           {selectedCategoryFilter !== 'all' && (
             <button

@@ -7,8 +7,9 @@ import {
   RotateCcw,
   X,
   ShieldAlert,
+  UserCog,
 } from 'lucide-react';
-import { LedgerState } from '../types';
+import { LedgerState, SpenderId } from '../types';
 
 interface DeviceSyncModalProps {
   isOpen: boolean;
@@ -17,6 +18,8 @@ interface DeviceSyncModalProps {
   onTriggerSync: () => Promise<void>;
   isSyncing: boolean;
   onResetHousehold: () => Promise<void>;
+  authenticatedUser: SpenderId;
+  onSwitchUser: () => void;
 }
 
 export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
@@ -26,6 +29,8 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
   onTriggerSync,
   isSyncing,
   onResetHousehold,
+  authenticatedUser,
+  onSwitchUser,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -116,6 +121,30 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
           <p className="text-[11px] text-neutral-400">
             Open Family Ledger on your partner's iPhone or Mac to sync real-time UPI alerts.
           </p>
+        </div>
+
+        {/* This Device's Identity */}
+        <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                authenticatedUser === 'husband' ? 'bg-blue-500' : 'bg-purple-500'
+              }`}
+            />
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-neutral-900 dark:text-white truncate min-w-0">
+                Signed in as {authenticatedUser === 'husband' ? husbandName : wifeName}
+              </div>
+              <div className="text-[11px] text-neutral-400">On this device</div>
+            </div>
+          </div>
+          <button
+            onClick={onSwitchUser}
+            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5 shrink-0 hover:border-[#007AFF] transition-colors"
+          >
+            <UserCog className="w-3.5 h-3.5" />
+            <span>Switch</span>
+          </button>
         </div>
 
         {/* Paired Devices List (informational — who has actually connected) */}
