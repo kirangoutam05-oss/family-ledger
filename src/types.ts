@@ -1,15 +1,41 @@
 export type SpenderId = 'husband' | 'wife';
 
-export type CategoryId =
-  | 'dining'
-  | 'groceries'
-  | 'bills'
-  | 'shopping'
-  | 'transport'
-  | 'entertainment'
-  | 'health'
-  | 'investments'
-  | 'grey_area';
+// A category id is any string — the built-in categories ('dining', 'groceries', etc.)
+// plus whatever ids get generated for user-created custom categories. 'grey_area' is
+// reserved: it's the system bucket for ambiguous transactions and can't be deleted.
+export type CategoryId = string;
+
+// The full set of icons offered when creating or editing a category. Kept as plain
+// data (no React import) so both the client (icon picker, rendering) and the server
+// (validating a submitted icon name) can share one list.
+export const CATEGORY_ICON_OPTIONS = [
+  'UtensilsCrossed',
+  'ShoppingBag',
+  'Zap',
+  'Shirt',
+  'Car',
+  'Film',
+  'HeartPulse',
+  'TrendingUp',
+  'Plane',
+  'ShieldCheck',
+  'Speaker',
+  'Home',
+  'Gift',
+  'Wifi',
+  'Coffee',
+  'Dumbbell',
+  'GraduationCap',
+  'Wrench',
+  'Music',
+  'Gamepad2',
+  'Fuel',
+  'Baby',
+  'PawPrint',
+  'Briefcase',
+  'Palette',
+  'PiggyBank',
+] as const;
 
 export interface Category {
   id: CategoryId;

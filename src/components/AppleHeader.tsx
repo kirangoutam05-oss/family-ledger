@@ -57,25 +57,25 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
       </button>
       <button
         onClick={() => onSelectSpender('husband')}
-        className={`flex-1 sm:flex-none justify-center px-3 py-1.5 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 truncate ${
+        className={`flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 ${
           activeSpender === 'husband'
             ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
             : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
         }`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-        <span className="truncate">{husbandName}</span>
+        <span className="truncate min-w-0">{husbandName}</span>
       </button>
       <button
         onClick={() => onSelectSpender('wife')}
-        className={`flex-1 sm:flex-none justify-center px-3 py-1.5 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 truncate ${
+        className={`flex-1 sm:flex-none min-w-0 justify-center px-3 py-1.5 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 ${
           activeSpender === 'wife'
             ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
             : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
         }`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
-        <span className="truncate">{wifeName}</span>
+        <span className="truncate min-w-0">{wifeName}</span>
       </button>
     </div>
   );

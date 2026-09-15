@@ -241,7 +241,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     >
                       {getCategoryIcon(cat.icon, 'w-2.5 h-2.5')}
                     </div>
-                    <span className="truncate">{cat.name}</span>
+                    <span className="truncate min-w-0">{cat.name}</span>
                   </button>
                 ))}
               </div>

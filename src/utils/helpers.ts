@@ -21,8 +21,24 @@ import {
   CheckCircle2,
   Bell,
   RefreshCw,
+  Home,
+  Gift,
+  Wifi,
+  Coffee,
+  Dumbbell,
+  GraduationCap,
+  Wrench,
+  Music,
+  Gamepad2,
+  Fuel,
+  Baby,
+  PawPrint,
+  Briefcase,
+  Palette,
+  PiggyBank,
 } from 'lucide-react';
 import { CategoryId } from '../types';
+export { CATEGORY_ICON_OPTIONS } from '../types';
 
 export function formatCurrency(amount: number, currency: string = '₹'): string {
   return `${currency}${Number(amount || 0).toLocaleString('en-IN')}`;
@@ -67,6 +83,36 @@ export function getCategoryIcon(iconName: string, className = 'w-5 h-5') {
       return React.createElement(ShieldCheck, { className });
     case 'Speaker':
       return React.createElement(Speaker, { className });
+    case 'Home':
+      return React.createElement(Home, { className });
+    case 'Gift':
+      return React.createElement(Gift, { className });
+    case 'Wifi':
+      return React.createElement(Wifi, { className });
+    case 'Coffee':
+      return React.createElement(Coffee, { className });
+    case 'Dumbbell':
+      return React.createElement(Dumbbell, { className });
+    case 'GraduationCap':
+      return React.createElement(GraduationCap, { className });
+    case 'Wrench':
+      return React.createElement(Wrench, { className });
+    case 'Music':
+      return React.createElement(Music, { className });
+    case 'Gamepad2':
+      return React.createElement(Gamepad2, { className });
+    case 'Fuel':
+      return React.createElement(Fuel, { className });
+    case 'Baby':
+      return React.createElement(Baby, { className });
+    case 'PawPrint':
+      return React.createElement(PawPrint, { className });
+    case 'Briefcase':
+      return React.createElement(Briefcase, { className });
+    case 'Palette':
+      return React.createElement(Palette, { className });
+    case 'PiggyBank':
+      return React.createElement(PiggyBank, { className });
     case 'HelpCircle':
     default:
       return React.createElement(HelpCircle, { className });

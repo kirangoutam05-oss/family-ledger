@@ -87,6 +87,14 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 
   const greyAreaCount = transactions.filter((t) => t.status === 'grey_area').length;
 
+  // Ranked category spend for the bar chart — highest first, system grey-area bucket excluded
+  const categoryBarData = categories
+    .filter((cat) => cat.id !== 'grey_area')
+    .map((cat) => ({ cat, spent: categoryTotals[cat.id]?.total || 0 }))
+    .filter((row) => row.spent > 0)
+    .sort((a, b) => b.spent - a.spent);
+  const maxCategorySpend = Math.max(...categoryBarData.map((row) => row.spent), 1);
+
   return (
     <div className="space-y-6">
       {/* 3 Clean Summary KPI Cards */}
@@ -186,6 +194,56 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         </div>
       </div>
 
+      {/* Spending by Category — ranked bar chart */}
+      <div className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 px-1">
+          Spending by Category
+        </h2>
+
+        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs">
+          {categoryBarData.length === 0 ? (
+            <p className="text-xs text-neutral-400 py-6 text-center">
+              No expenses recorded yet. Bars will appear here once you log some.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {categoryBarData.map(({ cat, spent }) => {
+                const widthPercent = Math.max((spent / maxCategorySpend) * 100, 3);
+                const shareOfTotal = totalDebits > 0 ? Math.round((spent / totalDebits) * 100) : 0;
+                return (
+                  <div key={cat.id} className="group">
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 min-w-0">
+                        <span
+                          className="w-4 h-4 rounded-md flex items-center justify-center text-white shrink-0"
+                          style={{ backgroundColor: cat.color }}
+                        >
+                          {getCategoryIcon(cat.icon, 'w-2.5 h-2.5')}
+                        </span>
+                        <span className="truncate min-w-0">{cat.name}</span>
+                      </span>
+                      <span className="text-xs font-semibold text-neutral-900 dark:text-white shrink-0">
+                        {formatCurrency(spent, currency)}
+                        <span className="hidden sm:inline text-neutral-400 font-normal"> ({shareOfTotal}%)</span>
+                      </span>
+                    </div>
+                    <div
+                      className="w-full h-2 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
+                      title={`${cat.name}: ${formatCurrency(spent, currency)} (${shareOfTotal}% of total spend)`}
+                    >
+                      <div
+                        className="h-full rounded-full transition-all group-hover:opacity-80"
+                        style={{ width: `${widthPercent}%`, backgroundColor: cat.color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Category Budgets - Apple Style Compact Clean Bar */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
@@ -224,19 +282,19 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                       : 'border-black/[0.04] dark:border-white/[0.06] bg-white dark:bg-neutral-900 hover:border-black/[0.1] dark:hover:border-white/[0.1]'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between mb-2 gap-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
                       <div
-                        className="w-6 h-6 rounded-md flex items-center justify-center text-white"
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0"
                         style={{ backgroundColor: cat.color }}
                       >
                         {getCategoryIcon(cat.icon, 'w-3.5 h-3.5')}
                       </div>
-                      <span className="text-xs font-medium text-neutral-800 dark:text-neutral-200 truncate">
+                      <span className="text-xs font-medium text-neutral-800 dark:text-neutral-200 truncate min-w-0">
                         {cat.name}
                       </span>
                     </div>
-                    <span className="text-[10px] font-semibold text-neutral-400">
+                    <span className="text-[10px] font-semibold text-neutral-400 shrink-0">
                       {percent}%
                     </span>
                   </div>

@@ -107,11 +107,11 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                         : 'border-black/[0.04] dark:border-white/[0.06] bg-white dark:bg-neutral-900 hover:border-black/[0.1] dark:hover:border-white/[0.1]'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-neutral-900 dark:text-white truncate">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-neutral-900 dark:text-white truncate min-w-0">
                         {tx.title}
                       </span>
-                      <span className="text-xs font-semibold text-neutral-900 dark:text-white ml-2">
+                      <span className="text-xs font-semibold text-neutral-900 dark:text-white shrink-0">
                         {formatCurrency(tx.amount, currency)}
                       </span>
                     </div>
@@ -196,7 +196,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                             >
                               {getCategoryIcon(cat.icon, 'w-3 h-3')}
                             </div>
-                            <span className="truncate text-left text-[11px]">
+                            <span className="truncate min-w-0 text-left text-[11px]">
                               {cat.name}
                             </span>
                           </button>

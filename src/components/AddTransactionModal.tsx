@@ -160,7 +160,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       >
                         {getCategoryIcon(cat.icon, 'w-3 h-3')}
                       </div>
-                      <span className="truncate text-[11px] font-semibold">
+                      <span className="truncate min-w-0 text-[11px] font-semibold">
                         {cat.name}
                       </span>
                     </button>

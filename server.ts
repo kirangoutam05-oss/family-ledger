@@ -6,7 +6,7 @@ import { Pool } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { EMPTY_LEDGER_STATE } from './src/data/initialData';
-import { LedgerState, Transaction, SavingsGoal, BudgetAlert, CategoryId, SpenderId, DeviceInfo } from './src/types';
+import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS } from './src/types';
 
 dotenv.config();
 
@@ -73,6 +73,12 @@ function maskSensitiveFinancialData(text: string): string {
 function sanitizeString(str: unknown, maxLen = 150): string {
   if (typeof str !== 'string') return '';
   return str.replace(/<[^>]*>?/gm, '').trim().slice(0, maxLen);
+}
+
+// Category ids are dynamic (users can add/rename/delete categories), so validity is
+// always checked against the household's current category list, not a fixed enum.
+function getValidCategoryIds(): string[] {
+  return currentLedgerState.categories.map((c) => c.id);
 }
 
 // Persistent state. When DATABASE_URL is set (production), the ledger lives in a
@@ -333,10 +339,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
       return res.status(400).json({ error: 'Amount must be a positive number under ₹5,00,00,000' });
     }
 
-    const validCategories: CategoryId[] = [
-      'dining', 'groceries', 'bills', 'shopping', 'transport', 'entertainment', 'health', 'investments', 'grey_area'
-    ];
-    const category: CategoryId = validCategories.includes(rawTx.category as CategoryId)
+    const category: CategoryId = getValidCategoryIds().includes(rawTx.category as string)
       ? (rawTx.category as CategoryId)
       : 'bills';
 
@@ -435,10 +438,7 @@ app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    const validCategories: CategoryId[] = [
-      'dining', 'groceries', 'bills', 'shopping', 'transport', 'entertainment', 'health', 'investments', 'grey_area'
-    ];
-    if (category && validCategories.includes(category)) {
+    if (category && getValidCategoryIds().includes(category)) {
       tx.category = category;
     }
 
@@ -498,10 +498,7 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
         tx.amount = Number(updates.amount);
       }
       if (updates.category) {
-        const validCategories: CategoryId[] = [
-          'dining', 'groceries', 'bills', 'shopping', 'transport', 'entertainment', 'health', 'investments', 'grey_area'
-        ];
-        if (validCategories.includes(updates.category)) {
+        if (getValidCategoryIds().includes(updates.category)) {
           tx.category = updates.category;
         }
       }
@@ -675,6 +672,119 @@ app.post('/api/ledger/register-device', (req, res) => {
   }
 });
 
+const DEFAULT_CATEGORY_COLOR = '#8E8E93';
+
+function slugifyToCategoryId(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 30) || 'category';
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+// Add a new custom category
+app.post('/api/ledger/categories', rateLimit(30, 60000), (req, res) => {
+  try {
+    const cleanName = sanitizeString(req.body?.name, 40);
+    if (!cleanName) {
+      return res.status(400).json({ error: 'Category name is required' });
+    }
+
+    const icon = CATEGORY_ICON_OPTIONS.includes(req.body?.icon) ? req.body.icon : 'HelpCircle';
+    const color = typeof req.body?.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(req.body.color)
+      ? req.body.color
+      : DEFAULT_CATEGORY_COLOR;
+    const budgetMonthly = Math.max(0, Math.min(10000000, Number(req.body?.budgetMonthly) || 0));
+
+    const newCategory: Category = {
+      id: slugifyToCategoryId(cleanName),
+      name: cleanName,
+      color,
+      badgeBg: '',
+      badgeText: '',
+      badgeBorder: 'border-black/[0.08] dark:border-white/[0.1]',
+      icon,
+      budgetMonthly,
+    };
+
+    currentLedgerState.categories.push(newCategory);
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+    res.json({ success: true, category: newCategory, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while adding the category.' });
+  }
+});
+
+// Update an existing category's name, icon, color, or budget
+app.post('/api/ledger/categories/update', rateLimit(30, 60000), (req, res) => {
+  try {
+    const { categoryId } = req.body;
+    if (!categoryId || typeof categoryId !== 'string') {
+      return res.status(400).json({ error: 'Valid categoryId is required' });
+    }
+
+    const category = currentLedgerState.categories.find((c) => c.id === categoryId);
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    if (req.body.name !== undefined) {
+      const cleanName = sanitizeString(req.body.name, 40);
+      if (cleanName) category.name = cleanName;
+    }
+    if (CATEGORY_ICON_OPTIONS.includes(req.body.icon)) {
+      category.icon = req.body.icon;
+    }
+    if (typeof req.body.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(req.body.color)) {
+      category.color = req.body.color;
+    }
+    if (req.body.budgetMonthly !== undefined) {
+      category.budgetMonthly = Math.max(0, Math.min(10000000, Number(req.body.budgetMonthly) || 0));
+    }
+
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+    res.json({ success: true, category, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while updating the category.' });
+  }
+});
+
+// Delete a category. Existing transactions in it are reassigned to "bills" so
+// nothing is left pointing at a category that no longer exists.
+app.post('/api/ledger/categories/delete', rateLimit(30, 60000), (req, res) => {
+  try {
+    const { categoryId } = req.body;
+    if (!categoryId || typeof categoryId !== 'string') {
+      return res.status(400).json({ error: 'Valid categoryId is required' });
+    }
+    if (categoryId === 'grey_area') {
+      return res.status(403).json({ error: 'The Grey Area category is used by the app and cannot be deleted.' });
+    }
+
+    const exists = currentLedgerState.categories.some((c) => c.id === categoryId);
+    if (!exists) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    currentLedgerState.categories = currentLedgerState.categories.filter((c) => c.id !== categoryId);
+    const fallbackCategoryId = currentLedgerState.categories.some((c) => c.id === 'bills')
+      ? 'bills'
+      : currentLedgerState.categories[0]?.id || 'grey_area';
+    currentLedgerState.transactions.forEach((tx) => {
+      if (tx.category === categoryId) tx.category = fallbackCategoryId;
+    });
+
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+    res.json({ success: true, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while deleting the category.' });
+  }
+});
+
 // AI & Heuristic SMS / UPI Parser Endpoint
 app.post('/api/parse-sms', rateLimit(30, 60000), async (req, res) => {
   const { smsText, defaultSpender = 'husband', husbandName, wifeName } = req.body;
@@ -750,10 +860,7 @@ Determine:
       const parsedJson = JSON.parse(geminiResponse.text || '{}');
 
       let validCat: CategoryId = 'bills';
-      const validCategories: CategoryId[] = [
-        'dining', 'groceries', 'bills', 'shopping', 'transport', 'entertainment', 'health', 'investments', 'grey_area'
-      ];
-      if (validCategories.includes(parsedJson.category as CategoryId)) {
+      if (getValidCategoryIds().includes(parsedJson.category)) {
         validCat = parsedJson.category as CategoryId;
       }
       if (parsedJson.isGreyArea) {

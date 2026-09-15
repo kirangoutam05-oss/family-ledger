@@ -4,6 +4,7 @@ import {
   SpenderId,
   Transaction,
   CategoryId,
+  Category,
   SavingsGoal,
   DeviceIdentity,
 } from './types';
@@ -14,6 +15,7 @@ import { SmsUpiParser } from './components/SmsUpiParser';
 import { GreyAreaQueue } from './components/GreyAreaQueue';
 import { SavingsGoals } from './components/SavingsGoals';
 import { BudgetAlerts } from './components/BudgetAlerts';
+import { CategoryManager } from './components/CategoryManager';
 import { DeviceSyncModal } from './components/DeviceSyncModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
@@ -26,9 +28,10 @@ import {
   HelpCircle,
   Target,
   Bell,
+  Tags,
 } from 'lucide-react';
 
-type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts';
+type NavTab = 'dashboards' | 'auto_parser' | 'grey_areas' | 'savings_goals' | 'budget_alerts' | 'categories';
 
 const IDENTITY_STORAGE_KEY = 'family-ledger:identity';
 
@@ -356,6 +359,54 @@ export default function App() {
     await syncLedgerToServer(updated);
   };
 
+  // Add a new custom category
+  const handleAddCategory = async (details: { name: string; icon: string; color: string; budgetMonthly: number }) => {
+    const res = await fetch('/api/ledger/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to add category');
+    }
+    const data = await res.json();
+    if (data.ledger) setLedger(data.ledger);
+  };
+
+  // Update an existing category's name, icon, color, or budget
+  const handleUpdateCategory = async (
+    categoryId: string,
+    updates: Partial<Pick<Category, 'name' | 'icon' | 'color' | 'budgetMonthly'>>
+  ) => {
+    const res = await fetch('/api/ledger/categories/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoryId, ...updates }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to update category');
+    }
+    const data = await res.json();
+    if (data.ledger) setLedger(data.ledger);
+  };
+
+  // Delete a category (its transactions get reassigned server-side)
+  const handleDeleteCategory = async (categoryId: string) => {
+    const res = await fetch('/api/ledger/categories/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoryId }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to delete category');
+    }
+    const data = await res.json();
+    if (data.ledger) setLedger(data.ledger);
+  };
+
   // Dismiss alert
   const handleDismissAlert = (alertId: string) => {
     const updated = {
@@ -479,6 +530,15 @@ export default function App() {
               onResolveGreyArea={handleOpenGreyAreaDirect}
             />
           )}
+
+          {activeTab === 'categories' && (
+            <CategoryManager
+              ledger={ledger}
+              onAddCategory={handleAddCategory}
+              onUpdateCategory={handleUpdateCategory}
+              onDeleteCategory={handleDeleteCategory}
+            />
+          )}
         </main>
 
         {/* Clean Apple iOS Tab Bar */}
@@ -556,6 +616,18 @@ export default function App() {
                 )}
               </div>
               <span className="text-[10px] font-medium tracking-tight">Alerts</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('categories')}
+              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-colors ${
+                activeTab === 'categories'
+                  ? 'text-[#007AFF]'
+                  : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+              }`}
+            >
+              <Tags className="w-5 h-5" />
+              <span className="text-[10px] font-medium tracking-tight">Categories</span>
             </button>
           </div>
         </nav>
