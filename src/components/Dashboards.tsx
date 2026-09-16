@@ -7,6 +7,7 @@ import {
 } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel } from '../utils/helpers';
 import { ExportSection } from './ExportSection';
+import { TransactionFilterSheet, TransactionFilters, EMPTY_FILTERS, countActiveFilters } from './TransactionFilterSheet';
 import {
   TrendingDown,
   TrendingUp,
@@ -16,6 +17,7 @@ import {
   Lock,
   Edit3,
   BarChart3,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface DashboardsProps {
@@ -36,6 +38,8 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trendGranularity, setTrendGranularity] = useState<'day' | 'week' | 'month'>('day');
+  const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
@@ -76,14 +80,38 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     }
   });
 
-  // Filtered transactions for the list
-  const displayTransactions = relevantTransactions.filter((tx) => {
-    return (
-      tx.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (tx.notes && tx.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (tx.upiRef && tx.upiRef.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  });
+  // Filtered + sorted transactions for the list
+  const displayTransactions = relevantTransactions
+    .filter((tx) => {
+      const q = searchQuery.toLowerCase();
+      return (
+        !q ||
+        tx.title.toLowerCase().includes(q) ||
+        (tx.notes && tx.notes.toLowerCase().includes(q)) ||
+        (tx.upiRef && tx.upiRef.toLowerCase().includes(q))
+      );
+    })
+    .filter((tx) => filters.categories.length === 0 || filters.categories.includes(tx.category))
+    .filter((tx) => filters.paymentModes.length === 0 || filters.paymentModes.includes(tx.paymentMode))
+    .filter((tx) => filters.type === 'all' || tx.type === filters.type)
+    .filter((tx) => filters.spender === 'all' || tx.spender === filters.spender)
+    .filter((tx) => !filters.dateFrom || tx.date.slice(0, 10) >= filters.dateFrom)
+    .filter((tx) => !filters.dateTo || tx.date.slice(0, 10) <= filters.dateTo)
+    .sort((a, b) => {
+      switch (filters.sortBy) {
+        case 'date_asc':
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        case 'amount_desc':
+          return b.amount - a.amount;
+        case 'amount_asc':
+          return a.amount - b.amount;
+        case 'date_desc':
+        default:
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+      }
+    });
+
+  const activeFilterCount = countActiveFilters(filters);
 
   const isShared = activeSpender === 'shared';
 
@@ -475,24 +503,58 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 
           <div className="flex items-center gap-2">
             {/* Search Input */}
-            <div className="relative">
+            <div className="relative flex-1 sm:flex-initial">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400" />
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 pr-3 py-1 text-xs rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] w-36 sm:w-44 outline-none placeholder:text-neutral-400"
+                className="pl-8 pr-3 py-1 text-xs rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] w-full sm:w-44 outline-none placeholder:text-neutral-400"
               />
             </div>
+
+            {/* Filters trigger */}
+            <button
+              type="button"
+              onClick={() => setIsFilterSheetOpen(true)}
+              className={`relative shrink-0 p-1.5 rounded-lg transition-colors ${
+                activeFilterCount > 0
+                  ? 'bg-[#007AFF] text-white'
+                  : 'bg-black/[0.04] dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-300'
+              }`}
+              title="Filter & sort transactions"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
+
+        {activeFilterCount > 0 && (
+          <div className="flex items-center justify-between px-1 -mt-1">
+            <p className="text-[11px] text-neutral-400">
+              {displayTransactions.length} of {relevantTransactions.length} transactions match your filters
+            </p>
+            <button
+              type="button"
+              onClick={() => setFilters(EMPTY_FILTERS)}
+              className="text-[11px] font-medium text-[#007AFF]"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
 
         {/* Grouped Table View */}
         <div className="rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs overflow-hidden divide-y divide-black/[0.04] dark:divide-white/[0.04]">
           {displayTransactions.length === 0 ? (
             <div className="py-12 text-center text-xs text-neutral-400">
-              No transactions match your search.
+              No transactions match your search{activeFilterCount > 0 ? ' and filters' : ''}.
             </div>
           ) : (
             displayTransactions.map((tx, index) => {
@@ -628,6 +690,17 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           )}
         </div>
       </div>
+
+      <TransactionFilterSheet
+        isOpen={isFilterSheetOpen}
+        onClose={() => setIsFilterSheetOpen(false)}
+        categories={categories}
+        filters={filters}
+        onChange={setFilters}
+        isShared={isShared}
+        husbandName={husbandName}
+        wifeName={wifeName}
+      />
     </div>
   );
 };
