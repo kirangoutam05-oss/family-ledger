@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Transaction,
@@ -19,6 +19,20 @@ import {
   BarChart3,
   SlidersHorizontal,
 } from 'lucide-react';
+
+// The household's billing cycle runs the 21st of one month through the 20th
+// of the next, not the calendar month — shared by the "This Month" KPI and
+// the Spending Trends month view so both agree on what a "month" means.
+function billingCycleStart(d: Date): Date {
+  const start = new Date(d.getFullYear(), d.getMonth() - (d.getDate() < 21 ? 1 : 0), 21);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function billingCycleLabel(start: Date): string {
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 20);
+  return `${start.getDate()}/${start.getMonth() + 1} – ${end.getDate()}/${end.getMonth() + 1}`;
+}
 
 interface DashboardsProps {
   ledger: LedgerState;
@@ -53,6 +67,18 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const totalDebits = relevantTransactions
     .filter((t) => t.type === 'debit')
     .reduce((sum, t) => sum + t.amount, 0);
+
+  // "This Month" — scoped to the current 21st-to-20th billing cycle, not
+  // all-time, so the headline number reads as an actual monthly cash flow.
+  const currentCycleStart = billingCycleStart(new Date());
+  const currentCycleEnd = new Date(currentCycleStart.getFullYear(), currentCycleStart.getMonth() + 1, 21);
+  const currentCycleDebitTxs = relevantTransactions.filter((t) => {
+    if (t.type !== 'debit') return false;
+    const d = new Date(t.date);
+    return d >= currentCycleStart && d < currentCycleEnd;
+  });
+  const currentCycleDebits = currentCycleDebitTxs.reduce((sum, t) => sum + t.amount, 0);
+  const currentCycleLabel = billingCycleLabel(currentCycleStart);
 
   // Household spending breakdown by partner (informational — not a debt/balance)
   const husbandSpent = transactions
@@ -192,23 +218,34 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     } else {
       // "Month" here tracks the household's actual billing cycle — the 21st
       // of one month through the 20th of the next — not the calendar month.
-      const cycleStartFor = (d: Date) => {
-        const start = new Date(d.getFullYear(), d.getMonth() - (d.getDate() < 21 ? 1 : 0), 21);
-        start.setHours(0, 0, 0, 0);
-        return start;
-      };
-      const currentCycleStart = cycleStartFor(now);
-      for (let i = 5; i >= 0; i--) {
-        const cycleStart = new Date(currentCycleStart.getFullYear(), currentCycleStart.getMonth() - i, 21);
+      // The window reaches back to the earliest transaction's cycle (min 6,
+      // capped at 24) so the chart grows as more history is added, and the
+      // bar strip scrolls horizontally like a slider instead of squeezing
+      // everything into a fixed 6-bar view.
+      const cycleStart = billingCycleStart(now);
+      let cyclesBack = 5;
+      if (debits.length > 0) {
+        const earliest = debits.reduce(
+          (min, t) => (new Date(t.date) < min ? new Date(t.date) : min),
+          new Date(debits[0].date)
+        );
+        const earliestCycleStart = billingCycleStart(earliest);
+        const monthsDiff =
+          (cycleStart.getFullYear() - earliestCycleStart.getFullYear()) * 12 +
+          (cycleStart.getMonth() - earliestCycleStart.getMonth());
+        cyclesBack = Math.max(cyclesBack, Math.min(monthsDiff, 23));
+      }
+      for (let i = cyclesBack; i >= 0; i--) {
+        const start = new Date(cycleStart.getFullYear(), cycleStart.getMonth() - i, 21);
         buckets.push({
-          key: `${cycleStart.getFullYear()}-${cycleStart.getMonth()}`,
-          label: cycleStart.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          key: `${start.getFullYear()}-${start.getMonth()}`,
+          label: billingCycleLabel(start),
           amount: 0,
         });
       }
       debits.forEach((tx) => {
-        const cycleStart = cycleStartFor(new Date(tx.date));
-        const key = `${cycleStart.getFullYear()}-${cycleStart.getMonth()}`;
+        const start = billingCycleStart(new Date(tx.date));
+        const key = `${start.getFullYear()}-${start.getMonth()}`;
         const bucket = buckets.find((b) => b.key === key);
         if (bucket) bucket.amount += tx.amount;
       });
@@ -223,6 +260,16 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const trendAverage = Math.round(trendTotal / trendBuckets.length);
   const trendPeak = trendBuckets.reduce((peak, b) => (b.amount > peak.amount ? b : peak), trendBuckets[0]);
   const trendPeriodLabel = trendGranularity === 'day' ? 'day' : trendGranularity === 'week' ? 'week' : 'cycle';
+  const trendBarWidth = trendGranularity === 'month' ? 84 : trendGranularity === 'week' ? 48 : 40;
+
+  // The bar strip scrolls horizontally like a slider once there's more
+  // history than fits on screen — keep it scrolled to the latest period by
+  // default, so the user swipes left to go back in time.
+  const trendScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = trendScrollRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [trendGranularity, trendBuckets.length]);
 
   return (
     <div className="space-y-6">
@@ -233,8 +280,8 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400">
             <span>
               {activeSpender === 'shared'
-                ? 'Total Outflow'
-                : `${activeSpender === 'husband' ? husbandName : wifeName}'s Outflow`}
+                ? "This Month's Outflow"
+                : `${activeSpender === 'husband' ? husbandName : wifeName}'s Outflow This Month`}
             </span>
             <span className="p-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
               <TrendingDown className="w-3.5 h-3.5" />
@@ -242,11 +289,11 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           </div>
           <div className="my-3">
             <span className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white">
-              {formatCurrency(totalDebits, currency)}
+              {formatCurrency(currentCycleDebits, currency)}
             </span>
           </div>
           <div className="text-xs text-neutral-400">
-            {relevantTransactions.filter((t) => t.type === 'debit').length} transactions recorded
+            {currentCycleDebitTxs.length} transactions • {currentCycleLabel} cycle
           </div>
         </div>
 
@@ -459,32 +506,42 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                 </div>
               </div>
 
-              {/* Bar chart */}
-              <div className="flex items-end justify-between gap-1.5 sm:gap-3">
-                {trendBuckets.map((b, index) => (
-                  <div
-                    key={b.key}
-                    className="flex-1 flex flex-col items-center min-w-0"
-                    title={`${b.label}: ${formatCurrency(b.amount, currency)}`}
-                  >
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 mb-1 truncate w-full text-center">
-                      {b.amount > 0 ? formatCurrency(b.amount, currency) : ''}
-                    </span>
-                    <div className="w-full h-40 sm:h-48 flex items-end">
-                      <motion.div
-                        className={`w-full rounded-t-md ${
-                          b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
-                        }`}
-                        initial={{ height: 0 }}
-                        animate={{ height: `${Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0)}%` }}
-                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
-                      />
+              {/* Bar chart — a horizontal slider once there's more history
+                  than fits; scrolled to the latest period by default. */}
+              <div className="space-y-1.5">
+                {trendGranularity === 'month' && trendBuckets.length > 6 && (
+                  <p className="text-[10px] text-neutral-400 text-right">← Swipe to see more history</p>
+                )}
+                <div
+                  ref={trendScrollRef}
+                  className="flex items-end gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth snap-x snap-mandatory"
+                >
+                  {trendBuckets.map((b, index) => (
+                    <div
+                      key={b.key}
+                      className="shrink-0 snap-start flex flex-col items-center"
+                      style={{ width: trendBarWidth }}
+                      title={`${b.label}: ${formatCurrency(b.amount, currency)}`}
+                    >
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 mb-1 truncate w-full text-center">
+                        {b.amount > 0 ? formatCurrency(b.amount, currency) : ''}
+                      </span>
+                      <div className="w-full h-40 sm:h-48 flex items-end">
+                        <motion.div
+                          className={`w-full rounded-t-md ${
+                            b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
+                          }`}
+                          initial={{ height: 0 }}
+                          animate={{ height: `${Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0)}%` }}
+                          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
+                        />
+                      </div>
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 mt-1 text-center leading-tight whitespace-nowrap">
+                        {b.label}
+                      </span>
                     </div>
-                    <span className="text-[9px] sm:text-[10px] text-neutral-400 mt-1 truncate w-full text-center">
-                      {b.label}
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </>
           )}
