@@ -587,6 +587,7 @@ export default function App() {
                   ledger={ledger}
                   activeSpender={activeSpender}
                   onAddTransaction={handleAddTransaction}
+                  onEditTransaction={(tx) => setEditingTransaction(tx)}
                 />
               )}
 

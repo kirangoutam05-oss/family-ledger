@@ -611,6 +611,9 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
       if (updates.notes !== undefined) {
         tx.notes = sanitizeString(updates.notes, 250) || undefined;
       }
+      if (updates.date && typeof updates.date === 'string' && !isNaN(Date.parse(updates.date))) {
+        tx.date = updates.date;
+      }
     }
 
     currentLedgerState.lastSyncTime = new Date().toISOString();

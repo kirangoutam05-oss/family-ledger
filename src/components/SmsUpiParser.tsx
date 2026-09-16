@@ -5,20 +5,25 @@ import {
   HelpCircle,
   RefreshCw,
   Clock,
+  History,
+  Edit3,
+  CalendarClock,
 } from 'lucide-react';
 import { Transaction, SpenderId, LedgerState, CategoryId } from '../types';
-import { formatCurrency, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
+import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
 interface SmsUpiParserProps {
   ledger: LedgerState;
   activeSpender: SpenderId | 'shared';
   onAddTransaction: (transaction: Transaction) => Promise<void>;
+  onEditTransaction: (transaction: Transaction) => void;
 }
 
 export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   ledger,
   activeSpender,
   onAddTransaction,
+  onEditTransaction,
 }) => {
   const [smsInput, setSmsInput] = useState('');
   const [selectedSpender, setSelectedSpender] = useState<SpenderId>(
@@ -143,6 +148,11 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
     categories.find((c) => c.id === (isGreyArea ? inlineCategory : parsedPreview?.category)) ||
     categories[0];
 
+  // Newest-first is already the storage order (the server unshifts each new
+  // add), so this reflects true add order even when a transaction's own date
+  // is wrong — which is exactly the case this list exists to catch.
+  const recentTransactions = ledger.transactions.slice(0, 5);
+
   return (
     <div className="space-y-6">
       {/* Clean Header & Input Card */}
@@ -251,12 +261,18 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                 <div className="text-sm font-semibold text-neutral-900 dark:text-white">
                   {isGreyArea ? inlineTitle || parsedPreview.title : parsedPreview.title}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-neutral-400 mt-0.5">
+                <div className="flex items-center gap-2 text-xs text-neutral-400 mt-0.5 flex-wrap">
                   <span>{getPaymentModeLabel(parsedPreview.paymentMode || 'UPI')}</span>
                   <span>•</span>
                   <span>{parsedPreview.bankName || 'Bank Alert'}</span>
                   <span>•</span>
                   <span>{selectedSpender === 'husband' ? husbandName : wifeName}</span>
+                </div>
+                {/* Parsed date/time — shown so a misread timestamp (the whole
+                    reason this screen exists) is caught before saving, not after. */}
+                <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  <CalendarClock className="w-3 h-3 shrink-0" />
+                  <span>{formatDate(parsedPreview.date || new Date().toISOString())}</span>
                 </div>
               </div>
             </div>
@@ -402,6 +418,80 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
           </div>
         </div>
       )}
+
+      {/* Recently Added — every transaction added anywhere in the app (not
+          just via this parser), newest first, so a bad parse or a fat-finger
+          entry can be caught and fixed immediately instead of hunting for it
+          later in Recent Activity. */}
+      <div className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 px-1">
+          <History className="w-3.5 h-3.5" />
+          <span>Recently Added</span>
+        </h2>
+
+        <div className="rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs overflow-hidden divide-y divide-black/[0.04] dark:divide-white/[0.04]">
+          {recentTransactions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-neutral-400">
+              Nothing added yet — it'll show up here as soon as you save one.
+            </div>
+          ) : (
+            recentTransactions.map((tx) => {
+              const cat = categories.find((c) => c.id === tx.category) || categories[0];
+              return (
+                <button
+                  key={tx.id}
+                  type="button"
+                  onClick={() => onEditTransaction(tx)}
+                  className="w-full p-3.5 flex items-center justify-between gap-3 text-left hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0"
+                      style={{ backgroundColor: cat.color }}
+                    >
+                      {getCategoryIcon(cat.icon, 'w-4 h-4')}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-neutral-900 dark:text-white truncate">
+                        {tx.title}
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-neutral-400 mt-0.5">
+                        <CalendarClock className="w-3 h-3 shrink-0" />
+                        <span className="truncate">
+                          {formatDate(tx.date)} • {getPaymentModeLabel(tx.paymentMode)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="text-right">
+                      <div
+                        className={`text-xs font-semibold ${
+                          tx.type === 'credit'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-neutral-900 dark:text-white'
+                        }`}
+                      >
+                        {tx.type === 'credit' ? '+' : '-'}
+                        {formatCurrency(tx.amount, currency)}
+                      </div>
+                      <div className="text-[10px] text-neutral-400">{cat.name}</div>
+                    </div>
+                    <Edit3 className="w-3.5 h-3.5 text-neutral-300 dark:text-neutral-600" />
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {recentTransactions.length > 0 && (
+          <p className="text-[11px] text-neutral-400 px-1">
+            Tap any entry to fix a wrong date, time, category, or amount.
+          </p>
+        )}
+      </div>
     </div>
   );
 };

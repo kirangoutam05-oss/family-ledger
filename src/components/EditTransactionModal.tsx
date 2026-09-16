@@ -46,6 +46,22 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const ownerName = transaction.spender === 'husband' ? husbandName : wifeName;
   const currentUserName = authenticatedUser === 'husband' ? husbandName : wifeName;
 
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const toDateTimeStrs = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) {
+      const now = new Date();
+      return {
+        dateStr: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+        timeStr: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      };
+    }
+    return {
+      dateStr: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      timeStr: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    };
+  };
+
   // Form states
   const [title, setTitle] = useState(transaction.title);
   const [amount, setAmount] = useState<number | ''>(transaction.amount);
@@ -54,6 +70,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     transaction.paymentMode
   );
   const [notes, setNotes] = useState(transaction.notes || '');
+  const [dateStr, setDateStr] = useState(() => toDateTimeStrs(transaction.date).dateStr);
+  const [timeStr, setTimeStr] = useState(() => toDateTimeStrs(transaction.date).timeStr);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -67,6 +85,9 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setCategory(transaction.category);
       setPaymentMode(transaction.paymentMode);
       setNotes(transaction.notes || '');
+      const { dateStr: d, timeStr: t } = toDateTimeStrs(transaction.date);
+      setDateStr(d);
+      setTimeStr(t);
       setShowDeleteConfirm(false);
       setErrorMsg(null);
     }
@@ -88,12 +109,16 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     setErrorMsg(null);
 
     try {
+      const enteredDate = dateStr && timeStr ? new Date(`${dateStr}T${timeStr}:00`) : null;
+      const isoDate = enteredDate && !isNaN(enteredDate.getTime()) ? enteredDate.toISOString() : undefined;
+
       await onSave(transaction.id, {
         title: title.trim(),
         amount: Number(amount),
         category,
         paymentMode,
         notes: notes.trim() || undefined,
+        ...(isoDate ? { date: isoDate } : {}),
       });
       onClose();
     } catch (err: unknown) {
@@ -228,6 +253,36 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
                   required
                   className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                />
+              </div>
+            </div>
+
+            {/* Date & Time — editable here so a bad parse (a wrong date/time
+                extracted from an SMS, or a fat-fingered manual entry) can be
+                corrected without re-adding the whole transaction. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={dateStr}
+                  onChange={(e) => setDateStr(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  Time
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={timeStr}
+                  onChange={(e) => setTimeStr(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
             </div>
