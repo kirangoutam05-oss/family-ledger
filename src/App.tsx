@@ -606,6 +606,7 @@ export default function App() {
                   onAddCategory={handleAddCategory}
                   onUpdateCategory={handleUpdateCategory}
                   onDeleteCategory={handleDeleteCategory}
+                  onEditTransaction={(tx) => setEditingTransaction(tx)}
                 />
               )}
 

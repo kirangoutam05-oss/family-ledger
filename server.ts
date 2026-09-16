@@ -189,13 +189,42 @@ const MONTH_ABBR: Record<string, number> = {
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
+// Guard against a false-positive date match (a card number fragment, a
+// hallucinated LLM date) that resolves implausibly far in the future or
+// past — a transaction SMS is essentially always about "now" or the past.
+function isPlausibleTransactionDate(d: Date): boolean {
+  const now = Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const fiveYearsMs = 5 * 365 * oneDayMs;
+  return d.getTime() <= now + oneDayMs && d.getTime() >= now - fiveYearsMs;
+}
+
+// Gemini reads dates far more flexibly than any regex (odd phrasing,
+// relative dates, unfamiliar formats), so its own dateTime field is trusted
+// first when present and sane — extractDateTimeFromSms remains the fallback
+// for when Gemini omits it or isn't configured at all.
+function geminiDate(dateTime: unknown): string | null {
+  if (!dateTime || typeof dateTime !== 'string') return null;
+  const parsed = new Date(dateTime);
+  if (isNaN(parsed.getTime()) || !isPlausibleTransactionDate(parsed)) return null;
+  return parsed.toISOString();
+}
+
 function extractDateTimeFromSms(sms: string): string | null {
-  // Most banks write DD-Mon-YY / DD/MM/YYYY, but some (e.g. HDFC's card-spend
-  // alert) use ISO order instead: "On 2026-09-16:22:46:14" — year first, with
-  // no space before the time. Try ISO first since its 4-digit year prefix is
-  // unambiguous; fall back to the day-first format otherwise.
-  const isoDateMatch = sms.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
-  const dayFirstMatch = sms.match(/\b(\d{1,2})[-\/]([A-Za-z]{3,}|\d{1,2})[-\/](\d{2,4})\b/);
+  // Indian bank/UPI SMS use a surprising variety of date shapes: ISO
+  // year-first (some card alerts glue it straight onto the time), the usual
+  // day-first "15-Sep-26" / "15/09/2026" with any of -, /, ., or a plain
+  // space as the separator (occasionally with a "16th" ordinal), and less
+  // commonly a US-style month-first "Sep 16, 2026". Tried in that order,
+  // since each shape's first token (4-digit year, digit day, or letter
+  // month) makes them unambiguous to tell apart.
+  const isoDateMatch = sms.match(/\b(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})\b/);
+  const dayFirstMatch = sms.match(
+    /\b(\d{1,2})(?:st|nd|rd|th)?[-\/.,\s]+([A-Za-z]{3,9}|\d{1,2})[-\/.,\s]+(\d{2,4})\b/
+  );
+  const monthFirstMatch = sms.match(
+    /\b([A-Za-z]{3,9})[-\/.,\s]+(\d{1,2})(?:st|nd|rd|th)?[-\/.,\s]+(\d{2,4})\b/
+  );
 
   let day: number;
   let month: number | undefined;
@@ -216,6 +245,12 @@ function extractDateTimeFromSms(sms: string): string | null {
     year = parseInt(dayFirstMatch[3], 10);
     if (year < 100) year += 2000;
     matchedDateText = dayFirstMatch[0];
+  } else if (monthFirstMatch) {
+    month = MONTH_ABBR[monthFirstMatch[1].slice(0, 3).toLowerCase()];
+    day = parseInt(monthFirstMatch[2], 10);
+    year = parseInt(monthFirstMatch[3], 10);
+    if (year < 100) year += 2000;
+    matchedDateText = monthFirstMatch[0];
   } else {
     return null;
   }
@@ -240,14 +275,7 @@ function extractDateTimeFromSms(sms: string): string | null {
   }
 
   const parsed = new Date(year, month, day, hours, minutes, seconds);
-  if (isNaN(parsed.getTime())) return null;
-
-  // Guard against false-positive matches (e.g. a card number fragment) that
-  // resolve to a date implausibly far in the future or past.
-  const now = Date.now();
-  const oneDayMs = 24 * 60 * 60 * 1000;
-  const fiveYearsMs = 5 * 365 * oneDayMs;
-  if (parsed.getTime() > now + oneDayMs || parsed.getTime() < now - fiveYearsMs) return null;
+  if (isNaN(parsed.getTime()) || !isPlausibleTransactionDate(parsed)) return null;
 
   return parsed.toISOString();
 }
@@ -939,19 +967,21 @@ app.post('/api/parse-sms', rateLimit(30, 60000), async (req, res) => {
   // If Gemini API is configured, use Gemini 3.8-Flash with structured schema
   if (ai) {
     try {
+      // Built from the household's actual live category list (not a fixed
+      // enum) so Gemini always sees whatever categories exist right now,
+      // custom ones included, instead of drifting out of sync over time.
+      const categoryList = currentLedgerState.categories
+        .filter((c) => c.id !== 'grey_area')
+        .map((c) => `- ${c.id} (${c.name})`)
+        .join('\n');
+
+      const nowIso = new Date().toISOString();
       const prompt = `You are an expert Indian UPI and banking SMS parsing intelligence for a family finance app called Family Ledger.
 Analyze the following bank SMS or UPI notification:
 "${maskedSms}"
 
 Categories must be strictly one of:
-- dining (restaurants, Zomato, Swiggy, cafes)
-- groceries (Blinkit, Zepto, DMart, Instamart, BigBasket, vegetables, daily needs)
-- bills (electricity, BESCOM, rent, wifi, broadband, mobile recharge, maintenance)
-- shopping (clothing, Zara, Myntra, Amazon, Flipkart, electronics)
-- transport (Uber, Ola, Shell petrol, fuel, toll, parking)
-- entertainment (movies, Netflix, Apple subscriptions, games)
-- health (pharmacy, Apollo, doctors, Cult.fit, hospital)
-- investments (mutual funds, Groww, Zerodha, SIP, gold)
+${categoryList}
 - grey_area (ambiguous peer UPI transfer to an individual name or phone number with no clear merchant context, ATM cash withdrawal, generic "UPI/..." transfers, or splits where it is unclear if it is personal vs household)
 
 Determine:
@@ -969,7 +999,8 @@ Determine:
 7. upiRef: UPI reference or transaction ID if present
 8. isGreyArea: boolean (true if payee is an individual or ATM or ambiguous transfer)
 9. greyAreaReason: why context is needed
-10. contextQuestion: A polite, natural question addressing ${safeSpender === 'husband' ? safeHusbandName : safeWifeName} asking for the exact nature of the spend (e.g. household repair vs personal loan).`;
+10. contextQuestion: A polite, natural question addressing ${safeSpender === 'husband' ? safeHusbandName : safeWifeName} asking for the exact nature of the spend (e.g. household repair vs personal loan).
+11. dateTime: The exact date and time the transaction happened, AS STATED IN THE SMS — read it however the bank wrote it (any date order, separator, ordinal, relative phrase like "today"/"yesterday", or a date and time glued together with no space) and return it as strict ISO 8601 ("YYYY-MM-DDTHH:mm:ss"). If the SMS gives a date but no time, use "12:00:00". If the SMS gives no date at all, omit this field entirely — do not guess. The current date/time, for resolving relative phrases only, is ${nowIso}.`;
 
       const geminiResponse = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -989,6 +1020,7 @@ Determine:
               isGreyArea: { type: Type.BOOLEAN },
               greyAreaReason: { type: Type.STRING },
               contextQuestion: { type: Type.STRING },
+              dateTime: { type: Type.STRING },
             },
             required: ['title', 'amount', 'type', 'category', 'isGreyArea'],
           },
@@ -1023,7 +1055,7 @@ Determine:
         greyAreaReason: sanitizeString(parsedJson.greyAreaReason, 150) || '',
         contextQuestion: sanitizeString(parsedJson.contextQuestion, 200) || '',
         spender: safeSpender,
-        date: extractDateTimeFromSms(cleanSms) || new Date().toISOString(),
+        date: geminiDate(parsedJson.dateTime) || extractDateTimeFromSms(cleanSms) || new Date().toISOString(),
       };
 
       return res.json({
