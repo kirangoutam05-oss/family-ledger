@@ -105,9 +105,11 @@ export default function App() {
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
-  // Bottom-nav tab switches fade; switching Shared/Kiran/Mageswari (swipe or tap)
-  // slides in the swiped/tapped direction instead.
-  const touchStartX = React.useRef<number | null>(null);
+  // Bottom-nav tab switches fade; switching Shared/Kiran/Mageswari (from the
+  // header dropdown) slides in the direction of the tapped item instead.
+  // This used to also trigger on a left/right swipe anywhere in the content
+  // area, but that gesture kept firing accidentally while scrolling charts
+  // and lists — picking a spender is now only done via the dropdown.
   const [slideDirection, setSlideDirection] = useState(1);
   const [transitionMode, setTransitionMode] = useState<'fade' | 'slide'>('fade');
 
@@ -116,29 +118,6 @@ export default function App() {
     setActiveTab(tab);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-    touchStartX.current = null;
-    if (Math.abs(deltaX) < 60) return;
-
-    const currentIndex = SPENDER_ORDER.indexOf(activeSpender);
-    if (deltaX < 0 && currentIndex < SPENDER_ORDER.length - 1) {
-      setTransitionMode('slide');
-      setSlideDirection(1);
-      setActiveSpender(SPENDER_ORDER[currentIndex + 1]);
-    } else if (deltaX > 0 && currentIndex > 0) {
-      setTransitionMode('slide');
-      setSlideDirection(-1);
-      setActiveSpender(SPENDER_ORDER[currentIndex - 1]);
-    }
-  };
-
-  // Also used when picking a spender from the header dropdown, so the slide
-  // direction stays consistent with tap position, not just swipes.
   const handleSelectSpender = (spender: SpenderId | 'shared') => {
     const fromIndex = SPENDER_ORDER.indexOf(activeSpender);
     const toIndex = SPENDER_ORDER.indexOf(spender);
@@ -581,11 +560,7 @@ export default function App() {
         />
 
         {/* Main Body Content */}
-        <main
-          className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28 overflow-x-hidden"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28 overflow-x-hidden">
           <AnimatePresence mode="wait" custom={{ mode: transitionMode, direction: slideDirection }} initial={false}>
             <motion.div
               key={`${activeTab}-${activeSpender}`}

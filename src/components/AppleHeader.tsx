@@ -6,6 +6,7 @@ import {
   Check,
   Plus,
   Lock,
+  Users,
 } from 'lucide-react';
 import { SpenderId } from '../types';
 
@@ -71,11 +72,12 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
 
               <button
                 onClick={() => setSpenderMenuOpen((v) => !v)}
-                className="p-2 rounded-full bg-black/[0.06] dark:bg-white/[0.1] hover:bg-black/[0.1] dark:hover:bg-white/[0.16] flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1"
-                title="Switch between Kiran and Mageswari"
+                className="p-2.5 rounded-full bg-black/[0.06] dark:bg-white/[0.1] hover:bg-black/[0.1] dark:hover:bg-white/[0.16] flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1"
+                title="Switch between Overall, Kiran, and Mageswari"
               >
                 <ChevronDown
-                  className={`w-4 h-4 sm:w-5 sm:h-5 text-neutral-600 dark:text-neutral-300 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
+                  strokeWidth={3}
+                  className={`w-5 h-5 sm:w-6 sm:h-6 text-neutral-700 dark:text-neutral-200 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
@@ -110,29 +112,54 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.96, y: -4 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                className="glass-sheet absolute left-3 sm:left-6 top-full mt-2 w-44 rounded-2xl border border-black/[0.06] dark:border-white/[0.1] p-1.5 z-50"
+                className="glass-sheet absolute left-3 sm:left-6 top-full mt-2 w-64 rounded-2xl border border-black/[0.06] dark:border-white/[0.1] p-2 z-50"
               >
+                <button
+                  onClick={() => {
+                    onSelectSpender('shared');
+                    setSpenderMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-3.5 rounded-xl text-sm transition-colors ${
+                    activeSpender === 'shared'
+                      ? 'bg-black/[0.05] dark:bg-white/[0.1] text-neutral-900 dark:text-white font-bold'
+                      : 'text-neutral-700 dark:text-neutral-300 font-medium hover:bg-black/5 dark:hover:bg-white/10'
+                  }`}
+                >
+                  <span className="w-6 h-6 rounded-full bg-neutral-400/20 flex items-center justify-center shrink-0">
+                    <Users className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300" />
+                  </span>
+                  <span className="truncate min-w-0 flex-1 text-left">Overall</span>
+                  {activeSpender === 'shared' && <Check className="w-4 h-4 text-neutral-900 dark:text-white shrink-0" />}
+                </button>
                 <button
                   onClick={() => {
                     onSelectSpender('husband');
                     setSpenderMenuOpen(false);
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-3.5 rounded-xl text-sm transition-colors ${
+                    activeSpender === 'husband'
+                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold'
+                      : 'text-neutral-700 dark:text-neutral-300 font-medium hover:bg-black/5 dark:hover:bg-white/10'
+                  }`}
                 >
-                  <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
                   <span className="truncate min-w-0 flex-1 text-left">{husbandName}</span>
-                  {activeSpender === 'husband' && <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                  {activeSpender === 'husband' && <Check className="w-4 h-4 text-blue-500 shrink-0" />}
                 </button>
                 <button
                   onClick={() => {
                     onSelectSpender('wife');
                     setSpenderMenuOpen(false);
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-3.5 rounded-xl text-sm transition-colors ${
+                    activeSpender === 'wife'
+                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold'
+                      : 'text-neutral-700 dark:text-neutral-300 font-medium hover:bg-black/5 dark:hover:bg-white/10'
+                  }`}
                 >
-                  <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0" />
                   <span className="truncate min-w-0 flex-1 text-left">{wifeName}</span>
-                  {activeSpender === 'wife' && <Check className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+                  {activeSpender === 'wife' && <Check className="w-4 h-4 text-purple-500 shrink-0" />}
                 </button>
               </motion.div>
             </>
