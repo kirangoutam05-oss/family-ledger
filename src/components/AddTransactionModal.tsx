@@ -128,24 +128,24 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               alone, since iOS Safari's native date/time picker controls
               don't size the same way a text input's padding does. */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="text-xs font-semibold text-neutral-500 block mb-1">Date</label>
               <input
                 type="date"
                 required
                 value={dateStr}
                 onChange={(e) => setDateStr(e.target.value)}
-                className="w-full h-11 text-xs font-medium px-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full min-w-0 h-11 text-xs font-medium px-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="text-xs font-semibold text-neutral-500 block mb-1">Time</label>
               <input
                 type="time"
                 required
                 value={timeStr}
                 onChange={(e) => setTimeStr(e.target.value)}
-                className="w-full h-11 text-xs font-medium px-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full min-w-0 h-11 text-xs font-medium px-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>

@@ -242,13 +242,13 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
               type="date"
               value={filters.dateFrom}
               onChange={(e) => onChange({ ...filters, dateFrom: e.target.value })}
-              className="h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+              className="w-full min-w-0 h-10 px-2.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
             />
             <input
               type="date"
               value={filters.dateTo}
               onChange={(e) => onChange({ ...filters, dateTo: e.target.value })}
-              className="h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+              className="w-full min-w-0 h-10 px-2.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
             />
           </div>
         </div>

@@ -261,7 +261,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 extracted from an SMS, or a fat-fingered manual entry) can be
                 corrected without re-adding the whole transaction. */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                   Date
                 </label>
@@ -270,10 +270,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   required
                   value={dateStr}
                   onChange={(e) => setDateStr(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full min-w-0 h-11 px-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                   Time
                 </label>
@@ -282,7 +282,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   required
                   value={timeStr}
                   onChange={(e) => setTimeStr(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full min-w-0 h-11 px-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
             </div>

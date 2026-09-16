@@ -153,6 +153,25 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   // is wrong — which is exactly the case this list exists to catch.
   const recentTransactions = ledger.transactions.slice(0, 5);
 
+  // Parsed date/time, editable right in the preview — a wrong extraction
+  // (or a bank that gives no date at all) should be fixable before saving,
+  // not just after via Recently Added.
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const previewDateObj = (() => {
+    const d = parsedPreview?.date ? new Date(parsedPreview.date) : new Date();
+    return isNaN(d.getTime()) ? new Date() : d;
+  })();
+  const previewDateStr = `${previewDateObj.getFullYear()}-${pad(previewDateObj.getMonth() + 1)}-${pad(previewDateObj.getDate())}`;
+  const previewTimeStr = `${pad(previewDateObj.getHours())}:${pad(previewDateObj.getMinutes())}`;
+
+  const updatePreviewDateTime = (nextDateStr: string, nextTimeStr: string) => {
+    if (!parsedPreview) return;
+    const combined = new Date(`${nextDateStr}T${nextTimeStr}:00`);
+    if (!isNaN(combined.getTime())) {
+      setParsedPreview({ ...parsedPreview, date: combined.toISOString() });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Clean Header & Input Card */}
@@ -268,13 +287,29 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                   <span>•</span>
                   <span>{selectedSpender === 'husband' ? husbandName : wifeName}</span>
                 </div>
-                {/* Parsed date/time — shown so a misread timestamp (the whole
-                    reason this screen exists) is caught before saving, not after. */}
-                <div className="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                  <CalendarClock className="w-3 h-3 shrink-0" />
-                  <span>{formatDate(parsedPreview.date || new Date().toISOString())}</span>
-                </div>
               </div>
+            </div>
+
+            {/* Parsed date/time — editable right here, since a misread
+                timestamp (the whole reason this screen exists) should be
+                fixable before saving, not just after via Recently Added.
+                Whatever's saved here is the same date every other screen
+                (Overview, trends, category totals) reads — there's no
+                separate copy to keep in sync. */}
+            <div className="flex items-center gap-1.5">
+              <CalendarClock className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <input
+                type="date"
+                value={previewDateStr}
+                onChange={(e) => updatePreviewDateTime(e.target.value, previewTimeStr)}
+                className="min-w-0 flex-1 h-8 px-1.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-[11px] text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+              />
+              <input
+                type="time"
+                value={previewTimeStr}
+                onChange={(e) => updatePreviewDateTime(previewDateStr, e.target.value)}
+                className="min-w-0 flex-1 h-8 px-1.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-[11px] text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+              />
             </div>
 
             <div className="text-right">
