@@ -394,8 +394,10 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                           key={cat.id}
                           type="button"
                           onClick={() => setInlineCategory(cat.id)}
-                          className={`p-2 rounded-xl border text-xs flex items-center gap-1.5 bg-white transition-all ${
-                            isChosen ? 'ring-2 ring-blue-500 border-blue-200' : 'border-neutral-200 hover:border-neutral-300'
+                          className={`p-2 rounded-xl border text-xs flex items-center gap-1.5 bg-white dark:bg-neutral-800 transition-all ${
+                            isChosen
+                              ? 'ring-2 ring-blue-500 border-blue-200 dark:border-blue-800'
+                              : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
                           }`}
                         >
                           <div
@@ -404,7 +406,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                           >
                             {getCategoryIcon(cat.icon, 'w-2.5 h-2.5')}
                           </div>
-                          <span className="truncate min-w-0 text-left text-neutral-900 font-medium">{cat.name}</span>
+                          <span className="truncate min-w-0 text-left text-neutral-900 dark:text-white font-medium">{cat.name}</span>
                         </button>
                       );
                     })}

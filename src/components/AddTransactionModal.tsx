@@ -192,10 +192,10 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       key={cat.id}
                       type="button"
                       onClick={() => setCategory(cat.id)}
-                      className={`min-h-[48px] p-2.5 rounded-xl border text-left flex items-center gap-2 bg-white transition-all ${
+                      className={`min-h-[48px] p-2.5 rounded-xl border text-left flex items-center gap-2 bg-white dark:bg-neutral-800 transition-all ${
                         isSelected
-                          ? 'ring-2 ring-blue-500 border-blue-200 shadow-xs'
-                          : 'border-neutral-200 hover:border-neutral-300'
+                          ? 'ring-2 ring-blue-500 border-blue-200 dark:border-blue-800 shadow-xs'
+                          : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
                       }`}
                     >
                       <div
@@ -204,7 +204,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       >
                         {getCategoryIcon(cat.icon, 'w-3 h-3')}
                       </div>
-                      <span className="min-w-0 text-[11px] font-semibold leading-tight text-neutral-900">
+                      <span className="min-w-0 text-[11px] font-semibold leading-tight text-neutral-900 dark:text-white">
                         {cat.name}
                       </span>
                     </button>

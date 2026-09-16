@@ -23,6 +23,14 @@ import {
 // The household's billing cycle runs the 21st of one month through the 20th
 // of the next, not the calendar month — shared by the "This Month" KPI and
 // the Spending Trends month view so both agree on what a "month" means.
+// A YYYY-MM-DD key built from LOCAL calendar fields — never `toISOString()`,
+// which reports the UTC date and silently shifts a transaction into the
+// wrong day's bucket whenever the viewer's timezone offset pushes a local
+// evening/early-morning timestamp across the UTC day boundary.
+function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function billingCycleStart(d: Date): Date {
   const start = new Date(d.getFullYear(), d.getMonth() - (d.getDate() < 21 ? 1 : 0), 21);
   start.setHours(0, 0, 0, 0);
@@ -148,8 +156,8 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     .filter((tx) => filters.paymentModes.length === 0 || filters.paymentModes.includes(tx.paymentMode))
     .filter((tx) => filters.type === 'all' || tx.type === filters.type)
     .filter((tx) => filters.spender === 'all' || tx.spender === filters.spender)
-    .filter((tx) => !filters.dateFrom || tx.date.slice(0, 10) >= filters.dateFrom)
-    .filter((tx) => !filters.dateTo || tx.date.slice(0, 10) <= filters.dateTo)
+    .filter((tx) => !filters.dateFrom || localDateKey(new Date(tx.date)) >= filters.dateFrom)
+    .filter((tx) => !filters.dateTo || localDateKey(new Date(tx.date)) <= filters.dateTo)
     .sort((a, b) => {
       switch (filters.sortBy) {
         case 'date_asc':
@@ -227,13 +235,13 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         const d = new Date(now);
         d.setDate(d.getDate() - i);
         buckets.push({
-          key: d.toISOString().slice(0, 10),
+          key: localDateKey(d),
           label: daysBack > 6 ? `${d.getDate()}/${d.getMonth() + 1}` : d.toLocaleDateString('en-IN', { weekday: 'short' }),
           amount: 0,
         });
       }
       debits.forEach((tx) => {
-        const key = tx.date.slice(0, 10);
+        const key = localDateKey(new Date(tx.date));
         const bucket = buckets.find((b) => b.key === key);
         if (bucket) bucket.amount += tx.amount;
       });
@@ -261,13 +269,13 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         ref.setDate(ref.getDate() - i * 7);
         const monday = mondayOf(ref);
         buckets.push({
-          key: monday.toISOString().slice(0, 10),
+          key: localDateKey(monday),
           label: `${monday.getDate()}/${monday.getMonth() + 1}`,
           amount: 0,
         });
       }
       debits.forEach((tx) => {
-        const key = mondayOf(new Date(tx.date)).toISOString().slice(0, 10);
+        const key = localDateKey(mondayOf(new Date(tx.date)));
         const bucket = buckets.find((b) => b.key === key);
         if (bucket) bucket.amount += tx.amount;
       });

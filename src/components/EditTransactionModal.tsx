@@ -298,10 +298,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     key={cat.id}
                     type="button"
                     onClick={() => setCategory(cat.id)}
-                    className={`min-h-[48px] p-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white transition-all ${
+                    className={`min-h-[48px] p-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white dark:bg-neutral-800 transition-all ${
                       category === cat.id
-                        ? 'ring-2 ring-[#007AFF] border-blue-200 text-[#007AFF]'
-                        : 'border-neutral-200 text-neutral-900 hover:border-neutral-300'
+                        ? 'ring-2 ring-[#007AFF] border-blue-200 dark:border-blue-800 text-[#007AFF]'
+                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white hover:border-neutral-300 dark:hover:border-neutral-600'
                     }`}
                   >
                     <div
