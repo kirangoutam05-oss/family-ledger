@@ -82,6 +82,31 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const currentCycleDebits = currentCycleDebitTxs.reduce((sum, t) => sum + t.amount, 0);
   const currentCycleLabel = billingCycleLabel(currentCycleStart);
 
+  // "Today" — the other half of the Outflow card, alongside the cycle total.
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+  const todayDebitTxs = relevantTransactions.filter((t) => {
+    if (t.type !== 'debit') return false;
+    const d = new Date(t.date);
+    return d >= todayStart && d < todayEnd;
+  });
+  const todayDebits = todayDebitTxs.reduce((sum, t) => sum + t.amount, 0);
+
+  // Which person's data is on screen gets its own colour — blue for Kiran,
+  // purple for Mageswari, teal for the combined household view — carried
+  // through the Outflow card so the active selection stays visually clear
+  // without needing to reopen the header dropdown.
+  const spenderAccent =
+    activeSpender === 'husband'
+      ? { text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10' }
+      : activeSpender === 'wife'
+      ? { text: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-500/10' }
+      : { text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/10' };
+  const outflowCardLabel =
+    activeSpender === 'shared' ? 'Household Outflow' : `${activeSpender === 'husband' ? husbandName : wifeName}'s Outflow`;
+
   // Household spending breakdown by partner (informational — not a debt/balance)
   const husbandSpent = transactions
     .filter((t) => t.type === 'debit' && t.spender === 'husband')
@@ -309,25 +334,34 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     <div className="space-y-6">
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Outflow Card */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            <span>
-              {activeSpender === 'shared'
-                ? "This Month's Outflow"
-                : `${activeSpender === 'husband' ? husbandName : wifeName}'s Outflow This Month`}
-            </span>
-            <span className="p-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+        {/* Outflow Card — Today alongside the current billing cycle, both
+            tinted with the active spender's colour. */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs">
+          <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-4">
+            <span>{outflowCardLabel}</span>
+            <span className={`p-1 rounded-md ${spenderAccent.bg} ${spenderAccent.text}`}>
               <TrendingDown className="w-3.5 h-3.5" />
             </span>
           </div>
-          <div className="my-3">
-            <span className="text-3xl font-semibold tracking-tight text-neutral-900 dark:text-white">
-              {formatCurrency(currentCycleDebits, currency)}
-            </span>
-          </div>
-          <div className="text-xs text-neutral-400">
-            {currentCycleDebitTxs.length} transactions • {currentCycleLabel} cycle
+          <div className="grid grid-cols-2 divide-x divide-black/[0.06] dark:divide-white/[0.08]">
+            <div className="pr-4">
+              <div className="text-[10px] uppercase tracking-wide text-neutral-400 mb-1">Today</div>
+              <div className={`text-2xl font-bold tracking-tight ${spenderAccent.text}`}>
+                {formatCurrency(todayDebits, currency)}
+              </div>
+              <div className="text-[11px] text-neutral-400 mt-1">
+                {todayDebitTxs.length} transaction{todayDebitTxs.length === 1 ? '' : 's'}
+              </div>
+            </div>
+            <div className="pl-4">
+              <div className="text-[10px] uppercase tracking-wide text-neutral-400 mb-1">This Month</div>
+              <div className={`text-2xl font-bold tracking-tight ${spenderAccent.text}`}>
+                {formatCurrency(currentCycleDebits, currency)}
+              </div>
+              <div className="text-[11px] text-neutral-400 mt-1">
+                {currentCycleDebitTxs.length} txns • {currentCycleLabel}
+              </div>
+            </div>
           </div>
         </div>
 

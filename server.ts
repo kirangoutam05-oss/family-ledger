@@ -190,23 +190,46 @@ const MONTH_ABBR: Record<string, number> = {
 };
 
 function extractDateTimeFromSms(sms: string): string | null {
-  const dateMatch = sms.match(/\b(\d{1,2})[-\/]([A-Za-z]{3,}|\d{1,2})[-\/](\d{2,4})\b/);
-  if (!dateMatch) return null;
+  // Most banks write DD-Mon-YY / DD/MM/YYYY, but some (e.g. HDFC's card-spend
+  // alert) use ISO order instead: "On 2026-09-16:22:46:14" — year first, with
+  // no space before the time. Try ISO first since its 4-digit year prefix is
+  // unambiguous; fall back to the day-first format otherwise.
+  const isoDateMatch = sms.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  const dayFirstMatch = sms.match(/\b(\d{1,2})[-\/]([A-Za-z]{3,}|\d{1,2})[-\/](\d{2,4})\b/);
 
-  const day = parseInt(dateMatch[1], 10);
-  const monthPart = dateMatch[2];
-  const month = /^\d+$/.test(monthPart)
-    ? parseInt(monthPart, 10) - 1
-    : MONTH_ABBR[monthPart.slice(0, 3).toLowerCase()];
-  let year = parseInt(dateMatch[3], 10);
-  if (year < 100) year += 2000;
+  let day: number;
+  let month: number | undefined;
+  let year: number;
+  let matchedDateText: string;
+
+  if (isoDateMatch) {
+    year = parseInt(isoDateMatch[1], 10);
+    month = parseInt(isoDateMatch[2], 10) - 1;
+    day = parseInt(isoDateMatch[3], 10);
+    matchedDateText = isoDateMatch[0];
+  } else if (dayFirstMatch) {
+    day = parseInt(dayFirstMatch[1], 10);
+    const monthPart = dayFirstMatch[2];
+    month = /^\d+$/.test(monthPart)
+      ? parseInt(monthPart, 10) - 1
+      : MONTH_ABBR[monthPart.slice(0, 3).toLowerCase()];
+    year = parseInt(dayFirstMatch[3], 10);
+    if (year < 100) year += 2000;
+    matchedDateText = dayFirstMatch[0];
+  } else {
+    return null;
+  }
 
   if (month === undefined || month < 0 || month > 11 || day < 1 || day > 31) return null;
 
+  // Search for a time everywhere EXCEPT inside the matched date itself — some
+  // banks glue date and time together with no separator (as above), and the
+  // date's own digits can otherwise look like a stray "HH:MM" to this regex.
+  const smsWithoutDate = sms.replace(matchedDateText, '');
   let hours = 12;
   let minutes = 0;
   let seconds = 0;
-  const timeMatch = sms.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/);
+  const timeMatch = smsWithoutDate.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/);
   if (timeMatch) {
     hours = parseInt(timeMatch[1], 10);
     minutes = parseInt(timeMatch[2], 10);

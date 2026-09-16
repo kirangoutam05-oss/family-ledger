@@ -121,15 +121,23 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
                   }}
                   className={`w-full flex items-center gap-2.5 px-3.5 py-3.5 rounded-xl text-sm transition-colors ${
                     activeSpender === 'shared'
-                      ? 'bg-black/[0.05] dark:bg-white/[0.1] text-neutral-900 dark:text-white font-bold'
+                      ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 font-bold'
                       : 'text-neutral-700 dark:text-neutral-300 font-medium hover:bg-black/5 dark:hover:bg-white/10'
                   }`}
                 >
-                  <span className="w-6 h-6 rounded-full bg-neutral-400/20 flex items-center justify-center shrink-0">
-                    <Users className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-300" />
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                      activeSpender === 'shared' ? 'bg-teal-500/20' : 'bg-neutral-400/20'
+                    }`}
+                  >
+                    <Users
+                      className={`w-3.5 h-3.5 ${
+                        activeSpender === 'shared' ? 'text-teal-600 dark:text-teal-400' : 'text-neutral-600 dark:text-neutral-300'
+                      }`}
+                    />
                   </span>
                   <span className="truncate min-w-0 flex-1 text-left">Overall</span>
-                  {activeSpender === 'shared' && <Check className="w-4 h-4 text-neutral-900 dark:text-white shrink-0" />}
+                  {activeSpender === 'shared' && <Check className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />}
                 </button>
                 <button
                   onClick={() => {
