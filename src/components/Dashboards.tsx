@@ -54,6 +54,8 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const [trendGranularity, setTrendGranularity] = useState<'day' | 'week' | 'month'>('day');
   const [filters, setFilters] = useState<TransactionFilters>(EMPTY_FILTERS);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const RECENT_ACTIVITY_PAGE_SIZE = 15;
+  const [visibleCount, setVisibleCount] = useState(RECENT_ACTIVITY_PAGE_SIZE);
 
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
@@ -138,6 +140,13 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     });
 
   const activeFilterCount = countActiveFilters(filters);
+  const pagedTransactions = displayTransactions.slice(0, visibleCount);
+
+  // Collapse the list back to one page whenever the search/filter/spender
+  // scope changes, so "View More" always starts from the top of a new result set.
+  useEffect(() => {
+    setVisibleCount(RECENT_ACTIVITY_PAGE_SIZE);
+  }, [searchQuery, filters, activeSpender]);
 
   const isShared = activeSpender === 'shared';
 
@@ -178,12 +187,23 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     const buckets: { key: string; label: string; amount: number }[] = [];
 
     if (granularity === 'day') {
-      for (let i = 6; i >= 0; i--) {
+      // Window grows to cover all history (min 7 days, capped at 90) so the
+      // strip scrolls through every day you've logged, not just last week.
+      let daysBack = 6;
+      if (debits.length > 0) {
+        const earliest = debits.reduce(
+          (min, t) => (new Date(t.date) < min ? new Date(t.date) : min),
+          new Date(debits[0].date)
+        );
+        const diffDays = Math.floor((now.getTime() - earliest.getTime()) / (24 * 60 * 60 * 1000));
+        daysBack = Math.max(daysBack, Math.min(diffDays, 89));
+      }
+      for (let i = daysBack; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
         buckets.push({
           key: d.toISOString().slice(0, 10),
-          label: d.toLocaleDateString('en-IN', { weekday: 'short' }),
+          label: daysBack > 6 ? `${d.getDate()}/${d.getMonth() + 1}` : d.toLocaleDateString('en-IN', { weekday: 'short' }),
           amount: 0,
         });
       }
@@ -200,7 +220,18 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         monday.setHours(0, 0, 0, 0);
         return monday;
       };
-      for (let i = 5; i >= 0; i--) {
+      // Same idea as "day" — grows to cover all history (min 6 weeks, capped
+      // at ~2 years) instead of a fixed 6-week window.
+      let weeksBack = 5;
+      if (debits.length > 0) {
+        const earliest = debits.reduce(
+          (min, t) => (new Date(t.date) < min ? new Date(t.date) : min),
+          new Date(debits[0].date)
+        );
+        const diffWeeks = Math.round((mondayOf(now).getTime() - mondayOf(earliest).getTime()) / (7 * 24 * 60 * 60 * 1000));
+        weeksBack = Math.max(weeksBack, Math.min(diffWeeks, 103));
+      }
+      for (let i = weeksBack; i >= 0; i--) {
         const ref = new Date(now);
         ref.setDate(ref.getDate() - i * 7);
         const monday = mondayOf(ref);
@@ -261,6 +292,9 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const trendPeak = trendBuckets.reduce((peak, b) => (b.amount > peak.amount ? b : peak), trendBuckets[0]);
   const trendPeriodLabel = trendGranularity === 'day' ? 'day' : trendGranularity === 'week' ? 'week' : 'cycle';
   const trendBarWidth = trendGranularity === 'month' ? 84 : trendGranularity === 'week' ? 48 : 40;
+  // Rough count of bars that fit in the visible strip at this width, used
+  // only to decide whether to show the "swipe for more" hint.
+  const trendBarsVisible = Math.max(1, Math.floor(300 / (trendBarWidth + 8)));
 
   // The bar strip scrolls horizontally like a slider once there's more
   // history than fits on screen — keep it scrolled to the latest period by
@@ -509,7 +543,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               {/* Bar chart — a horizontal slider once there's more history
                   than fits; scrolled to the latest period by default. */}
               <div className="space-y-1.5">
-                {trendGranularity === 'month' && trendBuckets.length > 6 && (
+                {trendBuckets.length > trendBarsVisible && (
                   <p className="text-[10px] text-neutral-400 text-right">← Swipe to see more history</p>
                 )}
                 <div
@@ -614,7 +648,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               No transactions match your search{activeFilterCount > 0 ? ' and filters' : ''}.
             </div>
           ) : (
-            displayTransactions.map((tx, index) => {
+            pagedTransactions.map((tx, index) => {
               const cat = categories.find((c) => c.id === tx.category) || categories[0];
               const isGrey = tx.status === 'grey_area';
               const isMine = tx.spender === authenticatedUser;
@@ -746,6 +780,16 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             })
           )}
         </div>
+
+        {displayTransactions.length > visibleCount && (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((v) => v + RECENT_ACTIVITY_PAGE_SIZE)}
+            className="w-full py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] text-xs font-semibold text-neutral-600 dark:text-neutral-300 transition-colors"
+          >
+            View more ({displayTransactions.length - visibleCount} left)
+          </button>
+        )}
       </div>
 
       <TransactionFilterSheet
