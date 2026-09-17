@@ -59,6 +59,15 @@ export function formatDate(dateString: string): string {
   }
 }
 
+// A YYYY-MM-DD key built from LOCAL calendar fields — never `toISOString()`,
+// which reports the UTC date and silently shifts a timestamp into the wrong
+// day whenever the viewer's timezone offset crosses a day boundary. Used
+// anywhere a transaction needs to be bucketed or filtered by calendar day
+// (trend charts, date-range filters/exports) so it agrees with formatDate.
+export function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function getCategoryIcon(iconName: string, className = 'w-5 h-5') {
   switch (iconName) {
     case 'UtensilsCrossed':

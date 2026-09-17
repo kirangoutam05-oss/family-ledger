@@ -5,7 +5,7 @@ import {
   SpenderId,
   LedgerState,
 } from '../types';
-import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel } from '../utils/helpers';
+import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel, localDateKey } from '../utils/helpers';
 import { ExportSection } from './ExportSection';
 import { TransactionFilterSheet, TransactionFilters, EMPTY_FILTERS, countActiveFilters } from './TransactionFilterSheet';
 import {
@@ -23,14 +23,6 @@ import {
 // The household's billing cycle runs the 21st of one month through the 20th
 // of the next, not the calendar month — shared by the "This Month" KPI and
 // the Spending Trends month view so both agree on what a "month" means.
-// A YYYY-MM-DD key built from LOCAL calendar fields — never `toISOString()`,
-// which reports the UTC date and silently shifts a transaction into the
-// wrong day's bucket whenever the viewer's timezone offset pushes a local
-// evening/early-morning timestamp across the UTC day boundary.
-function localDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function billingCycleStart(d: Date): Date {
   const start = new Date(d.getFullYear(), d.getMonth() - (d.getDate() < 21 ? 1 : 0), 21);
   start.setHours(0, 0, 0, 0);

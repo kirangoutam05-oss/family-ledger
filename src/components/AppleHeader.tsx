@@ -72,12 +72,12 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
 
               <button
                 onClick={() => setSpenderMenuOpen((v) => !v)}
-                className="p-2.5 rounded-full bg-black/[0.06] dark:bg-white/[0.1] hover:bg-black/[0.1] dark:hover:bg-white/[0.16] flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1"
+                className="p-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.1] hover:bg-black/[0.1] dark:hover:bg-white/[0.16] flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1"
                 title="Switch between Overall, Kiran, and Mageswari"
               >
                 <ChevronDown
                   strokeWidth={3}
-                  className={`w-5 h-5 sm:w-6 sm:h-6 text-neutral-700 dark:text-neutral-200 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 sm:w-5 sm:h-5 text-neutral-700 dark:text-neutral-200 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
