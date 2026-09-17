@@ -107,12 +107,22 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const outflowCardLabel =
     activeSpender === 'shared' ? 'Household Outflow' : `${activeSpender === 'husband' ? husbandName : wifeName}'s Outflow`;
 
-  // Household spending breakdown by partner (informational — not a debt/balance)
+  // Household spending breakdown by partner (informational — not a debt/balance),
+  // scoped to the current billing cycle so it reads as "this month" rather than
+  // an ever-growing all-time figure — same cycle as the Outflow card's "This Month".
   const husbandSpent = transactions
     .filter((t) => t.type === 'debit' && t.spender === 'husband')
+    .filter((t) => {
+      const d = new Date(t.date);
+      return d >= currentCycleStart && d < currentCycleEnd;
+    })
     .reduce((sum, t) => sum + t.amount, 0);
   const wifeSpent = transactions
     .filter((t) => t.type === 'debit' && t.spender === 'wife')
+    .filter((t) => {
+      const d = new Date(t.date);
+      return d >= currentCycleStart && d < currentCycleEnd;
+    })
     .reduce((sum, t) => sum + t.amount, 0);
   const householdTotal = husbandSpent + wifeSpent;
   const husbandSharePercent = householdTotal > 0 ? Math.round((husbandSpent / householdTotal) * 100) : 50;
@@ -402,7 +412,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           </div>
 
           <div className="pt-1">
-            <span className="text-xs text-neutral-400">Combined household total, no balance owed</span>
+            <span className="text-xs text-neutral-400">This month's split ({currentCycleLabel}), no balance owed</span>
           </div>
         </div>
       </div>

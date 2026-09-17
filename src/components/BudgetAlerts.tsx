@@ -21,6 +21,7 @@ import {
 interface BudgetAlertsProps {
   ledger: LedgerState;
   onDismissAlert: (alertId: string) => void;
+  onClearAllAlerts: () => void;
   onUpdateBudget: (categoryId: CategoryId, newLimit: number) => void;
   onResolveGreyArea: (transactionId: string) => void;
   onReviewAck: (pendingId: string) => void;
@@ -30,6 +31,7 @@ interface BudgetAlertsProps {
 export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
   ledger,
   onDismissAlert,
+  onClearAllAlerts,
   onUpdateBudget,
   onResolveGreyArea,
   onReviewAck,
@@ -39,6 +41,14 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
 
   const [editingCatId, setEditingCatId] = useState<CategoryId | null>(null);
   const [editLimit, setEditLimit] = useState<number>(0);
+
+  // "Review" alerts (paid-for-spouse, lock-reset requests) point at something
+  // that still needs a decision elsewhere — clearing them here would just hide
+  // the alert while leaving the underlying request stranded, so "Clear All"
+  // only touches alerts that already support an individual Dismiss.
+  const dismissibleCount = alerts.filter(
+    (a) => a.actionType !== 'review_ack' && a.actionType !== 'approve_lock_reset'
+  ).length;
 
   // Compute spending per category
   const categorySpend: Record<string, number> = {};
@@ -70,11 +80,22 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
             Spending threshold warnings and monthly category caps.
           </p>
         </div>
-        {alerts.length > 0 && (
-          <span className="px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold">
-            {alerts.length} Active
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {alerts.length > 0 && (
+            <span className="px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold">
+              {alerts.length} Active
+            </span>
+          )}
+          {dismissibleCount > 0 && (
+            <button
+              type="button"
+              onClick={onClearAllAlerts}
+              className="px-2.5 py-1 rounded-full text-xs font-medium text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            >
+              Clear All
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Active Alerts List */}

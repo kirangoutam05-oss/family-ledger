@@ -882,6 +882,20 @@ export default function App() {
     syncLedgerToServer(updated);
   };
 
+  // Clear every dismissible alert at once — "review" alerts (paid-for-spouse,
+  // lock-reset requests) are left alone since they point at a pending request
+  // that still needs a decision, not just a notice to acknowledge.
+  const handleClearAllAlerts = () => {
+    const updated = {
+      ...ledger,
+      alerts: ledger.alerts.filter(
+        (a) => a.actionType === 'review_ack' || a.actionType === 'approve_lock_reset'
+      ),
+    };
+    setLedger(updated);
+    syncLedgerToServer(updated);
+  };
+
   // Wipe all household data (transactions/goals/alerts), keeping household setup intact
   const handleResetHousehold = async () => {
     try {
@@ -1053,6 +1067,7 @@ export default function App() {
                 <BudgetAlerts
                   ledger={ledger}
                   onDismissAlert={handleDismissAlert}
+                  onClearAllAlerts={handleClearAllAlerts}
                   onUpdateBudget={handleUpdateBudget}
                   onResolveGreyArea={handleOpenGreyAreaDirect}
                   onReviewAck={handleOpenReviewAck}
