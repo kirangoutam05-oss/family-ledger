@@ -592,31 +592,45 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                   ref={trendScrollRef}
                   className="flex items-end gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth snap-x snap-mandatory"
                 >
-                  {trendBuckets.map((b, index) => (
-                    <div
-                      key={b.key}
-                      className="shrink-0 snap-start flex flex-col items-center"
-                      style={{ width: trendBarWidth }}
-                      title={`${b.label}: ${formatCurrency(b.amount, currency)}`}
-                    >
-                      <span className="text-[9px] sm:text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 mb-1 truncate w-full text-center">
-                        {b.amount > 0 ? formatCurrency(b.amount, currency) : ''}
-                      </span>
-                      <div className="w-full h-40 sm:h-48 flex items-end">
-                        <motion.div
-                          className={`w-full rounded-t-md ${
-                            b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
-                          }`}
-                          initial={{ height: 0 }}
-                          animate={{ height: `${Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0)}%` }}
-                          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
-                        />
+                  {trendBuckets.map((b, index) => {
+                    const barHeightPct = Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0);
+                    // Clamp how high the label can float so it always has
+                    // headroom to render below the container's own top edge,
+                    // even for a peak bar at ~100% height.
+                    const labelBottomPct = Math.min(barHeightPct, 82);
+                    return (
+                      <div
+                        key={b.key}
+                        className="shrink-0 snap-start flex flex-col items-center"
+                        style={{ width: trendBarWidth }}
+                        title={`${b.label}: ${formatCurrency(b.amount, currency)}`}
+                      >
+                        <div className="w-full h-40 sm:h-48 relative">
+                          <motion.div
+                            className={`absolute bottom-0 left-0 w-full rounded-t-md ${
+                              b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
+                            }`}
+                            initial={{ height: 0 }}
+                            animate={{ height: `${barHeightPct}%` }}
+                            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
+                          />
+                          {b.amount > 0 && (
+                            <motion.span
+                              className="absolute left-0 w-full text-center text-[9px] sm:text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 truncate px-0.5"
+                              initial={{ bottom: '4px', opacity: 0 }}
+                              animate={{ bottom: `calc(${labelBottomPct}% + 6px)`, opacity: 1 }}
+                              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
+                            >
+                              {formatCurrency(b.amount, currency)}
+                            </motion.span>
+                          )}
+                        </div>
+                        <span className="text-[9px] sm:text-[10px] text-neutral-400 mt-1 text-center leading-tight whitespace-nowrap">
+                          {b.label}
+                        </span>
                       </div>
-                      <span className="text-[9px] sm:text-[10px] text-neutral-400 mt-1 text-center leading-tight whitespace-nowrap">
-                        {b.label}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </>

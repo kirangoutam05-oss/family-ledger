@@ -257,11 +257,14 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </div>
             </div>
 
-            {/* Date & Time — editable here so a bad parse (a wrong date/time
-                extracted from an SMS, or a fat-fingered manual entry) can be
-                corrected without re-adding the whole transaction. */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="min-w-0">
+            {/* Date & Time — stacked full-width, not a 2-column grid: iOS
+                Safari's native date/time controls carry their own internal
+                minimum render width that ignores min-width/width styling, so
+                a side-by-side layout can still overflow on a real device
+                even after measuring fine in a desktop browser. Stacking
+                guarantees each control gets the full available width. */}
+            <div className="space-y-3">
+              <div>
                 <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                   Date
                 </label>
@@ -270,10 +273,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   required
                   value={dateStr}
                   onChange={(e) => setDateStr(e.target.value)}
-                  className="w-full min-w-0 h-11 px-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
-              <div className="min-w-0">
+              <div>
                 <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                   Time
                 </label>
@@ -282,7 +285,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   required
                   value={timeStr}
                   onChange={(e) => setTimeStr(e.target.value)}
-                  className="w-full min-w-0 h-11 px-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
             </div>

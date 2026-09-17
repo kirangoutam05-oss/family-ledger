@@ -298,17 +298,20 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                 separate copy to keep in sync. */}
             <div className="flex items-center gap-1.5">
               <CalendarClock className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">When</span>
+            </div>
+            <div className="space-y-1.5">
               <input
                 type="date"
                 value={previewDateStr}
                 onChange={(e) => updatePreviewDateTime(e.target.value, previewTimeStr)}
-                className="min-w-0 flex-1 h-8 px-1.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-[11px] text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="w-full h-9 px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
               />
               <input
                 type="time"
                 value={previewTimeStr}
                 onChange={(e) => updatePreviewDateTime(previewDateStr, e.target.value)}
-                className="min-w-0 flex-1 h-8 px-1.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-[11px] text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="w-full h-9 px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
               />
             </div>
 

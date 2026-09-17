@@ -234,22 +234,30 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
           </div>
         </div>
 
-        {/* Date range */}
+        {/* Date range — stacked, not side-by-side: native date inputs carry
+            their own internal minimum width that can overflow a narrow
+            column on a real device regardless of min-width/width styling. */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">Date range</label>
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => onChange({ ...filters, dateFrom: e.target.value })}
-              className="w-full min-w-0 h-10 px-2.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
-            />
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => onChange({ ...filters, dateTo: e.target.value })}
-              className="w-full min-w-0 h-10 px-2.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
-            />
+          <div className="space-y-2">
+            <div>
+              <label className="text-[10px] text-neutral-400 block mb-1">From</label>
+              <input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(e) => onChange({ ...filters, dateFrom: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-neutral-400 block mb-1">To</label>
+              <input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) => onChange({ ...filters, dateTo: e.target.value })}
+                className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+              />
+            </div>
           </div>
         </div>
 
