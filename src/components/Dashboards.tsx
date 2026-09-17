@@ -584,12 +584,14 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                   ref={trendScrollRef}
                   className="flex items-end gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth snap-x snap-mandatory"
                 >
+                  {/* Bars only ever grow to BAR_MAX_PCT of the container's
+                      height — the rest is reserved headroom so every amount
+                      label sits above its bar, outside the bar's own fill,
+                      never crowding the container's top edge even at peak. */}
                   {trendBuckets.map((b, index) => {
-                    const barHeightPct = Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0);
-                    // Clamp how high the label can float so it always has
-                    // headroom to render below the container's own top edge,
-                    // even for a peak bar at ~100% height.
-                    const labelBottomPct = Math.min(barHeightPct, 82);
+                    const BAR_MAX_PCT = 72;
+                    const rawPct = Math.max((b.amount / maxTrendAmount) * 100, b.amount > 0 ? 4 : 0);
+                    const barHeightPct = (rawPct / 100) * BAR_MAX_PCT;
                     return (
                       <div
                         key={b.key}
@@ -597,7 +599,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         style={{ width: trendBarWidth }}
                         title={`${b.label}: ${formatCurrency(b.amount, currency)}`}
                       >
-                        <div className="w-full h-40 sm:h-48 relative">
+                        <div className="w-full h-44 sm:h-52 relative">
                           <motion.div
                             className={`absolute bottom-0 left-0 w-full rounded-t-md ${
                               b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
@@ -610,7 +612,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                             <motion.span
                               className="absolute left-0 w-full text-center text-[9px] sm:text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 truncate px-0.5"
                               initial={{ bottom: '4px', opacity: 0 }}
-                              animate={{ bottom: `calc(${labelBottomPct}% + 6px)`, opacity: 1 }}
+                              animate={{ bottom: `calc(${barHeightPct}% + 8px)`, opacity: 1 }}
                               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
                             >
                               {formatCurrency(b.amount, currency)}
