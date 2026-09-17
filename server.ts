@@ -6,7 +6,7 @@ import { Pool } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { EMPTY_LEDGER_STATE } from './src/data/initialData';
-import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS } from './src/types';
+import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS, PendingAcknowledgement } from './src/types';
 
 dotenv.config();
 
@@ -595,6 +595,168 @@ app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
   }
 });
 
+// Flag an expense as "paid for the other spouse" — it's held here, entirely
+// separate from currentLedgerState.transactions, until the person it's for
+// accepts it below. This is deliberate: it must never count toward any
+// total/trend/category figure until then, so it can't just be a Transaction
+// with a special status (every aggregation site would need to remember to
+// exclude it).
+app.post('/api/ledger/pending-ack', rateLimit(30, 60000), (req, res) => {
+  try {
+    const { title, amount, category, paymentMode, notes, bankName, upiRef, rawSms, date, paidBy, paidFor } = req.body;
+
+    const cleanTitle = sanitizeString(title, 90);
+    if (!cleanTitle) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+
+    const amountNum = Number(amount);
+    if (!isFinite(amountNum) || amountNum <= 0 || amountNum > 50000000) {
+      return res.status(400).json({ error: 'Amount must be a positive number under ₹5,00,00,000' });
+    }
+
+    if (paidBy !== 'husband' && paidBy !== 'wife') {
+      return res.status(400).json({ error: 'Valid paidBy is required' });
+    }
+    if (paidFor !== 'husband' && paidFor !== 'wife') {
+      return res.status(400).json({ error: 'Valid paidFor is required' });
+    }
+    if (paidBy === paidFor) {
+      return res.status(400).json({ error: 'paidBy and paidFor must be different people' });
+    }
+
+    const validCategory: CategoryId = getValidCategoryIds().includes(category) ? category : 'bills';
+    const validPaymentMode = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(paymentMode)
+      ? paymentMode
+      : 'UPI';
+
+    const pending: PendingAcknowledgement = {
+      id: `ack-${Date.now()}`,
+      title: cleanTitle,
+      amount: amountNum,
+      date: date && !isNaN(Date.parse(date)) ? date : new Date().toISOString(),
+      category: validCategory,
+      paymentMode: validPaymentMode,
+      notes: sanitizeString(notes, 250) || undefined,
+      bankName: sanitizeString(bankName, 50) || undefined,
+      upiRef: sanitizeString(upiRef, 60) || undefined,
+      rawSms: rawSms ? maskSensitiveFinancialData(rawSms) : undefined,
+      paidBy,
+      paidFor,
+      createdAt: new Date().toISOString(),
+    };
+
+    currentLedgerState.pendingAcknowledgements.unshift(pending);
+
+    const payerName = paidBy === 'husband' ? currentLedgerState.husbandName : currentLedgerState.wifeName;
+    currentLedgerState.alerts.unshift({
+      id: `alert-ack-${Date.now()}`,
+      type: 'ack_needed',
+      title: `${payerName} paid for you`,
+      message: `${payerName} logged ₹${amountNum.toLocaleString('en-IN')} for "${cleanTitle}" on your behalf — review it to add it to your spend.`,
+      timestamp: 'Just now',
+      read: false,
+      actionType: 'review_ack',
+      targetId: pending.id,
+    });
+
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+    res.json({ success: true, pending, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while flagging the expense.' });
+  }
+});
+
+// Accept a pending "paid for you" expense — becomes a real transaction
+// attributed to the person it was for (not whoever physically paid),
+// optionally with corrections applied first.
+app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), (req, res) => {
+  try {
+    const { id, authenticatedSpender, updates } = req.body;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid id is required' });
+    }
+
+    const idx = currentLedgerState.pendingAcknowledgements.findIndex((p) => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Pending item not found' });
+    }
+    const pending = currentLedgerState.pendingAcknowledgements[idx];
+
+    if (authenticatedSpender && authenticatedSpender !== pending.paidFor) {
+      return res.status(403).json({ error: 'Only the person this expense was for can accept it.' });
+    }
+
+    const title = sanitizeString(updates?.title, 90) || pending.title;
+    const amount = updates?.amount && Number(updates.amount) > 0 ? Number(updates.amount) : pending.amount;
+    const category: CategoryId =
+      updates?.category && getValidCategoryIds().includes(updates.category) ? updates.category : pending.category;
+    const notes = updates?.notes !== undefined ? sanitizeString(updates.notes, 250) || undefined : pending.notes;
+    const date = updates?.date && !isNaN(Date.parse(updates.date)) ? updates.date : pending.date;
+
+    const tx: Transaction = {
+      id: `tx-ack-${Date.now()}`,
+      title,
+      amount,
+      type: 'debit',
+      date,
+      spender: pending.paidFor,
+      category,
+      paymentMode: pending.paymentMode,
+      upiRef: pending.upiRef,
+      bankName: pending.bankName,
+      rawSms: pending.rawSms,
+      status: 'verified',
+      notes,
+    };
+
+    currentLedgerState.transactions.unshift(tx);
+    currentLedgerState.pendingAcknowledgements.splice(idx, 1);
+    currentLedgerState.alerts = currentLedgerState.alerts.filter(
+      (a) => !(a.actionType === 'review_ack' && a.targetId === id)
+    );
+
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+    res.json({ success: true, transaction: tx, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while accepting the expense.' });
+  }
+});
+
+// Reject a pending "paid for you" expense — removed entirely; it never
+// becomes a transaction.
+app.post('/api/ledger/pending-ack/reject', rateLimit(60, 60000), (req, res) => {
+  try {
+    const { id, authenticatedSpender } = req.body;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid id is required' });
+    }
+
+    const idx = currentLedgerState.pendingAcknowledgements.findIndex((p) => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Pending item not found' });
+    }
+    const pending = currentLedgerState.pendingAcknowledgements[idx];
+
+    if (authenticatedSpender && authenticatedSpender !== pending.paidFor) {
+      return res.status(403).json({ error: 'Only the person this expense was for can reject it.' });
+    }
+
+    currentLedgerState.pendingAcknowledgements.splice(idx, 1);
+    currentLedgerState.alerts = currentLedgerState.alerts.filter(
+      (a) => !(a.actionType === 'review_ack' && a.targetId === id)
+    );
+
+    currentLedgerState.lastSyncTime = new Date().toISOString();
+    persistLedgerState();
+    res.json({ success: true, ledger: currentLedgerState });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while rejecting the expense.' });
+  }
+});
+
 // Update an existing transaction with strict ownership check
 app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
   try {
@@ -1083,6 +1245,11 @@ Determine:
 // Start server with Vite middleware in dev or static files in production
 async function startServer() {
   currentLedgerState = await initLedgerState();
+  // Backfill fields added after some households' data was first persisted —
+  // older rows/files predate these and would otherwise crash the first time
+  // something reads them (e.g. `.find()` on undefined).
+  currentLedgerState.connectedDevices ??= [];
+  currentLedgerState.pendingAcknowledgements ??= [];
   console.log(`Ledger storage: ${pool ? 'Postgres (persistent across deploys)' : 'local file (data/ledger.json)'}`);
 
   if (process.env.NODE_ENV !== 'production') {

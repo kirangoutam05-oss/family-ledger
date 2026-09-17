@@ -70,6 +70,26 @@ export interface Transaction {
   notes?: string;
 }
 
+// Created when one spouse pays for something that's really the other's
+// expense — it stays out of `transactions` entirely (so it never counts
+// toward totals/trends) until the person it's for accepts it, at which
+// point it becomes a real Transaction attributed to them.
+export interface PendingAcknowledgement {
+  id: string;
+  title: string;
+  amount: number;
+  date: string;
+  category: CategoryId;
+  paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater';
+  notes?: string;
+  bankName?: string;
+  upiRef?: string;
+  rawSms?: string;
+  paidBy: SpenderId;
+  paidFor: SpenderId;
+  createdAt: string;
+}
+
 export interface GoalContribution {
   id: string;
   contributor: SpenderId;
@@ -90,12 +110,12 @@ export interface SavingsGoal {
 
 export interface BudgetAlert {
   id: string;
-  type: 'warning' | 'critical' | 'grey_area' | 'goal' | 'sync';
+  type: 'warning' | 'critical' | 'grey_area' | 'goal' | 'sync' | 'ack_needed';
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
-  actionType?: 'resolve_grey' | 'view_budget' | 'view_goal';
+  actionType?: 'resolve_grey' | 'view_budget' | 'view_goal' | 'review_ack';
   targetId?: string;
 }
 
@@ -121,6 +141,7 @@ export interface LedgerState {
   alerts: BudgetAlert[];
   lastSyncTime: string;
   connectedDevices: DeviceInfo[];
+  pendingAcknowledgements: PendingAcknowledgement[];
 }
 
 export interface DeviceIdentity {

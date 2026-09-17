@@ -8,6 +8,7 @@ import {
   Category,
   SavingsGoal,
   DeviceIdentity,
+  PendingAcknowledgement,
 } from './types';
 import { EMPTY_LEDGER_STATE } from './data/initialData';
 import { AppleHeader } from './components/AppleHeader';
@@ -21,6 +22,7 @@ import { AccountSettings } from './components/AccountSettings';
 import { DeviceSyncModal } from './components/DeviceSyncModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
+import { PendingAckModal } from './components/PendingAckModal';
 import { LiveOnMobileModal } from './components/LiveOnMobileModal';
 import { HouseholdSetupScreen } from './components/HouseholdSetupScreen';
 import { WhoAreYouScreen } from './components/WhoAreYouScreen';
@@ -88,6 +90,30 @@ function clearLocalIdentity() {
   }
 }
 
+// Which "paid for you" acknowledgements have already been shown as a pop-up
+// on this device — so a still-pending item only interrupts once (the first
+// time it's seen), and otherwise just sits quietly in Budget Alerts.
+const SEEN_ACK_POPUPS_KEY = 'family-ledger:seen-ack-popups';
+
+function loadSeenAckPopupIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SEEN_ACK_POPUPS_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markAckPopupSeen(id: string) {
+  try {
+    const seen = loadSeenAckPopupIds();
+    seen.add(id);
+    localStorage.setItem(SEEN_ACK_POPUPS_KEY, JSON.stringify([...seen]));
+  } catch {
+    // ignore
+  }
+}
+
 export default function App() {
   const [ledger, setLedger] = useState<LedgerState>(EMPTY_LEDGER_STATE);
   const [isLedgerLoaded, setIsLedgerLoaded] = useState(false);
@@ -104,6 +130,7 @@ export default function App() {
   const [showLiveMobileModal, setShowLiveMobileModal] = useState(false);
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [reviewingPendingAck, setReviewingPendingAck] = useState<PendingAcknowledgement | null>(null);
 
   // Bottom-nav tab switches fade; switching Shared/Kiran/Mageswari (from the
   // header dropdown) slides in the direction of the tapped item instead.
@@ -282,6 +309,32 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchLedger]);
 
+  // The first time a "paid for you" expense shows up for this device's
+  // signed-in person, interrupt with a pop-up instead of leaving it to be
+  // found in Budget Alerts — every later poll of the same still-pending item
+  // is silent (loadSeenAckPopupIds), so it doesn't re-pop on every reopen.
+  useEffect(() => {
+    if (!isLedgerLoaded) return;
+
+    // If whatever's open got resolved from elsewhere (another device, or a
+    // second tab) while this modal sat open, don't leave it showing a stale
+    // item — close it so the effect below is free to surface anything new.
+    if (reviewingPendingAck && !ledger.pendingAcknowledgements.some((p) => p.id === reviewingPendingAck.id)) {
+      setReviewingPendingAck(null);
+      return;
+    }
+    if (reviewingPendingAck) return;
+
+    const seen = loadSeenAckPopupIds();
+    const unseen = ledger.pendingAcknowledgements.find(
+      (p) => p.paidFor === authenticatedUser && !seen.has(p.id)
+    );
+    if (unseen) {
+      setReviewingPendingAck(unseen);
+      markAckPopupSeen(unseen.id);
+    }
+  }, [ledger.pendingAcknowledgements, authenticatedUser, isLedgerLoaded, reviewingPendingAck]);
+
   // Sync state to server
   const syncLedgerToServer = async (updatedLedger: LedgerState) => {
     setIsSyncing(true);
@@ -386,6 +439,91 @@ export default function App() {
       setIsSyncing(false);
       setFocusedGreyTxId(null);
     }
+  };
+
+  // Flag an expense as paid on the other spouse's behalf — held server-side
+  // outside the real transaction list until they accept it.
+  const handleFlagPendingAck = async (pending: {
+    title: string;
+    amount: number;
+    category: CategoryId;
+    paymentMode: Transaction['paymentMode'];
+    notes?: string;
+    bankName?: string;
+    upiRef?: string;
+    rawSms?: string;
+    date: string;
+    paidBy: SpenderId;
+    paidFor: SpenderId;
+  }) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/ledger/pending-ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pending),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      }
+    } catch (err) {
+      console.error('Failed to flag pending acknowledgement:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleAcceptPendingAck = async (
+    id: string,
+    updates?: Partial<Pick<Transaction, 'title' | 'amount' | 'category' | 'notes' | 'date'>>
+  ) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/ledger/pending-ack/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, authenticatedSpender: authenticatedUser, updates }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to accept the expense.');
+      }
+    } catch (err: unknown) {
+      console.error('Failed to accept pending acknowledgement:', err);
+      alert(err instanceof Error ? err.message : 'Failed to accept the expense.');
+    } finally {
+      setIsSyncing(false);
+      setReviewingPendingAck(null);
+    }
+  };
+
+  const handleRejectPendingAck = async (id: string) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/ledger/pending-ack/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, authenticatedSpender: authenticatedUser }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      }
+    } catch (err) {
+      console.error('Failed to reject pending acknowledgement:', err);
+    } finally {
+      setIsSyncing(false);
+      setReviewingPendingAck(null);
+    }
+  };
+
+  const handleOpenReviewAck = (id: string) => {
+    const pending = ledger.pendingAcknowledgements.find((p) => p.id === id);
+    if (pending) setReviewingPendingAck(pending);
   };
 
   // Contribute to savings goal
@@ -588,6 +726,7 @@ export default function App() {
                   activeSpender={activeSpender}
                   onAddTransaction={handleAddTransaction}
                   onEditTransaction={(tx) => setEditingTransaction(tx)}
+                  onFlagPendingAck={handleFlagPendingAck}
                 />
               )}
 
@@ -625,6 +764,7 @@ export default function App() {
                   onDismissAlert={handleDismissAlert}
                   onUpdateBudget={handleUpdateBudget}
                   onResolveGreyArea={handleOpenGreyAreaDirect}
+                  onReviewAck={handleOpenReviewAck}
                 />
               )}
 
@@ -744,6 +884,20 @@ export default function App() {
             ledger={ledger}
             onAddTransaction={handleAddTransaction}
             authenticatedUser={authenticatedUser}
+            onFlagPendingAck={handleFlagPendingAck}
+          />
+        )}
+
+        {/* Review a "paid for you" expense — opened either by tapping its
+            Budget Alert or automatically the first time it appears. */}
+        {reviewingPendingAck && (
+          <PendingAckModal
+            key="pending-ack-modal"
+            pending={reviewingPendingAck}
+            ledger={ledger}
+            onClose={() => setReviewingPendingAck(null)}
+            onAccept={handleAcceptPendingAck}
+            onReject={handleRejectPendingAck}
           />
         )}
 

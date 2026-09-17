@@ -8,6 +8,7 @@ import {
   History,
   Edit3,
   CalendarClock,
+  HandCoins,
 } from 'lucide-react';
 import { Transaction, SpenderId, LedgerState, CategoryId } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
@@ -17,6 +18,19 @@ interface SmsUpiParserProps {
   activeSpender: SpenderId | 'shared';
   onAddTransaction: (transaction: Transaction) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
+  onFlagPendingAck: (pending: {
+    title: string;
+    amount: number;
+    category: CategoryId;
+    paymentMode: Transaction['paymentMode'];
+    notes?: string;
+    bankName?: string;
+    upiRef?: string;
+    rawSms?: string;
+    date: string;
+    paidBy: SpenderId;
+    paidFor: SpenderId;
+  }) => Promise<void>;
 }
 
 export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
@@ -24,6 +38,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   activeSpender,
   onAddTransaction,
   onEditTransaction,
+  onFlagPendingAck,
 }) => {
   const [smsInput, setSmsInput] = useState('');
   const [selectedSpender, setSelectedSpender] = useState<SpenderId>(
@@ -33,6 +48,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   const [parsedPreview, setParsedPreview] = useState<Partial<Transaction> | null>(null);
   const [parseSource, setParseSource] = useState<'gemini' | 'heuristic' | null>(null);
   const [addedSuccess, setAddedSuccess] = useState(false);
+  const [paidForOther, setPaidForOther] = useState(false);
 
   // When the parse comes back ambiguous, its context is resolved right here
   // in the same card instead of forcing a save-then-jump-to-Grey-Areas round
@@ -50,6 +66,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
 
     setIsParsing(true);
     setAddedSuccess(false);
+    setPaidForOther(false);
 
     try {
       const res = await fetch('/api/parse-sms', {
@@ -92,20 +109,47 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   const handleConfirmAndAdd = async () => {
     if (!parsedPreview) return;
 
+    const title = isGreyArea
+      ? inlineTitle.trim() || parsedPreview.title || 'UPI Transaction'
+      : parsedPreview.title || 'UPI Transaction';
+    const category = isGreyArea ? inlineCategory : parsedPreview.category || 'bills';
+    const notes = isGreyArea ? inlineNote.trim() : parsedPreview.notes || '';
+
+    if (paidForOther) {
+      const otherSpender: SpenderId = selectedSpender === 'husband' ? 'wife' : 'husband';
+      await onFlagPendingAck({
+        title,
+        amount: parsedPreview.amount || 0,
+        category,
+        paymentMode: parsedPreview.paymentMode || 'UPI',
+        notes: notes || undefined,
+        bankName: parsedPreview.bankName,
+        upiRef: parsedPreview.upiRef,
+        rawSms: smsInput,
+        date: parsedPreview.date || new Date().toISOString(),
+        paidBy: selectedSpender,
+        paidFor: otherSpender,
+      });
+      setAddedSuccess(true);
+      setParsedPreview(null);
+      setSmsInput('');
+      return;
+    }
+
     const newTx: Transaction = {
       id: `tx-${Date.now()}`,
-      title: isGreyArea ? inlineTitle.trim() || parsedPreview.title || 'UPI Transaction' : parsedPreview.title || 'UPI Transaction',
+      title,
       amount: parsedPreview.amount || 0,
       type: parsedPreview.type || 'debit',
       date: parsedPreview.date || new Date().toISOString(),
       spender: selectedSpender,
-      category: isGreyArea ? inlineCategory : parsedPreview.category || 'bills',
+      category,
       paymentMode: parsedPreview.paymentMode || 'UPI',
       upiRef: parsedPreview.upiRef,
       bankName: parsedPreview.bankName,
       rawSms: smsInput,
       status: isGreyArea ? 'verified' : parsedPreview.status || 'verified',
-      notes: isGreyArea ? inlineNote.trim() : parsedPreview.notes || '',
+      notes,
     };
 
     await onAddTransaction(newTx);
@@ -250,7 +294,11 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
         {addedSuccess && (
           <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Transaction saved to the shared ledger.</span>
+            <span>
+              {paidForOther
+                ? 'Sent for acknowledgement — it will count once accepted.'
+                : 'Transaction saved to the shared ledger.'}
+            </span>
           </div>
         )}
       </div>
@@ -358,6 +406,49 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             </div>
           </div>
 
+          {/* Paid for the other spouse — held aside until they acknowledge
+              it, instead of landing straight in the ledger under this name. */}
+          {(parsedPreview.type || 'debit') === 'debit' && (
+            <button
+              type="button"
+              onClick={() => setPaidForOther((v) => !v)}
+              className={`w-full p-3 rounded-xl border flex items-center gap-2.5 text-left transition-colors ${
+                paidForOther
+                  ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30'
+                  : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80'
+              }`}
+            >
+              <div
+                className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                  paidForOther
+                    ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                    : 'bg-black/5 dark:bg-white/10 text-neutral-500'
+                }`}
+              >
+                <HandCoins className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-bold text-neutral-900 dark:text-white block leading-tight">
+                  This was actually for {selectedSpender === 'husband' ? wifeName : husbandName}
+                </span>
+                <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                  Held until they acknowledge it — then it counts as their spend
+                </span>
+              </div>
+              <div
+                className={`w-9 h-5 rounded-full shrink-0 relative transition-colors ${
+                  paidForOther ? 'bg-amber-500' : 'bg-black/10 dark:bg-white/20'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
+                    paidForOther ? 'left-4' : 'left-0.5'
+                  }`}
+                />
+              </div>
+            </button>
+          )}
+
           {/* Clarify inline, right here, instead of saving first and
               resolving on a separate Grey Areas screen. */}
           {isGreyArea && (
@@ -450,10 +541,12 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             )}
             <button
               onClick={handleConfirmAndAdd}
-              className="px-4 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+              className={`px-4 py-1.5 rounded-xl text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs ${
+                paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#007AFF] hover:bg-[#0071E3]'
+              }`}
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Save & Sync</span>
+              {paidForOther ? <HandCoins className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              <span>{paidForOther ? 'Send for Acknowledgement' : 'Save & Sync'}</span>
             </button>
           </div>
         </div>

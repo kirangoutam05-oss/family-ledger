@@ -113,4 +113,5 @@ export const EMPTY_LEDGER_STATE: LedgerState = {
   goals: [],
   alerts: [],
   transactions: [],
+  pendingAcknowledgements: [],
 };

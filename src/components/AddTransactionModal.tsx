@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { X, CheckCircle2 } from 'lucide-react';
+import { X, CheckCircle2, HandCoins } from 'lucide-react';
 import { Transaction, SpenderId, CategoryId, LedgerState } from '../types';
 import { getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
@@ -9,6 +9,17 @@ interface AddTransactionModalProps {
   ledger: LedgerState;
   onAddTransaction: (transaction: Transaction) => Promise<void>;
   authenticatedUser: SpenderId;
+  onFlagPendingAck: (pending: {
+    title: string;
+    amount: number;
+    category: CategoryId;
+    paymentMode: Transaction['paymentMode'];
+    notes?: string;
+    bankName?: string;
+    date: string;
+    paidBy: SpenderId;
+    paidFor: SpenderId;
+  }) => Promise<void>;
 }
 
 export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
@@ -16,8 +27,11 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   ledger,
   onAddTransaction,
   authenticatedUser,
+  onFlagPendingAck,
 }) => {
   const { categories, husbandName, wifeName, currency } = ledger;
+  const otherSpender: SpenderId = authenticatedUser === 'husband' ? 'wife' : 'husband';
+  const otherName = otherSpender === 'husband' ? husbandName : wifeName;
 
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -29,6 +43,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [notes, setNotes] = useState('');
   const [dateStr, setDateStr] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
   const [timeStr, setTimeStr] = useState(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
+  const [paidForOther, setPaidForOther] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,22 +55,35 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     const enteredDate = dateStr && timeStr ? new Date(`${dateStr}T${timeStr}:00`) : new Date();
     const isoDate = isNaN(enteredDate.getTime()) ? new Date().toISOString() : enteredDate.toISOString();
 
-    const newTx: Transaction = {
-      id: `tx-manual-${Date.now()}`,
-      title: title.trim(),
-      amount: Number(amount),
-      type: 'debit',
-      date: isoDate,
-      spender: authenticatedUser,
-      category,
-      paymentMode,
-      bankName: paymentMode === 'UPI' ? 'GPay UPI' : 'Card',
-      status: 'verified',
-      notes: notes.trim(),
-    };
-
     try {
-      await onAddTransaction(newTx);
+      if (paidForOther) {
+        await onFlagPendingAck({
+          title: title.trim(),
+          amount: Number(amount),
+          category,
+          paymentMode,
+          bankName: paymentMode === 'UPI' ? 'GPay UPI' : 'Card',
+          notes: notes.trim() || undefined,
+          date: isoDate,
+          paidBy: authenticatedUser,
+          paidFor: otherSpender,
+        });
+      } else {
+        const newTx: Transaction = {
+          id: `tx-manual-${Date.now()}`,
+          title: title.trim(),
+          amount: Number(amount),
+          type: 'debit',
+          date: isoDate,
+          spender: authenticatedUser,
+          category,
+          paymentMode,
+          bankName: paymentMode === 'UPI' ? 'GPay UPI' : 'Card',
+          status: 'verified',
+          notes: notes.trim(),
+        };
+        await onAddTransaction(newTx);
+      }
       onClose();
     } catch (err) {
       console.error('Failed to add transaction:', err);
@@ -181,6 +209,45 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             </div>
           </div>
 
+          {/* Paid for the other spouse — held aside until they acknowledge
+              it, instead of landing straight in the ledger under your name. */}
+          <button
+            type="button"
+            onClick={() => setPaidForOther((v) => !v)}
+            className={`w-full p-3 rounded-xl border flex items-center gap-2.5 text-left transition-colors ${
+              paidForOther
+                ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30'
+                : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80'
+            }`}
+          >
+            <div
+              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                paidForOther ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400' : 'bg-black/5 dark:bg-white/10 text-neutral-500'
+              }`}
+            >
+              <HandCoins className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-bold text-neutral-900 dark:text-white block leading-tight">
+                This was actually for {otherName}
+              </span>
+              <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                Held until {otherName} acknowledges it — then it counts as their spend
+              </span>
+            </div>
+            <div
+              className={`w-9 h-5 rounded-full shrink-0 relative transition-colors ${
+                paidForOther ? 'bg-amber-500' : 'bg-black/10 dark:bg-white/20'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
+                  paidForOther ? 'left-4' : 'left-0.5'
+                }`}
+              />
+            </div>
+          </button>
+
           {/* Category Selector Grid */}
           <div>
             <label className="text-xs font-semibold text-neutral-500 block mb-2">
@@ -243,10 +310,12 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           <button
             type="submit"
             disabled={isSubmitting || !amount}
-            className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+            className={`w-full py-2.5 rounded-xl text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 disabled:opacity-50 ${
+              paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#007AFF] hover:bg-blue-600'
+            }`}
           >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Add Transaction & Sync</span>
+            {paidForOther ? <HandCoins className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+            <span>{paidForOther ? `Send to ${otherName} for Acknowledgement` : 'Add Transaction & Sync'}</span>
           </button>
         </form>
       </motion.div>
