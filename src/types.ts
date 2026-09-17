@@ -90,6 +90,18 @@ export interface PendingAcknowledgement {
   createdAt: string;
 }
 
+// A device-lock PIN reset, gated on the other partner's approval — created when
+// someone taps "Forgot PIN" and chooses to ask their partner rather than use the
+// invite-code fallback. Lives on the household (not the device) so the other
+// partner's own polling picks it up regardless of which device they're on.
+export interface LockResetRequest {
+  id: string;
+  requestedBy: SpenderId;
+  createdAt: string;
+  expiresAt: string;
+  status: 'pending' | 'approved';
+}
+
 export interface GoalContribution {
   id: string;
   contributor: SpenderId;
@@ -110,12 +122,12 @@ export interface SavingsGoal {
 
 export interface BudgetAlert {
   id: string;
-  type: 'warning' | 'critical' | 'grey_area' | 'goal' | 'sync' | 'ack_needed';
+  type: 'warning' | 'critical' | 'grey_area' | 'goal' | 'sync' | 'ack_needed' | 'lock_reset_requested';
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
-  actionType?: 'resolve_grey' | 'view_budget' | 'view_goal' | 'review_ack';
+  actionType?: 'resolve_grey' | 'view_budget' | 'view_goal' | 'review_ack' | 'approve_lock_reset';
   targetId?: string;
 }
 
@@ -141,6 +153,7 @@ export interface LedgerState {
   lastSyncTime: string;
   connectedDevices: DeviceInfo[];
   pendingAcknowledgements: PendingAcknowledgement[];
+  lockResetRequests: LockResetRequest[];
 }
 
 export interface DeviceIdentity {

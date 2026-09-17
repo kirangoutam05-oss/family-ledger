@@ -9,6 +9,7 @@ import {
   SavingsGoal,
   DeviceIdentity,
   PendingAcknowledgement,
+  LockResetRequest,
 } from './types';
 import { EMPTY_LEDGER_STATE } from './data/initialData';
 import { AppleHeader } from './components/AppleHeader';
@@ -23,6 +24,7 @@ import { DeviceSyncModal } from './components/DeviceSyncModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { EditTransactionModal } from './components/EditTransactionModal';
 import { PendingAckModal } from './components/PendingAckModal';
+import { LockResetApprovalModal } from './components/LockResetApprovalModal';
 import { LiveOnMobileModal } from './components/LiveOnMobileModal';
 import { HouseholdSetupScreen } from './components/HouseholdSetupScreen';
 import { WhoAreYouScreen } from './components/WhoAreYouScreen';
@@ -40,10 +42,11 @@ import {
 import {
   apiFetch,
   buildInviteUrl,
+  extractHouseholdIdFromText,
   resolveHouseholdIdOnBoot,
   setStoredHouseholdId,
 } from './utils/household';
-import { LockConfig, loadLockConfig } from './utils/appLock';
+import { LockConfig, clearLockConfig, loadLockConfig } from './utils/appLock';
 
 type NavTab =
   | 'dashboards'
@@ -125,6 +128,29 @@ function markAckPopupSeen(id: string) {
   }
 }
 
+// Same one-time-interrupt pattern as the ack popups, for "my partner is
+// locked out and wants me to approve a PIN reset" requests.
+const SEEN_LOCK_RESET_POPUPS_KEY = 'family-ledger:seen-lock-reset-popups';
+
+function loadSeenLockResetPopupIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SEEN_LOCK_RESET_POPUPS_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markLockResetPopupSeen(id: string) {
+  try {
+    const seen = loadSeenLockResetPopupIds();
+    seen.add(id);
+    localStorage.setItem(SEEN_LOCK_RESET_POPUPS_KEY, JSON.stringify([...seen]));
+  } catch {
+    // ignore
+  }
+}
+
 // How long the app can sit backgrounded before it re-locks on return — long
 // enough that a quick switch to reply to a text doesn't re-prompt, short
 // enough that a phone left down for real stays protected.
@@ -160,6 +186,7 @@ export default function App() {
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [reviewingPendingAck, setReviewingPendingAck] = useState<PendingAcknowledgement | null>(null);
+  const [reviewingLockResetRequest, setReviewingLockResetRequest] = useState<LockResetRequest | null>(null);
 
   // A freshly clicked /join/<id> link is password-equivalent — persist it, then
   // scrub it out of the URL bar/history immediately rather than leaving it
@@ -296,10 +323,97 @@ export default function App() {
     setIsUnlocked(true);
   };
 
-  const handleForgotPin = () => {
-    // AppLockScreen already cleared the stored config before calling this —
-    // dropping it from state re-shows AppLockSetupScreen to establish a new one.
+  // No PIN can be recovered on its own (there's no server-known secret behind
+  // it) — the normal path is asking the other partner to approve a reset from
+  // their own, already-unlocked device; see the lock-reset-request effect below
+  // for how an approval on the server gets noticed and consumed on this end.
+  const handleRequestLockReset = async () => {
+    try {
+      const res = await apiFetch('/api/ledger/lock-reset/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedBy: authenticatedUser }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      }
+    } catch (err) {
+      console.error('Failed to request a PIN reset:', err);
+    }
+  };
+
+  const handleCancelLockReset = async () => {
+    const mine = ledger.lockResetRequests.find((r) => r.requestedBy === authenticatedUser);
+    if (!mine) return;
+    try {
+      const res = await apiFetch('/api/ledger/lock-reset/deny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: mine.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      }
+    } catch (err) {
+      console.error('Failed to cancel the PIN reset request:', err);
+    }
+  };
+
+  const handleApproveLockReset = async (id: string) => {
+    try {
+      const res = await apiFetch('/api/ledger/lock-reset/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, approvedBy: authenticatedUser }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to approve the PIN reset.');
+      }
+    } catch (err) {
+      console.error('Failed to approve the PIN reset:', err);
+    } finally {
+      setReviewingLockResetRequest(null);
+    }
+  };
+
+  const handleDenyLockReset = async (id: string) => {
+    try {
+      const res = await apiFetch('/api/ledger/lock-reset/deny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ledger) setLedger(data.ledger);
+      }
+    } catch (err) {
+      console.error('Failed to deny the PIN reset:', err);
+    } finally {
+      setReviewingLockResetRequest(null);
+    }
+  };
+
+  const handleOpenReviewLockReset = (id: string) => {
+    const request = ledger.lockResetRequests.find((r) => r.id === id);
+    if (request) setReviewingLockResetRequest(request);
+  };
+
+  // The "both forgot" fallback: proving you know the household's own invite
+  // code/link is the same bar as joining a device in the first place, so it's
+  // allowed to reset this device's lock without needing partner approval.
+  const handleResetWithInviteCode = (code: string): boolean => {
+    const parsed = extractHouseholdIdFromText(code);
+    if (!parsed || parsed !== householdId) return false;
+    clearLockConfig();
     setLockConfig(null);
+    return true;
   };
 
   // Update transaction with spouse ownership enforcement
@@ -407,6 +521,53 @@ export default function App() {
       markAckPopupSeen(unseen.id);
     }
   }, [ledger.pendingAcknowledgements, authenticatedUser, isLedgerLoaded, reviewingPendingAck]);
+
+  // Same one-time-interrupt treatment for "my partner forgot their PIN and
+  // wants me to approve a reset" — surfaced to whichever of us didn't ask.
+  useEffect(() => {
+    if (!isLedgerLoaded) return;
+
+    if (
+      reviewingLockResetRequest &&
+      !ledger.lockResetRequests.some((r) => r.id === reviewingLockResetRequest.id && r.status === 'pending')
+    ) {
+      setReviewingLockResetRequest(null);
+      return;
+    }
+    if (reviewingLockResetRequest) return;
+
+    const seen = loadSeenLockResetPopupIds();
+    const unseen = ledger.lockResetRequests.find(
+      (r) => r.status === 'pending' && r.requestedBy !== authenticatedUser && !seen.has(r.id)
+    );
+    if (unseen) {
+      setReviewingLockResetRequest(unseen);
+      markLockResetPopupSeen(unseen.id);
+    }
+  }, [ledger.lockResetRequests, authenticatedUser, isLedgerLoaded, reviewingLockResetRequest]);
+
+  // The requester's own device notices its request was approved (via the
+  // regular 4s ledger poll, which keeps running even while this device is
+  // locked) and finishes the job: clear the local lock so AppLockSetupScreen
+  // reappears, then tell the server this request has been used.
+  useEffect(() => {
+    if (!isLedgerLoaded) return;
+    const approved = ledger.lockResetRequests.find(
+      (r) => r.requestedBy === authenticatedUser && r.status === 'approved'
+    );
+    if (!approved) return;
+
+    clearLockConfig();
+    setLockConfig(null);
+    apiFetch('/api/ledger/lock-reset/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: approved.id, requestedBy: authenticatedUser }),
+    })
+      .then((res) => res.ok && res.json())
+      .then((data) => data?.ledger && setLedger(data.ledger))
+      .catch((err) => console.error('Failed to consume the approved PIN reset:', err));
+  }, [ledger.lockResetRequests, authenticatedUser, isLedgerLoaded]);
 
   // Sync state to server
   const syncLedgerToServer = async (updatedLedger: LedgerState) => {
@@ -774,7 +935,18 @@ export default function App() {
   }
 
   if (!isUnlocked) {
-    return <AppLockScreen lockConfig={lockConfig} onUnlock={() => setIsUnlocked(true)} onForgotPin={handleForgotPin} />;
+    const myResetRequest = ledger.lockResetRequests.find((r) => r.requestedBy === authenticatedUser);
+    return (
+      <AppLockScreen
+        lockConfig={lockConfig}
+        partnerName={authenticatedUser === 'husband' ? ledger.wifeName : ledger.husbandName}
+        isWaitingForApproval={!!myResetRequest && myResetRequest.status === 'pending'}
+        onUnlock={() => setIsUnlocked(true)}
+        onRequestReset={handleRequestLockReset}
+        onCancelReset={handleCancelLockReset}
+        onResetWithInviteCode={handleResetWithInviteCode}
+      />
+    );
   }
 
   return (
@@ -868,6 +1040,7 @@ export default function App() {
                   onUpdateBudget={handleUpdateBudget}
                   onResolveGreyArea={handleOpenGreyAreaDirect}
                   onReviewAck={handleOpenReviewAck}
+                  onReviewLockReset={handleOpenReviewLockReset}
                 />
               )}
 
@@ -1003,6 +1176,19 @@ export default function App() {
             onClose={() => setReviewingPendingAck(null)}
             onAccept={handleAcceptPendingAck}
             onReject={handleRejectPendingAck}
+          />
+        )}
+
+        {/* Approve/deny a partner's "forgot PIN" reset request — opened either
+            by tapping its Budget Alert or automatically the first time it appears. */}
+        {reviewingLockResetRequest && (
+          <LockResetApprovalModal
+            key="lock-reset-modal"
+            request={reviewingLockResetRequest}
+            ledger={ledger}
+            onClose={() => setReviewingLockResetRequest(null)}
+            onApprove={handleApproveLockReset}
+            onDeny={handleDenyLockReset}
           />
         )}
 

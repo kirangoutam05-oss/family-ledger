@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ScanFace, ArrowRight, Check } from 'lucide-react';
+import { ScanFace, ArrowRight, Check } from 'lucide-react';
 import { generateSalt, hashPin, isWebAuthnAvailable, registerBiometric, saveLockConfig } from '../utils/appLock';
 
 interface AppLockSetupScreenProps {
@@ -69,8 +69,13 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-16 h-16 rounded-[22px] bg-white dark:bg-neutral-900 shadow-lg border border-black/[0.08] dark:border-white/[0.12] flex items-center justify-center text-[#007AFF]">
-            <ShieldCheck className="w-7 h-7" />
+          <div className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
+            <img
+              src="/app-logo.jpg?v=4"
+              alt="Family Ledger Logo"
+              className="w-full h-full object-cover object-center block"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight">Secure this device</h1>
@@ -87,11 +92,14 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
             <input
               type="password"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              data-lpignore="true"
+              data-1p-ignore="true"
               autoFocus
               value={pin}
               onChange={(e) => setPin(digitsOnly(e.target.value))}
               placeholder="4–6 digit PIN"
-              className="w-full py-3 px-4 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-2xl tracking-[0.5em] font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full py-3 px-4 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-lg tracking-normal font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
             />
             <button
               type="submit"
@@ -109,11 +117,14 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
             <input
               type="password"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              data-lpignore="true"
+              data-1p-ignore="true"
               autoFocus
               value={confirmPin}
               onChange={(e) => setConfirmPin(digitsOnly(e.target.value))}
               placeholder="Confirm PIN"
-              className="w-full py-3 px-4 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-2xl tracking-[0.5em] font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full py-3 px-4 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-lg tracking-normal font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
             />
             <button
               type="submit"

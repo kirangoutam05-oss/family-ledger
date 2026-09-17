@@ -1,18 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Lock, ScanFace, Delete } from 'lucide-react';
-import { LockConfig, clearLockConfig, hashPin, isWebAuthnAvailable, verifyBiometric } from '../utils/appLock';
+import { Lock, ScanFace, Delete, KeyRound, Users } from 'lucide-react';
+import { LockConfig, hashPin, isWebAuthnAvailable, verifyBiometric } from '../utils/appLock';
 
 interface AppLockScreenProps {
   lockConfig: LockConfig;
+  partnerName: string;
+  isWaitingForApproval: boolean;
   onUnlock: () => void;
-  onForgotPin: () => void;
+  onRequestReset: () => Promise<void>;
+  onCancelReset: () => Promise<void>;
+  onResetWithInviteCode: (code: string) => boolean;
 }
 
-export const AppLockScreen: React.FC<AppLockScreenProps> = ({ lockConfig, onUnlock, onForgotPin }) => {
+type ForgotStage = 'idle' | 'choose' | 'invite-code';
+
+export const AppLockScreen: React.FC<AppLockScreenProps> = ({
+  lockConfig,
+  partnerName,
+  isWaitingForApproval,
+  onUnlock,
+  onRequestReset,
+  onCancelReset,
+  onResetWithInviteCode,
+}) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isCheckingBiometric, setIsCheckingBiometric] = useState(false);
-  const [confirmingForgot, setConfirmingForgot] = useState(false);
+  const [forgotStage, setForgotStage] = useState<ForgotStage>('idle');
+  const [isRequestingReset, setIsRequestingReset] = useState(false);
+  const [isCancellingReset, setIsCancellingReset] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState('');
+  const [inviteCodeError, setInviteCodeError] = useState<string | null>(null);
   const canUseBiometric = !!lockConfig.webauthnCredentialId && isWebAuthnAvailable();
   const autoSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,6 +83,33 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ lockConfig, onUnlo
       if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current);
     };
   }, []);
+
+  const handleAskPartner = async () => {
+    setIsRequestingReset(true);
+    try {
+      await onRequestReset();
+    } finally {
+      setIsRequestingReset(false);
+    }
+  };
+
+  const handleCancelWaiting = async () => {
+    setIsCancellingReset(true);
+    try {
+      await onCancelReset();
+    } finally {
+      setIsCancellingReset(false);
+      setForgotStage('idle');
+    }
+  };
+
+  const handleSubmitInviteCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ok = onResetWithInviteCode(inviteCodeInput);
+    if (!ok) {
+      setInviteCodeError("That doesn't match this household's invite code.");
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
@@ -129,39 +174,89 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({ lockConfig, onUnlo
           </button>
         )}
 
-        {!confirmingForgot ? (
+        {isWaitingForApproval ? (
+          <div className="space-y-2 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+            <p className="text-xs text-amber-800 dark:text-amber-300 font-medium">
+              Waiting for {partnerName} to approve your PIN reset…
+            </p>
+            <button
+              type="button"
+              onClick={handleCancelWaiting}
+              disabled={isCancellingReset}
+              className="text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 underline disabled:opacity-50"
+            >
+              {isCancellingReset ? 'Cancelling…' : 'Cancel request'}
+            </button>
+          </div>
+        ) : forgotStage === 'idle' ? (
           <button
             type="button"
-            onClick={() => setConfirmingForgot(true)}
+            onClick={() => setForgotStage('choose')}
             className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
           >
             Forgot PIN?
           </button>
-        ) : (
+        ) : forgotStage === 'choose' ? (
           <div className="space-y-2">
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              This resets the lock on this device only — you'll set a new PIN, but it won't touch any household data.
+              No PIN can be recovered on its own here — pick how you'd like to get back in.
             </p>
-            <div className="flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  clearLockConfig();
-                  onForgotPin();
-                }}
-                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
-              >
-                Reset lock
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmingForgot(false)}
-                className="px-3 py-1.5 rounded-lg border border-black/10 dark:border-white/10 text-xs text-neutral-500"
-              >
-                Cancel
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleAskPartner}
+              disabled={isRequestingReset}
+              className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-semibold shadow-xs flex items-center justify-center gap-2"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>{isRequestingReset ? 'Sending…' : `Ask ${partnerName} to approve`}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setForgotStage('invite-code')}
+              className="w-full py-2.5 rounded-xl border border-black/10 dark:border-white/10 text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Enter household invite code instead</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setForgotStage('idle')}
+              className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+            >
+              Cancel
+            </button>
           </div>
+        ) : (
+          <form onSubmit={handleSubmitInviteCode} className="space-y-2">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Only works if nobody else can approve it for you — enter the invite link or code for this household.
+            </p>
+            <input
+              type="text"
+              value={inviteCodeInput}
+              onChange={(e) => {
+                setInviteCodeInput(e.target.value);
+                setInviteCodeError(null);
+              }}
+              placeholder="Invite code or link"
+              autoFocus
+              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+            />
+            {inviteCodeError && <p className="text-xs text-red-500 font-medium">{inviteCodeError}</p>}
+            <button
+              type="submit"
+              className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-semibold shadow-xs"
+            >
+              Reset lock
+            </button>
+            <button
+              type="button"
+              onClick={() => setForgotStage('choose')}
+              className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+            >
+              Back
+            </button>
+          </form>
         )}
       </div>
     </div>

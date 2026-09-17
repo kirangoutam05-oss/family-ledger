@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Check,
   HandCoins,
+  KeyRound,
 } from 'lucide-react';
 
 interface BudgetAlertsProps {
@@ -23,6 +24,7 @@ interface BudgetAlertsProps {
   onUpdateBudget: (categoryId: CategoryId, newLimit: number) => void;
   onResolveGreyArea: (transactionId: string) => void;
   onReviewAck: (pendingId: string) => void;
+  onReviewLockReset: (requestId: string) => void;
 }
 
 export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
@@ -31,6 +33,7 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
   onUpdateBudget,
   onResolveGreyArea,
   onReviewAck,
+  onReviewLockReset,
 }) => {
   const { alerts, categories, transactions, currency } = ledger;
 
@@ -93,6 +96,7 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
               const isWarning = alert.type === 'warning';
               const isGrey = alert.type === 'grey_area';
               const isAck = alert.type === 'ack_needed';
+              const isLockReset = alert.type === 'lock_reset_requested';
 
               return (
                 <div
@@ -111,6 +115,8 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                           ? 'bg-orange-500/10 text-orange-600'
                           : isAck
                           ? 'bg-amber-500/10 text-amber-600'
+                          : isLockReset
+                          ? 'bg-amber-500/10 text-amber-600'
                           : 'bg-blue-500/10 text-blue-600'
                       }`}
                     >
@@ -122,6 +128,8 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                         <HelpCircle className="w-4 h-4" />
                       ) : isAck ? (
                         <HandCoins className="w-4 h-4" />
+                      ) : isLockReset ? (
+                        <KeyRound className="w-4 h-4" />
                       ) : (
                         <TrendingUp className="w-4 h-4" />
                       )}
@@ -163,7 +171,17 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                       </button>
                     )}
 
-                    {alert.actionType !== 'review_ack' && (
+                    {alert.actionType === 'approve_lock_reset' && alert.targetId && (
+                      <button
+                        onClick={() => onReviewLockReset(alert.targetId!)}
+                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium flex items-center gap-1 transition-colors"
+                      >
+                        <span>Review</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
+
+                    {alert.actionType !== 'review_ack' && alert.actionType !== 'approve_lock_reset' && (
                       <button
                         onClick={() => onDismissAlert(alert.id)}
                         className="px-2.5 py-1 rounded-lg text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"

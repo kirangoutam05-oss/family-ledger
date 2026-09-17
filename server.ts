@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { EMPTY_LEDGER_STATE } from './src/data/initialData';
-import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS, PendingAcknowledgement } from './src/types';
+import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS, PendingAcknowledgement, LockResetRequest } from './src/types';
 
 dotenv.config();
 
@@ -139,7 +139,19 @@ const householdCache = new Map<string, LedgerState>();
 function backfillLedgerState(state: LedgerState): LedgerState {
   state.connectedDevices ??= [];
   state.pendingAcknowledgements ??= [];
+  state.lockResetRequests ??= [];
   return state;
+}
+
+// A "forgot PIN" request left unanswered for 15 minutes stops being valid —
+// otherwise a stale request could sit around and get approved long after
+// whoever asked for it moved on. Returns whether anything was actually pruned,
+// so callers only bother persisting when the array really changed.
+function pruneExpiredLockResetRequests(state: LedgerState): boolean {
+  const now = Date.now();
+  const before = state.lockResetRequests.length;
+  state.lockResetRequests = state.lockResetRequests.filter((r) => new Date(r.expiresAt).getTime() > now);
+  return state.lockResetRequests.length !== before;
 }
 
 // Loads a household's state (from cache, then Postgres/file), or `null` if it
@@ -228,6 +240,10 @@ async function resolveHousehold(req: express.Request, res: express.Response, nex
   const state = await loadHouseholdState(id);
   if (!state) {
     return res.status(404).json({ error: 'Household not found. Check your invite link.' });
+  }
+
+  if (pruneExpiredLockResetRequests(state)) {
+    persistHouseholdState(id, state).catch((err) => console.error('Failed to persist pruned state:', err));
   }
 
   req.householdId = id;
@@ -856,6 +872,135 @@ app.post('/api/ledger/pending-ack/reject', rateLimit(60, 60000), async (req, res
     res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while rejecting the expense.' });
+  }
+});
+
+const LOCK_RESET_TIMEOUT_MS = 15 * 60 * 1000;
+
+// A device's local PIN is unrecoverable on its own (there's no server-known
+// secret backing it) — the normal recovery path is asking the other partner to
+// approve a reset from their own, already-unlocked device.
+app.post('/api/ledger/lock-reset/request', rateLimit(10, 60000), async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { requestedBy } = req.body;
+    if (requestedBy !== 'husband' && requestedBy !== 'wife') {
+      return res.status(400).json({ error: 'requestedBy must be "husband" or "wife"' });
+    }
+
+    // Idempotent: re-tapping "Forgot PIN" while a request is already pending
+    // just returns the existing one instead of spawning duplicates/duplicate alerts.
+    const existing = state.lockResetRequests.find((r) => r.requestedBy === requestedBy && r.status === 'pending');
+    if (existing) {
+      return res.json({ success: true, request: existing, ledger: state });
+    }
+
+    const now = new Date();
+    const request: LockResetRequest = {
+      id: `lockreset-${Date.now()}`,
+      requestedBy,
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + LOCK_RESET_TIMEOUT_MS).toISOString(),
+      status: 'pending',
+    };
+    state.lockResetRequests.push(request);
+
+    const requesterName = requestedBy === 'husband' ? state.husbandName : state.wifeName;
+    state.alerts.unshift({
+      id: `alert-lockreset-${Date.now()}`,
+      type: 'lock_reset_requested',
+      title: `${requesterName} forgot their PIN`,
+      message: `${requesterName} is locked out of their device and needs you to approve a PIN reset.`,
+      timestamp: 'Just now',
+      read: false,
+      actionType: 'approve_lock_reset',
+      targetId: request.id,
+    });
+
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, request, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while requesting a PIN reset.' });
+  }
+});
+
+// The other partner approves — the requester's own device picks this up on its
+// next poll and sets a new PIN. Whoever asked can't approve their own request.
+app.post('/api/ledger/lock-reset/approve', rateLimit(30, 60000), async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { id, approvedBy } = req.body;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid id is required' });
+    }
+
+    pruneExpiredLockResetRequests(state);
+    const request = state.lockResetRequests.find((r) => r.id === id);
+    if (!request) {
+      return res.status(404).json({ error: 'This request has expired or no longer exists.' });
+    }
+    if (approvedBy && approvedBy === request.requestedBy) {
+      return res.status(403).json({ error: "You can't approve your own reset request." });
+    }
+
+    request.status = 'approved';
+    state.alerts = state.alerts.filter((a) => !(a.actionType === 'approve_lock_reset' && a.targetId === id));
+
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while approving the PIN reset.' });
+  }
+});
+
+// Either the requester (cancelling their own ask) or the other partner
+// (declining it) removes the request the same way — no reset happens.
+app.post('/api/ledger/lock-reset/deny', rateLimit(30, 60000), async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { id } = req.body;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid id is required' });
+    }
+
+    state.lockResetRequests = state.lockResetRequests.filter((r) => r.id !== id);
+    state.alerts = state.alerts.filter((a) => !(a.actionType === 'approve_lock_reset' && a.targetId === id));
+
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while denying the PIN reset.' });
+  }
+});
+
+// The requester's device calls this once it notices its own request was
+// approved, to clear it out of the ledger after actually using it.
+app.post('/api/ledger/lock-reset/consume', rateLimit(30, 60000), async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { id, requestedBy } = req.body;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid id is required' });
+    }
+
+    const idx = state.lockResetRequests.findIndex((r) => r.id === id);
+    if (idx === -1) {
+      return res.json({ success: true, ledger: state });
+    }
+    const request = state.lockResetRequests[idx];
+    if (request.status !== 'approved' || (requestedBy && requestedBy !== request.requestedBy)) {
+      return res.status(403).json({ error: 'This request cannot be consumed.' });
+    }
+
+    state.lockResetRequests.splice(idx, 1);
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while completing the PIN reset.' });
   }
 });
 

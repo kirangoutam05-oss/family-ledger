@@ -133,10 +133,16 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
             <input
               type="password"
               inputMode="numeric"
+              autoComplete="one-time-code"
+              data-lpignore="true"
+              data-1p-ignore="true"
               value={currentPin}
               onChange={(e) => setCurrentPin(digitsOnly(e.target.value))}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white tracking-widest focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              // text-lg (18px), not text-sm — anything under 16px makes iOS
+              // Safari auto-zoom the whole page on focus, which is what made
+              // this field feel like it "resized" and broke normal typing.
+              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -147,10 +153,13 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
               <input
                 type="password"
                 inputMode="numeric"
+                autoComplete="one-time-code"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 value={newPin}
                 onChange={(e) => setNewPin(digitsOnly(e.target.value))}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white tracking-widest focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
               />
             </div>
             <div>
@@ -160,10 +169,13 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
               <input
                 type="password"
                 inputMode="numeric"
+                autoComplete="one-time-code"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 value={confirmPin}
                 onChange={(e) => setConfirmPin(digitsOnly(e.target.value))}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white tracking-widest focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
               />
             </div>
           </div>
