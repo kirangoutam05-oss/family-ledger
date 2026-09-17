@@ -45,6 +45,31 @@ export function clearLockConfig() {
   }
 }
 
+// Some people just don't want a PIN gate on a couple's expense app — this
+// records that choice so AppLockSetupScreen doesn't keep asking. It only
+// matters while there's no LockConfig; setting one up later clears it.
+const LOCK_SKIPPED_KEY = 'family-ledger:lock-skipped';
+
+export function isLockSkipped(): boolean {
+  try {
+    return localStorage.getItem(LOCK_SKIPPED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setLockSkipped(skipped: boolean) {
+  try {
+    if (skipped) {
+      localStorage.setItem(LOCK_SKIPPED_KEY, 'true');
+    } else {
+      localStorage.removeItem(LOCK_SKIPPED_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function bufToBase64Url(buf: ArrayBuffer): string {
   let binary = '';
   new Uint8Array(buf).forEach((b) => (binary += String.fromCharCode(b)));

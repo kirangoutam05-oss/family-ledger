@@ -32,6 +32,7 @@ import { GetStartedScreen } from './components/GetStartedScreen';
 import { InvitePartnerScreen } from './components/InvitePartnerScreen';
 import { AppLockSetupScreen } from './components/AppLockSetupScreen';
 import { AppLockScreen } from './components/AppLockScreen';
+import { StartupScreen } from './components/StartupScreen';
 import {
   LayoutDashboard,
   Sparkles,
@@ -46,7 +47,7 @@ import {
   resolveHouseholdIdOnBoot,
   setStoredHouseholdId,
 } from './utils/household';
-import { LockConfig, clearLockConfig, loadLockConfig } from './utils/appLock';
+import { LockConfig, clearLockConfig, isLockSkipped, loadLockConfig, setLockSkipped } from './utils/appLock';
 
 type NavTab =
   | 'dashboards'
@@ -178,6 +179,7 @@ export default function App() {
   // AppLockSetupScreen/AppLockScreen ever flip it to true.
   const [lockConfig, setLockConfig] = useState<LockConfig | null>(() => loadLockConfig());
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [hasSkippedLock, setHasSkippedLock] = useState(() => isLockSkipped());
   const lastHiddenAt = useRef<number | null>(null);
 
   const [showSyncModal, setShowSyncModal] = useState(false);
@@ -321,6 +323,19 @@ export default function App() {
   const handleLockSetupComplete = () => {
     setLockConfig(loadLockConfig());
     setIsUnlocked(true);
+  };
+
+  // Not everyone wants a PIN gate on a shared expense app — this skips it
+  // entirely rather than forcing one, and can be turned back on anytime from
+  // Account Settings.
+  const handleSkipLock = () => {
+    setLockSkipped(true);
+    setHasSkippedLock(true);
+  };
+
+  const handleEnableLock = () => {
+    setLockSkipped(false);
+    setHasSkippedLock(false);
   };
 
   // No PIN can be recovered on its own (there's no server-known secret behind
@@ -897,7 +912,7 @@ export default function App() {
   // Wait for the initial fetch before deciding which screen to show, so a
   // returning user doesn't flash the setup screen while the real ledger loads.
   if (!isLedgerLoaded) {
-    return <div className="min-h-dvh bg-gradient-to-b from-[#F7F7FB] to-[#EBEBF0] dark:from-[#0A0A0C] dark:to-[#000000]" />;
+    return <StartupScreen />;
   }
 
   if (!ledger.setupComplete) {
@@ -925,16 +940,17 @@ export default function App() {
     );
   }
 
-  if (!lockConfig) {
+  if (!lockConfig && !hasSkippedLock) {
     return (
       <AppLockSetupScreen
         personLabel={authenticatedUser === 'husband' ? ledger.husbandName : ledger.wifeName}
         onComplete={handleLockSetupComplete}
+        onSkip={handleSkipLock}
       />
     );
   }
 
-  if (!isUnlocked) {
+  if (lockConfig && !isUnlocked) {
     const myResetRequest = ledger.lockResetRequests.find((r) => r.requestedBy === authenticatedUser);
     return (
       <AppLockScreen
@@ -969,7 +985,7 @@ export default function App() {
           lastSyncTime={ledger.lastSyncTime}
           onLockLedger={handleSwitchUser}
           onSwitchUser={handleSwitchUser}
-          onLockNow={() => setIsUnlocked(false)}
+          onLockNow={lockConfig ? () => setIsUnlocked(false) : undefined}
         />
 
         {/* Main Body Content */}
@@ -1053,6 +1069,7 @@ export default function App() {
                   onOpenSyncModal={() => setShowSyncModal(true)}
                   onOpenLiveMobile={() => setShowLiveMobileModal(true)}
                   onLockConfigChanged={() => setLockConfig(loadLockConfig())}
+                  onEnableLock={handleEnableLock}
                 />
               )}
             </motion.div>

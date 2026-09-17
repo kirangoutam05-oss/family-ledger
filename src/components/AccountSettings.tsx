@@ -16,6 +16,7 @@ interface AccountSettingsProps {
   onOpenSyncModal: () => void;
   onOpenLiveMobile: () => void;
   onLockConfigChanged: () => void;
+  onEnableLock: () => void;
 }
 
 const CURRENCIES = [
@@ -33,6 +34,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   onOpenSyncModal,
   onOpenLiveMobile,
   onLockConfigChanged,
+  onEnableLock,
 }) => {
   const [familyName, setFamilyName] = useState(ledger.familyName);
   const [husbandName, setHusbandName] = useState(ledger.husbandName);
@@ -203,7 +205,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
       </form>
 
       {/* Per-device app lock: change PIN, toggle Face ID / Touch ID */}
-      <AppLockSettings personLabel={currentName} onLockConfigChanged={onLockConfigChanged} />
+      <AppLockSettings personLabel={currentName} onLockConfigChanged={onLockConfigChanged} onEnableLock={onEnableLock} />
 
       {/* Invite partner shortcut */}
       <button

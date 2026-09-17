@@ -12,6 +12,7 @@ import {
 interface AppLockSettingsProps {
   personLabel: string;
   onLockConfigChanged: () => void;
+  onEnableLock: () => void;
 }
 
 // Lets whoever's signed in on this device change their app-lock PIN, or turn
@@ -20,7 +21,7 @@ interface AppLockSettingsProps {
 // Every save calls onLockConfigChanged so App.tsx's own copy of the lock config
 // (the one AppLockScreen actually checks unlock attempts against) doesn't go
 // stale — without it, a changed PIN wouldn't take effect until a page reload.
-export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, onLockConfigChanged }) => {
+export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, onLockConfigChanged, onEnableLock }) => {
   const [lockConfig, setLockConfig] = useState(() => loadLockConfig());
   const [isEditingPin, setIsEditingPin] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
@@ -32,7 +33,30 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
   const [isRegisteringBiometric, setIsRegisteringBiometric] = useState(false);
   const [biometricError, setBiometricError] = useState<string | null>(null);
 
-  if (!lockConfig) return null;
+  if (!lockConfig) {
+    return (
+      <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-400 shrink-0">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-neutral-900 dark:text-white">App Lock: Off</div>
+            <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
+              This device isn't protected by a PIN or Face ID
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onEnableLock}
+          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-xs font-semibold text-white transition-colors shrink-0"
+        >
+          Turn On
+        </button>
+      </div>
+    );
+  }
 
   const digitsOnly = (value: string) => value.replace(/\D/g, '').slice(0, 6);
 

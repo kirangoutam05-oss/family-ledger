@@ -5,11 +5,12 @@ import { generateSalt, hashPin, isWebAuthnAvailable, registerBiometric, saveLock
 interface AppLockSetupScreenProps {
   personLabel: string;
   onComplete: () => void;
+  onSkip: () => void;
 }
 
 type Stage = 'pin' | 'confirm' | 'biometric';
 
-export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLabel, onComplete }) => {
+export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLabel, onComplete, onSkip }) => {
   const [stage, setStage] = useState<Stage>('pin');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -108,6 +109,13 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
             >
               <span>Continue</span>
               <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onSkip}
+              className="w-full text-center text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+            >
+              No thanks, don't lock this app
             </button>
           </form>
         )}
