@@ -26,6 +26,7 @@ interface AppleHeaderProps {
   lastSyncTime: string;
   onLockLedger?: () => void;
   onSwitchUser?: () => void;
+  onLockNow?: () => void;
 }
 
 export const AppleHeader: React.FC<AppleHeaderProps> = ({
@@ -43,6 +44,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
   isSyncing,
   onLockLedger,
   onSwitchUser,
+  onLockNow,
 }) => {
   const [spenderMenuOpen, setSpenderMenuOpen] = useState(false);
 
@@ -186,6 +188,16 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
             )}
           </button>
+
+          {onLockNow && (
+            <button
+              onClick={onLockNow}
+              className="p-2 rounded-xl text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-90"
+              title="Lock the app now"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Authenticated Account: full pill with name, shown on larger screens. On mobile, switching
               identity lives in the sync/devices popup instead (tap the "Synced" pill) — a bare

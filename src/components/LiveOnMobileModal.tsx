@@ -14,14 +14,16 @@ import {
 interface LiveOnMobileModalProps {
   isOpen: boolean;
   onClose: () => void;
+  inviteUrl: string;
 }
 
-export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, onClose }) => {
+export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, onClose, inviteUrl }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
-  // Determine the best live mobile URL
-  const mobileUrl = typeof window !== 'undefined' ? window.location.href : '';
+  // The household-specific invite link — scanning/opening it joins THIS
+  // household, not just a bare install of the app.
+  const mobileUrl = inviteUrl;
 
   useEffect(() => {
     if (!mobileUrl) return;
@@ -89,10 +91,10 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
               <span>Invite Your Partner</span>
             </div>
             <h2 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-white leading-tight">
-              Scan to Install on iPhone or Android
+              Scan to Join Your Household
             </h2>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Have your partner point their phone's camera at this QR code to open the app on their own device.
+              Have your partner point their phone's camera at this QR code to join this household on their own device.
             </p>
           </div>
         </div>

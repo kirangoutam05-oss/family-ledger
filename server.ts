@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -77,17 +78,21 @@ function sanitizeString(str: unknown, maxLen = 150): string {
 
 // Category ids are dynamic (users can add/rename/delete categories), so validity is
 // always checked against the household's current category list, not a fixed enum.
-function getValidCategoryIds(): string[] {
-  return currentLedgerState.categories.map((c) => c.id);
+function getValidCategoryIds(state: LedgerState): string[] {
+  return state.categories.map((c) => c.id);
 }
 
-// Persistent state. When DATABASE_URL is set (production), the ledger lives in a
-// single-row Postgres table and survives redeploys, not just restarts. Without it
-// (local dev), falls back to a JSON file on disk — convenient locally, but does not
+// Persistent state, scoped per household. When DATABASE_URL is set (production),
+// each household lives in its own Postgres row (keyed by household id) and
+// survives redeploys, not just restarts. Without it (local dev), each household
+// falls back to its own JSON file on disk — convenient locally, but does not
 // survive a redeploy on ephemeral hosting.
 const DATA_DIR = path.join(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'ledger.json');
-const LEDGER_ROW_ID = 'default';
+const HOUSEHOLDS_DIR = path.join(DATA_DIR, 'households');
+// The one household that existed before multi-tenancy shipped keeps its original
+// file path so local dev doesn't need any file moved around.
+const LEGACY_DATA_FILE = path.join(DATA_DIR, 'ledger.json');
+const DEFAULT_HOUSEHOLD_ID = 'default';
 
 // `pool` is mutable: if Postgres is unreachable or misconfigured at startup, we
 // fall back to file storage rather than crashing the whole server — a bad
@@ -110,56 +115,125 @@ async function ensureLedgerTable() {
   `);
 }
 
-function loadLedgerStateFromFile(): LedgerState {
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(raw) as LedgerState;
-  } catch {
-    return JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
-  }
+// A household id doubles as its invite "password" and, in file-storage mode, as
+// part of a file path — keep it to a fixed, safe charset so it can never be used
+// for path traversal or malformed SQL parameters.
+function isValidHouseholdId(id: unknown): id is string {
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{6,32}$/.test(id);
 }
 
-async function initLedgerState(): Promise<LedgerState> {
-  if (!pool) return loadLedgerStateFromFile();
+function generateHouseholdId(): string {
+  return crypto.randomBytes(9).toString('base64url');
+}
 
-  try {
-    await ensureLedgerTable();
-    const result = await pool.query('SELECT data FROM ledger_state WHERE id = $1', [LEDGER_ROW_ID]);
-    if (result.rows.length > 0) {
-      return result.rows[0].data as LedgerState;
+function householdFilePath(id: string): string {
+  return id === DEFAULT_HOUSEHOLD_ID ? LEGACY_DATA_FILE : path.join(HOUSEHOLDS_DIR, `${id}.json`);
+}
+
+// In-memory cache of every household currently in use, keyed by household id —
+// avoids a disk/DB read on every request once a household has been touched once.
+const householdCache = new Map<string, LedgerState>();
+
+// Older persisted data can predate fields added since — backfill them here so
+// every household, freshly loaded or long-lived, gets a consistent shape.
+function backfillLedgerState(state: LedgerState): LedgerState {
+  state.connectedDevices ??= [];
+  state.pendingAcknowledgements ??= [];
+  return state;
+}
+
+// Loads a household's state (from cache, then Postgres/file), or `null` if it
+// doesn't exist — except the legacy default household, which is created empty on
+// first read so the app keeps working with zero migration for existing installs.
+async function loadHouseholdState(id: string): Promise<LedgerState | null> {
+  const cached = householdCache.get(id);
+  if (cached) return cached;
+
+  if (pool) {
+    try {
+      await ensureLedgerTable();
+      const result = await pool.query('SELECT data FROM ledger_state WHERE id = $1', [id]);
+      if (result.rows.length > 0) {
+        const state = backfillLedgerState(result.rows[0].data as LedgerState);
+        householdCache.set(id, state);
+        return state;
+      }
+      if (id !== DEFAULT_HOUSEHOLD_ID) return null;
+    } catch (err) {
+      console.error(
+        'Could not connect to Postgres (check DATABASE_URL). Falling back to local file storage for this run:',
+        err
+      );
+      pool = null;
     }
-
-    const initial = JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
-    await pool.query('INSERT INTO ledger_state (id, data) VALUES ($1, $2)', [LEDGER_ROW_ID, initial]);
-    return initial;
-  } catch (err) {
-    console.error(
-      'Could not connect to Postgres (check DATABASE_URL). Falling back to local file storage for this run:',
-      err
-    );
-    pool = null;
-    return loadLedgerStateFromFile();
   }
+
+  if (!pool) {
+    try {
+      const raw = fs.readFileSync(householdFilePath(id), 'utf-8');
+      const state = backfillLedgerState(JSON.parse(raw) as LedgerState);
+      householdCache.set(id, state);
+      return state;
+    } catch {
+      if (id !== DEFAULT_HOUSEHOLD_ID) return null;
+    }
+  }
+
+  // Legacy default household, seen for the first time on this fresh deploy/DB.
+  const initial = backfillLedgerState(JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE)));
+  householdCache.set(id, initial);
+  await persistHouseholdState(id, initial);
+  return initial;
 }
 
-async function persistLedgerState() {
+async function persistHouseholdState(id: string, state: LedgerState) {
+  householdCache.set(id, state);
   try {
     if (pool) {
       await pool.query(
         'INSERT INTO ledger_state (id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = now()',
-        [LEDGER_ROW_ID, currentLedgerState]
+        [id, state]
       );
     } else {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(DATA_FILE, JSON.stringify(currentLedgerState, null, 2), 'utf-8');
+      fs.mkdirSync(path.dirname(householdFilePath(id)), { recursive: true });
+      fs.writeFileSync(householdFilePath(id), JSON.stringify(state, null, 2), 'utf-8');
     }
   } catch (err) {
-    console.error('Failed to persist ledger state:', err);
+    console.error(`Failed to persist household ${id}:`, err);
   }
 }
 
-// Populated by initLedgerState() before the server starts listening (see startServer()).
-let currentLedgerState: LedgerState = JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE));
+declare global {
+  namespace Express {
+    interface Request {
+      householdId?: string;
+      householdState?: LedgerState;
+    }
+  }
+}
+
+// Resolves which household a request is for (from the X-Household-Id header,
+// defaulting to the legacy household for any client that hasn't been upgraded to
+// send one yet) and loads its state onto the request — every handler below reads
+// and mutates `req.householdState`, never a shared global, so concurrent requests
+// for different households can't cross-contaminate each other mid-`await`.
+async function resolveHousehold(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const headerValue = req.header('X-Household-Id');
+  const id = headerValue ? headerValue.trim() : DEFAULT_HOUSEHOLD_ID;
+
+  if (!isValidHouseholdId(id)) {
+    return res.status(400).json({ error: 'Invalid household id' });
+  }
+
+  const state = await loadHouseholdState(id);
+  if (!state) {
+    return res.status(404).json({ error: 'Household not found. Check your invite link.' });
+  }
+
+  req.householdId = id;
+  req.householdState = state;
+  next();
+}
 
 // Lazy-initialized Gemini client
 let genAIClient: GoogleGenAI | null = null;
@@ -416,38 +490,62 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Create a brand new, empty household and return its id — the invite "password"
+// the creator shares with their partner. This is the only place a new household
+// id is ever allocated; every other route 404s on an id it doesn't recognize
+// rather than silently creating one.
+app.post('/api/household/create', rateLimit(10, 60000), async (req, res) => {
+  try {
+    const id = generateHouseholdId();
+    const state = backfillLedgerState(JSON.parse(JSON.stringify(EMPTY_LEDGER_STATE)));
+    await persistHouseholdState(id, state);
+    res.json({ success: true, householdId: id, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while creating the household.' });
+  }
+});
+
+// Every route below operates on a specific household, resolved from the
+// X-Household-Id header (defaulting to the legacy pre-multi-tenancy household).
+app.use('/api/ledger', resolveHousehold);
+app.use('/api/household/setup', resolveHousehold);
+app.use('/api/household/update', resolveHousehold);
+app.use('/api/parse-sms', resolveHousehold);
+
 // Get current state
 app.get('/api/ledger', (req, res) => {
-  res.json(currentLedgerState);
+  res.json(req.householdState);
 });
 
 // Full state sync from client
-app.post('/api/ledger/sync', (req, res) => {
+app.post('/api/ledger/sync', async (req, res) => {
   try {
+    const state = req.householdState!;
     const incoming = req.body as Partial<LedgerState>;
     if (incoming.transactions) {
-      currentLedgerState.transactions = incoming.transactions;
+      state.transactions = incoming.transactions;
     }
     if (incoming.goals) {
-      currentLedgerState.goals = incoming.goals;
+      state.goals = incoming.goals;
     }
     if (incoming.alerts) {
-      currentLedgerState.alerts = incoming.alerts;
+      state.alerts = incoming.alerts;
     }
     if (incoming.categories) {
-      currentLedgerState.categories = incoming.categories;
+      state.categories = incoming.categories;
     }
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Sync failed' });
   }
 });
 
 // Add new transaction
-app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
+app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const rawTx = req.body as Partial<Transaction>;
     if (!rawTx || typeof rawTx !== 'object') {
       return res.status(400).json({ error: 'Invalid transaction payload' });
@@ -463,7 +561,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
       return res.status(400).json({ error: 'Amount must be a positive number under ₹5,00,00,000' });
     }
 
-    const category: CategoryId = getValidCategoryIds().includes(rawTx.category as string)
+    const category: CategoryId = getValidCategoryIds(state).includes(rawTx.category as string)
       ? (rawTx.category as CategoryId)
       : 'bills';
 
@@ -492,20 +590,19 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
       notes: sanitizeString(rawTx.notes, 250) || undefined,
     };
 
-    currentLedgerState.transactions.unshift(tx);
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
+    state.transactions.unshift(tx);
+    state.lastSyncTime = new Date().toISOString();
 
     // Check if budget exceeded for this category
-    const cat = currentLedgerState.categories.find((c) => c.id === tx.category);
+    const cat = state.categories.find((c) => c.id === tx.category);
     if (cat && cat.budgetMonthly > 0) {
-      const totalSpent = currentLedgerState.transactions
+      const totalSpent = state.transactions
         .filter((t) => t.category === cat.id && t.type === 'debit')
         .reduce((sum, t) => sum + t.amount, 0);
 
       const pct = (totalSpent / cat.budgetMonthly) * 100;
       if (pct >= 100) {
-        currentLedgerState.alerts.unshift({
+        state.alerts.unshift({
           id: `alert-budget-${Date.now()}`,
           type: 'critical',
           title: `Budget Exceeded: ${cat.name}`,
@@ -516,7 +613,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
           targetId: cat.id,
         });
       } else if (pct >= 85) {
-        currentLedgerState.alerts.unshift({
+        state.alerts.unshift({
           id: `alert-budget-${Date.now()}`,
           type: 'warning',
           title: `Budget Alert: ${cat.name} at ${Math.round(pct)}%`,
@@ -531,7 +628,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
 
     // If grey area, trigger an alert
     if (tx.status === 'grey_area') {
-      currentLedgerState.alerts.unshift({
+      state.alerts.unshift({
         id: `alert-grey-${Date.now()}`,
         type: 'grey_area',
         title: `Context Needed: ${tx.title}`,
@@ -543,26 +640,28 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), (req, res) => {
       });
     }
 
-    res.json({ success: true, transaction: tx, ledger: currentLedgerState });
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, transaction: tx, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while adding the transaction.' });
   }
 });
 
 // Resolve grey area context
-app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
+app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { transactionId, category, note, title } = req.body;
     if (!transactionId || typeof transactionId !== 'string') {
       return res.status(400).json({ error: 'Valid transactionId is required' });
     }
 
-    const tx = currentLedgerState.transactions.find((t) => t.id === transactionId);
+    const tx = state.transactions.find((t) => t.id === transactionId);
     if (!tx) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    if (category && getValidCategoryIds().includes(category)) {
+    if (category && getValidCategoryIds(state).includes(category)) {
       tx.category = category;
     }
 
@@ -583,26 +682,27 @@ app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), (req, res) => {
     }
 
     // Dismiss associated grey area alert
-    currentLedgerState.alerts = currentLedgerState.alerts.filter(
+    state.alerts = state.alerts.filter(
       (a) => !(a.actionType === 'resolve_grey' && a.targetId === transactionId)
     );
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, transaction: tx, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, transaction: tx, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while resolving the transaction.' });
   }
 });
 
 // Flag an expense as "paid for the other spouse" — it's held here, entirely
-// separate from currentLedgerState.transactions, until the person it's for
+// separate from the household's transactions, until the person it's for
 // accepts it below. This is deliberate: it must never count toward any
 // total/trend/category figure until then, so it can't just be a Transaction
 // with a special status (every aggregation site would need to remember to
 // exclude it).
-app.post('/api/ledger/pending-ack', rateLimit(30, 60000), (req, res) => {
+app.post('/api/ledger/pending-ack', rateLimit(30, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { title, amount, category, paymentMode, notes, bankName, upiRef, rawSms, date, paidBy, paidFor } = req.body;
 
     const cleanTitle = sanitizeString(title, 90);
@@ -625,7 +725,7 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), (req, res) => {
       return res.status(400).json({ error: 'paidBy and paidFor must be different people' });
     }
 
-    const validCategory: CategoryId = getValidCategoryIds().includes(category) ? category : 'bills';
+    const validCategory: CategoryId = getValidCategoryIds(state).includes(category) ? category : 'bills';
     const validPaymentMode = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(paymentMode)
       ? paymentMode
       : 'UPI';
@@ -646,10 +746,10 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), (req, res) => {
       createdAt: new Date().toISOString(),
     };
 
-    currentLedgerState.pendingAcknowledgements.unshift(pending);
+    state.pendingAcknowledgements.unshift(pending);
 
-    const payerName = paidBy === 'husband' ? currentLedgerState.husbandName : currentLedgerState.wifeName;
-    currentLedgerState.alerts.unshift({
+    const payerName = paidBy === 'husband' ? state.husbandName : state.wifeName;
+    state.alerts.unshift({
       id: `alert-ack-${Date.now()}`,
       type: 'ack_needed',
       title: `${payerName} paid for you`,
@@ -660,9 +760,9 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), (req, res) => {
       targetId: pending.id,
     });
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, pending, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, pending, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while flagging the expense.' });
   }
@@ -671,18 +771,19 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), (req, res) => {
 // Accept a pending "paid for you" expense — becomes a real transaction
 // attributed to the person it was for (not whoever physically paid),
 // optionally with corrections applied first.
-app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), (req, res) => {
+app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { id, authenticatedSpender, updates } = req.body;
     if (!id || typeof id !== 'string') {
       return res.status(400).json({ error: 'Valid id is required' });
     }
 
-    const idx = currentLedgerState.pendingAcknowledgements.findIndex((p) => p.id === id);
+    const idx = state.pendingAcknowledgements.findIndex((p) => p.id === id);
     if (idx === -1) {
       return res.status(404).json({ error: 'Pending item not found' });
     }
-    const pending = currentLedgerState.pendingAcknowledgements[idx];
+    const pending = state.pendingAcknowledgements[idx];
 
     if (authenticatedSpender && authenticatedSpender !== pending.paidFor) {
       return res.status(403).json({ error: 'Only the person this expense was for can accept it.' });
@@ -691,7 +792,7 @@ app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), (req, res) => {
     const title = sanitizeString(updates?.title, 90) || pending.title;
     const amount = updates?.amount && Number(updates.amount) > 0 ? Number(updates.amount) : pending.amount;
     const category: CategoryId =
-      updates?.category && getValidCategoryIds().includes(updates.category) ? updates.category : pending.category;
+      updates?.category && getValidCategoryIds(state).includes(updates.category) ? updates.category : pending.category;
     const notes = updates?.notes !== undefined ? sanitizeString(updates.notes, 250) || undefined : pending.notes;
     const date = updates?.date && !isNaN(Date.parse(updates.date)) ? updates.date : pending.date;
 
@@ -711,15 +812,15 @@ app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), (req, res) => {
       notes,
     };
 
-    currentLedgerState.transactions.unshift(tx);
-    currentLedgerState.pendingAcknowledgements.splice(idx, 1);
-    currentLedgerState.alerts = currentLedgerState.alerts.filter(
+    state.transactions.unshift(tx);
+    state.pendingAcknowledgements.splice(idx, 1);
+    state.alerts = state.alerts.filter(
       (a) => !(a.actionType === 'review_ack' && a.targetId === id)
     );
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, transaction: tx, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, transaction: tx, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while accepting the expense.' });
   }
@@ -727,39 +828,41 @@ app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), (req, res) => {
 
 // Reject a pending "paid for you" expense — removed entirely; it never
 // becomes a transaction.
-app.post('/api/ledger/pending-ack/reject', rateLimit(60, 60000), (req, res) => {
+app.post('/api/ledger/pending-ack/reject', rateLimit(60, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { id, authenticatedSpender } = req.body;
     if (!id || typeof id !== 'string') {
       return res.status(400).json({ error: 'Valid id is required' });
     }
 
-    const idx = currentLedgerState.pendingAcknowledgements.findIndex((p) => p.id === id);
+    const idx = state.pendingAcknowledgements.findIndex((p) => p.id === id);
     if (idx === -1) {
       return res.status(404).json({ error: 'Pending item not found' });
     }
-    const pending = currentLedgerState.pendingAcknowledgements[idx];
+    const pending = state.pendingAcknowledgements[idx];
 
     if (authenticatedSpender && authenticatedSpender !== pending.paidFor) {
       return res.status(403).json({ error: 'Only the person this expense was for can reject it.' });
     }
 
-    currentLedgerState.pendingAcknowledgements.splice(idx, 1);
-    currentLedgerState.alerts = currentLedgerState.alerts.filter(
+    state.pendingAcknowledgements.splice(idx, 1);
+    state.alerts = state.alerts.filter(
       (a) => !(a.actionType === 'review_ack' && a.targetId === id)
     );
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while rejecting the expense.' });
   }
 });
 
 // Update an existing transaction with strict ownership check
-app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
+app.post('/api/ledger/transaction/update', rateLimit(60, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { authenticatedSpender } = req.body;
     const transactionId = req.body.transactionId || req.body.transaction?.id;
     const updates = req.body.updates || req.body.transaction;
@@ -768,14 +871,14 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
       return res.status(400).json({ error: 'Valid transactionId is required' });
     }
 
-    const tx = currentLedgerState.transactions.find((t) => t.id === transactionId);
+    const tx = state.transactions.find((t) => t.id === transactionId);
     if (!tx) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
     // Strict Ownership Enforcement: Users cannot edit other spouse's expenses
     if (authenticatedSpender && tx.spender !== authenticatedSpender) {
-      const ownerName = tx.spender === 'husband' ? currentLedgerState.husbandName : currentLedgerState.wifeName;
+      const ownerName = tx.spender === 'husband' ? state.husbandName : state.wifeName;
       return res.status(403).json({
         error: `Permission Denied: You cannot edit another person's expense. Only ${ownerName} can edit this entry.`,
       });
@@ -789,7 +892,7 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
         tx.amount = Number(updates.amount);
       }
       if (updates.category) {
-        if (getValidCategoryIds().includes(updates.category)) {
+        if (getValidCategoryIds(state).includes(updates.category)) {
           tx.category = updates.category;
         }
       }
@@ -806,56 +909,58 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), (req, res) => {
       }
     }
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, transaction: tx, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, transaction: tx, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while updating the transaction.' });
   }
 });
 
 // Delete a transaction with strict ownership check
-app.post('/api/ledger/transaction/delete', rateLimit(60, 60000), (req, res) => {
+app.post('/api/ledger/transaction/delete', rateLimit(60, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { transactionId, authenticatedSpender } = req.body;
     if (!transactionId || typeof transactionId !== 'string') {
       return res.status(400).json({ error: 'Valid transactionId is required' });
     }
 
-    const txIndex = currentLedgerState.transactions.findIndex((t) => t.id === transactionId);
+    const txIndex = state.transactions.findIndex((t) => t.id === transactionId);
     if (txIndex === -1) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    const tx = currentLedgerState.transactions[txIndex];
+    const tx = state.transactions[txIndex];
 
     // Strict Ownership Enforcement: Users cannot delete other spouse's expenses
     if (authenticatedSpender && tx.spender !== authenticatedSpender) {
-      const ownerName = tx.spender === 'husband' ? currentLedgerState.husbandName : currentLedgerState.wifeName;
+      const ownerName = tx.spender === 'husband' ? state.husbandName : state.wifeName;
       return res.status(403).json({
         error: `Permission Denied: You cannot delete another person's expense. Only ${ownerName} can delete this entry.`,
       });
     }
 
-    currentLedgerState.transactions.splice(txIndex, 1);
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, ledger: currentLedgerState });
+    state.transactions.splice(txIndex, 1);
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while deleting the transaction.' });
   }
 });
 
 // Contribute to savings goal
-app.post('/api/ledger/goal-contribution', rateLimit(60, 60000), (req, res) => {
+app.post('/api/ledger/goal-contribution', rateLimit(60, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { goalId, contributor, amount } = req.body;
     const amountNum = Number(amount);
     if (!isFinite(amountNum) || amountNum <= 0 || amountNum > 10000000) {
       return res.status(400).json({ error: 'Contribution amount must be a positive number under ₹1,00,00,000' });
     }
 
-    const goal = currentLedgerState.goals.find((g) => g.id === goalId);
+    const goal = state.goals.find((g) => g.id === goalId);
     if (!goal) return res.status(404).json({ error: 'Goal not found' });
 
     const cleanContributor: SpenderId = contributor === 'wife' ? 'wife' : 'husband';
@@ -868,7 +973,7 @@ app.post('/api/ledger/goal-contribution', rateLimit(60, 60000), (req, res) => {
     });
 
     if (goal.currentAmount >= goal.targetAmount) {
-      currentLedgerState.alerts.unshift({
+      state.alerts.unshift({
         id: `alert-goal-done-${Date.now()}`,
         type: 'goal',
         title: `Goal Achieved! 🎉`,
@@ -880,9 +985,9 @@ app.post('/api/ledger/goal-contribution', rateLimit(60, 60000), (req, res) => {
       });
     }
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, goal, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, goal, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while contributing to the savings goal.' });
   }
@@ -890,18 +995,20 @@ app.post('/api/ledger/goal-contribution', rateLimit(60, 60000), (req, res) => {
 
 // Wipe all household data (transactions/goals/alerts) but keep the household's
 // identity (names, currency, setup, paired devices) intact.
-app.post('/api/ledger/reset', (req, res) => {
-  currentLedgerState.transactions = [];
-  currentLedgerState.goals = [];
-  currentLedgerState.alerts = [];
-  currentLedgerState.lastSyncTime = new Date().toISOString();
-  persistLedgerState();
-  res.json({ success: true, ledger: currentLedgerState });
+app.post('/api/ledger/reset', async (req, res) => {
+  const state = req.householdState!;
+  state.transactions = [];
+  state.goals = [];
+  state.alerts = [];
+  state.lastSyncTime = new Date().toISOString();
+  await persistHouseholdState(req.householdId!, state);
+  res.json({ success: true, ledger: state });
 });
 
 // One-time household setup: real family/partner names, currency
-app.post('/api/household/setup', (req, res) => {
+app.post('/api/household/setup', async (req, res) => {
   try {
+    const state = req.householdState!;
     const { familyName, husbandName, wifeName, currency, myRole } = req.body;
 
     const cleanFamilyName = sanitizeString(familyName, 60);
@@ -916,15 +1023,15 @@ app.post('/api/household/setup', (req, res) => {
       return res.status(400).json({ error: 'myRole must be "husband" or "wife"' });
     }
 
-    currentLedgerState.familyName = cleanFamilyName;
-    currentLedgerState.husbandName = cleanHusbandName;
-    currentLedgerState.wifeName = cleanWifeName;
-    currentLedgerState.currency = cleanCurrency;
-    currentLedgerState.setupComplete = true;
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
+    state.familyName = cleanFamilyName;
+    state.husbandName = cleanHusbandName;
+    state.wifeName = cleanWifeName;
+    state.currency = cleanCurrency;
+    state.setupComplete = true;
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
 
-    res.json({ success: true, ledger: currentLedgerState });
+    res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while setting up the household.' });
   }
@@ -933,42 +1040,44 @@ app.post('/api/household/setup', (req, res) => {
 // Update household/partner names or currency after initial setup — same
 // validation as /api/household/setup, but doesn't touch setupComplete and
 // doesn't require myRole (this isn't a "which phone is this" flow).
-app.post('/api/household/update', (req, res) => {
+app.post('/api/household/update', async (req, res) => {
   try {
+    const state = req.householdState!;
     const { familyName, husbandName, wifeName, currency } = req.body;
 
     const cleanFamilyName = sanitizeString(familyName, 60);
     const cleanHusbandName = sanitizeString(husbandName, 40);
     const cleanWifeName = sanitizeString(wifeName, 40);
-    const cleanCurrency = typeof currency === 'string' && currency.trim() ? currency.trim().slice(0, 3) : currentLedgerState.currency;
+    const cleanCurrency = typeof currency === 'string' && currency.trim() ? currency.trim().slice(0, 3) : state.currency;
 
     if (!cleanFamilyName || !cleanHusbandName || !cleanWifeName) {
       return res.status(400).json({ error: 'Household name and both partner names are required' });
     }
 
-    currentLedgerState.familyName = cleanFamilyName;
-    currentLedgerState.husbandName = cleanHusbandName;
-    currentLedgerState.wifeName = cleanWifeName;
-    currentLedgerState.currency = cleanCurrency;
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
+    state.familyName = cleanFamilyName;
+    state.husbandName = cleanHusbandName;
+    state.wifeName = cleanWifeName;
+    state.currency = cleanCurrency;
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
 
-    res.json({ success: true, ledger: currentLedgerState });
+    res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while updating the household.' });
   }
 });
 
 // Register a device's real per-device identity (which role picked this phone)
-app.post('/api/ledger/register-device', (req, res) => {
+app.post('/api/ledger/register-device', async (req, res) => {
   try {
+    const state = req.householdState!;
     const { role } = req.body;
     if (role !== 'husband' && role !== 'wife') {
       return res.status(400).json({ error: 'role must be "husband" or "wife"' });
     }
 
-    const name = role === 'husband' ? currentLedgerState.husbandName : currentLedgerState.wifeName;
-    const existing = currentLedgerState.connectedDevices.find((d) => d.owner === role);
+    const name = role === 'husband' ? state.husbandName : state.wifeName;
+    const existing = state.connectedDevices.find((d) => d.owner === role);
 
     const device: DeviceInfo = {
       id: existing?.id || `dev-${role}-${Date.now()}`,
@@ -980,16 +1089,16 @@ app.post('/api/ledger/register-device', (req, res) => {
     };
 
     if (existing) {
-      currentLedgerState.connectedDevices = currentLedgerState.connectedDevices.map((d) =>
+      state.connectedDevices = state.connectedDevices.map((d) =>
         d.owner === role ? device : d
       );
     } else {
-      currentLedgerState.connectedDevices.push(device);
+      state.connectedDevices.push(device);
     }
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while registering this device.' });
   }
@@ -1007,8 +1116,9 @@ function slugifyToCategoryId(name: string): string {
 }
 
 // Add a new custom category
-app.post('/api/ledger/categories', rateLimit(30, 60000), (req, res) => {
+app.post('/api/ledger/categories', rateLimit(30, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const cleanName = sanitizeString(req.body?.name, 40);
     if (!cleanName) {
       return res.status(400).json({ error: 'Category name is required' });
@@ -1031,24 +1141,25 @@ app.post('/api/ledger/categories', rateLimit(30, 60000), (req, res) => {
       budgetMonthly,
     };
 
-    currentLedgerState.categories.push(newCategory);
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, category: newCategory, ledger: currentLedgerState });
+    state.categories.push(newCategory);
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, category: newCategory, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while adding the category.' });
   }
 });
 
 // Update an existing category's name, icon, color, or budget
-app.post('/api/ledger/categories/update', rateLimit(30, 60000), (req, res) => {
+app.post('/api/ledger/categories/update', rateLimit(30, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { categoryId } = req.body;
     if (!categoryId || typeof categoryId !== 'string') {
       return res.status(400).json({ error: 'Valid categoryId is required' });
     }
 
-    const category = currentLedgerState.categories.find((c) => c.id === categoryId);
+    const category = state.categories.find((c) => c.id === categoryId);
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });
     }
@@ -1067,9 +1178,9 @@ app.post('/api/ledger/categories/update', rateLimit(30, 60000), (req, res) => {
       category.budgetMonthly = Math.max(0, Math.min(10000000, Number(req.body.budgetMonthly) || 0));
     }
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, category, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, category, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while updating the category.' });
   }
@@ -1077,8 +1188,9 @@ app.post('/api/ledger/categories/update', rateLimit(30, 60000), (req, res) => {
 
 // Delete a category. Existing transactions in it are reassigned to "bills" so
 // nothing is left pointing at a category that no longer exists.
-app.post('/api/ledger/categories/delete', rateLimit(30, 60000), (req, res) => {
+app.post('/api/ledger/categories/delete', rateLimit(30, 60000), async (req, res) => {
   try {
+    const state = req.householdState!;
     const { categoryId } = req.body;
     if (!categoryId || typeof categoryId !== 'string') {
       return res.status(400).json({ error: 'Valid categoryId is required' });
@@ -1087,22 +1199,22 @@ app.post('/api/ledger/categories/delete', rateLimit(30, 60000), (req, res) => {
       return res.status(403).json({ error: 'The Grey Area category is used by the app and cannot be deleted.' });
     }
 
-    const exists = currentLedgerState.categories.some((c) => c.id === categoryId);
+    const exists = state.categories.some((c) => c.id === categoryId);
     if (!exists) {
       return res.status(404).json({ error: 'Category not found' });
     }
 
-    currentLedgerState.categories = currentLedgerState.categories.filter((c) => c.id !== categoryId);
-    const fallbackCategoryId = currentLedgerState.categories.some((c) => c.id === 'bills')
+    state.categories = state.categories.filter((c) => c.id !== categoryId);
+    const fallbackCategoryId = state.categories.some((c) => c.id === 'bills')
       ? 'bills'
-      : currentLedgerState.categories[0]?.id || 'grey_area';
-    currentLedgerState.transactions.forEach((tx) => {
+      : state.categories[0]?.id || 'grey_area';
+    state.transactions.forEach((tx) => {
       if (tx.category === categoryId) tx.category = fallbackCategoryId;
     });
 
-    currentLedgerState.lastSyncTime = new Date().toISOString();
-    persistLedgerState();
-    res.json({ success: true, ledger: currentLedgerState });
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while deleting the category.' });
   }
@@ -1110,6 +1222,7 @@ app.post('/api/ledger/categories/delete', rateLimit(30, 60000), (req, res) => {
 
 // AI & Heuristic SMS / UPI Parser Endpoint
 app.post('/api/parse-sms', rateLimit(30, 60000), async (req, res) => {
+  const state = req.householdState!;
   const { smsText, defaultSpender = 'husband', husbandName, wifeName } = req.body;
   if (!smsText || typeof smsText !== 'string' || smsText.trim().length < 3) {
     return res.status(400).json({ error: 'Valid smsText of at least 3 characters is required' });
@@ -1120,8 +1233,8 @@ app.post('/api/parse-sms', rateLimit(30, 60000), async (req, res) => {
   }
 
   const safeSpender: SpenderId = defaultSpender === 'wife' ? 'wife' : 'husband';
-  const safeHusbandName = sanitizeString(husbandName, 40) || currentLedgerState.husbandName || 'your partner';
-  const safeWifeName = sanitizeString(wifeName, 40) || currentLedgerState.wifeName || 'your partner';
+  const safeHusbandName = sanitizeString(husbandName, 40) || state.husbandName || 'your partner';
+  const safeWifeName = sanitizeString(wifeName, 40) || state.wifeName || 'your partner';
   const cleanSms = sanitizeString(smsText, 2000);
   const maskedSms = maskSensitiveFinancialData(cleanSms);
   const ai = getGenAI();
@@ -1132,7 +1245,7 @@ app.post('/api/parse-sms', rateLimit(30, 60000), async (req, res) => {
       // Built from the household's actual live category list (not a fixed
       // enum) so Gemini always sees whatever categories exist right now,
       // custom ones included, instead of drifting out of sync over time.
-      const categoryList = currentLedgerState.categories
+      const categoryList = state.categories
         .filter((c) => c.id !== 'grey_area')
         .map((c) => `- ${c.id} (${c.name})`)
         .join('\n');
@@ -1192,7 +1305,7 @@ Determine:
       const parsedJson = JSON.parse(geminiResponse.text || '{}');
 
       let validCat: CategoryId = 'bills';
-      if (getValidCategoryIds().includes(parsedJson.category)) {
+      if (getValidCategoryIds(state).includes(parsedJson.category)) {
         validCat = parsedJson.category as CategoryId;
       }
       if (parsedJson.isGreyArea) {
@@ -1244,13 +1357,9 @@ Determine:
 
 // Start server with Vite middleware in dev or static files in production
 async function startServer() {
-  currentLedgerState = await initLedgerState();
-  // Backfill fields added after some households' data was first persisted —
-  // older rows/files predate these and would otherwise crash the first time
-  // something reads them (e.g. `.find()` on undefined).
-  currentLedgerState.connectedDevices ??= [];
-  currentLedgerState.pendingAcknowledgements ??= [];
-  console.log(`Ledger storage: ${pool ? 'Postgres (persistent across deploys)' : 'local file (data/ledger.json)'}`);
+  // Households are loaded lazily, per request, by loadHouseholdState — there's no
+  // single state to load eagerly anymore.
+  console.log(`Ledger storage: ${pool ? 'Postgres (persistent across deploys)' : 'local files under data/'}`);
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

@@ -198,7 +198,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
           </button>
 
           <p className="text-[11px] text-center text-neutral-400">
-            Your partner will pick their own name the first time they open this app on their phone.
+            Next, you'll get a private link to share with your partner so they can join from their own phone.
           </p>
         </form>
       </div>

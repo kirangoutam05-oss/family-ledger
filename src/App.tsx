@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LedgerState,
@@ -26,6 +26,10 @@ import { PendingAckModal } from './components/PendingAckModal';
 import { LiveOnMobileModal } from './components/LiveOnMobileModal';
 import { HouseholdSetupScreen } from './components/HouseholdSetupScreen';
 import { WhoAreYouScreen } from './components/WhoAreYouScreen';
+import { GetStartedScreen } from './components/GetStartedScreen';
+import { InvitePartnerScreen } from './components/InvitePartnerScreen';
+import { AppLockSetupScreen } from './components/AppLockSetupScreen';
+import { AppLockScreen } from './components/AppLockScreen';
 import {
   LayoutDashboard,
   Sparkles,
@@ -33,6 +37,13 @@ import {
   UserCog,
   Tags,
 } from 'lucide-react';
+import {
+  apiFetch,
+  buildInviteUrl,
+  resolveHouseholdIdOnBoot,
+  setStoredHouseholdId,
+} from './utils/household';
+import { LockConfig, loadLockConfig } from './utils/appLock';
 
 type NavTab =
   | 'dashboards'
@@ -114,6 +125,11 @@ function markAckPopupSeen(id: string) {
   }
 }
 
+// How long the app can sit backgrounded before it re-locks on return — long
+// enough that a quick switch to reply to a text doesn't re-prompt, short
+// enough that a phone left down for real stays protected.
+const RELOCK_GRACE_MS = 45_000;
+
 export default function App() {
   const [ledger, setLedger] = useState<LedgerState>(EMPTY_LEDGER_STATE);
   const [isLedgerLoaded, setIsLedgerLoaded] = useState(false);
@@ -125,12 +141,55 @@ export default function App() {
   const [identity, setIdentity] = useState<DeviceIdentity | null>(() => loadLocalIdentity());
   const authenticatedUser: SpenderId = identity?.role ?? 'husband';
 
+  // Which household this device belongs to — resolved once on first mount from
+  // a /join/<id> link, a previously stored id, or (for devices that already had
+  // an identity before multi-tenancy shipped) the original single household.
+  const [household] = useState(() => resolveHouseholdIdOnBoot(!!loadLocalIdentity()));
+  const [householdId, setHouseholdId] = useState<string | null>(household.householdId);
+  const [justInvited, setJustInvited] = useState(false);
+
+  // Device-level app lock (Face ID/Touch ID/PIN) — always starts locked; only
+  // AppLockSetupScreen/AppLockScreen ever flip it to true.
+  const [lockConfig, setLockConfig] = useState<LockConfig | null>(() => loadLockConfig());
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const lastHiddenAt = useRef<number | null>(null);
+
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showLiveMobileModal, setShowLiveMobileModal] = useState(false);
   const [focusedGreyTxId, setFocusedGreyTxId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [reviewingPendingAck, setReviewingPendingAck] = useState<PendingAcknowledgement | null>(null);
+
+  // A freshly clicked /join/<id> link is password-equivalent — persist it, then
+  // scrub it out of the URL bar/history immediately rather than leaving it
+  // sitting there.
+  useEffect(() => {
+    if (household.fromJoinLink && household.householdId) {
+      setStoredHouseholdId(household.householdId);
+      window.history.replaceState({}, '', '/');
+    }
+  }, [household]);
+
+  // Re-lock after the app has been backgrounded past the grace period —
+  // switching away briefly (e.g. to reply to a text) doesn't re-prompt, but a
+  // phone left down for real does.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        lastHiddenAt.current = Date.now();
+      } else if (lastHiddenAt.current !== null && Date.now() - lastHiddenAt.current > RELOCK_GRACE_MS) {
+        setIsUnlocked(false);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  const handleHouseholdReady = (id: string) => {
+    setStoredHouseholdId(id);
+    setHouseholdId(id);
+  };
 
   // Bottom-nav tab switches fade; switching Shared/Kiran/Mageswari (from the
   // header dropdown) slides in the direction of the tapped item instead.
@@ -162,7 +221,7 @@ export default function App() {
 
   const registerDevice = async (role: SpenderId) => {
     try {
-      const res = await fetch('/api/ledger/register-device', {
+      const res = await apiFetch('/api/ledger/register-device', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
@@ -183,7 +242,7 @@ export default function App() {
     currency: string;
     myRole: SpenderId;
   }) => {
-    const res = await fetch('/api/household/setup', {
+    const res = await apiFetch('/api/household/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(details),
@@ -197,6 +256,7 @@ export default function App() {
     saveLocalIdentity(details.myRole);
     setIdentity({ role: details.myRole, setAt: new Date().toISOString() });
     setActiveSpender('shared');
+    setJustInvited(true);
     await registerDevice(details.myRole);
   };
 
@@ -206,7 +266,7 @@ export default function App() {
     wifeName: string;
     currency: string;
   }) => {
-    const res = await fetch('/api/household/update', {
+    const res = await apiFetch('/api/household/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(details),
@@ -231,11 +291,22 @@ export default function App() {
     setIdentity(null);
   };
 
+  const handleLockSetupComplete = () => {
+    setLockConfig(loadLockConfig());
+    setIsUnlocked(true);
+  };
+
+  const handleForgotPin = () => {
+    // AppLockScreen already cleared the stored config before calling this —
+    // dropping it from state re-shows AppLockSetupScreen to establish a new one.
+    setLockConfig(null);
+  };
+
   // Update transaction with spouse ownership enforcement
   const handleUpdateTransaction = async (tx: Transaction) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/transaction/update', {
+      const res = await apiFetch('/api/ledger/transaction/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,7 +334,7 @@ export default function App() {
   const handleDeleteTransaction = async (transactionId: string) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/transaction/delete', {
+      const res = await apiFetch('/api/ledger/transaction/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -290,7 +361,7 @@ export default function App() {
   // Fetch ledger from server
   const fetchLedger = useCallback(async () => {
     try {
-      const res = await fetch('/api/ledger');
+      const res = await apiFetch('/api/ledger');
       if (res.ok) {
         const data = await res.json();
         setLedger(data);
@@ -302,12 +373,14 @@ export default function App() {
     }
   }, []);
 
-  // Periodic polling for multi-device sync
+  // Periodic polling for multi-device sync — doesn't start until a household is
+  // known, since there's nothing to fetch yet on a brand new device.
   useEffect(() => {
+    if (!householdId) return;
     fetchLedger();
     const interval = setInterval(fetchLedger, 4000);
     return () => clearInterval(interval);
-  }, [fetchLedger]);
+  }, [fetchLedger, householdId]);
 
   // The first time a "paid for you" expense shows up for this device's
   // signed-in person, interrupt with a pop-up instead of leaving it to be
@@ -339,7 +412,7 @@ export default function App() {
   const syncLedgerToServer = async (updatedLedger: LedgerState) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/sync', {
+      const res = await apiFetch('/api/ledger/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedLedger),
@@ -359,7 +432,7 @@ export default function App() {
   const handleAddTransaction = async (tx: Transaction) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/transaction', {
+      const res = await apiFetch('/api/ledger/transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(tx),
@@ -396,7 +469,7 @@ export default function App() {
   ) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/resolve-grey', {
+      const res = await apiFetch('/api/ledger/resolve-grey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -458,7 +531,7 @@ export default function App() {
   }) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/pending-ack', {
+      const res = await apiFetch('/api/ledger/pending-ack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pending),
@@ -480,7 +553,7 @@ export default function App() {
   ) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/pending-ack/accept', {
+      const res = await apiFetch('/api/ledger/pending-ack/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, authenticatedSpender: authenticatedUser, updates }),
@@ -504,7 +577,7 @@ export default function App() {
   const handleRejectPendingAck = async (id: string) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/pending-ack/reject', {
+      const res = await apiFetch('/api/ledger/pending-ack/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, authenticatedSpender: authenticatedUser }),
@@ -534,7 +607,7 @@ export default function App() {
   ) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/ledger/goal-contribution', {
+      const res = await apiFetch('/api/ledger/goal-contribution', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ goalId, contributor, amount }),
@@ -577,7 +650,7 @@ export default function App() {
 
   // Add a new custom category
   const handleAddCategory = async (details: { name: string; icon: string; color: string; budgetMonthly: number }) => {
-    const res = await fetch('/api/ledger/categories', {
+    const res = await apiFetch('/api/ledger/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(details),
@@ -595,7 +668,7 @@ export default function App() {
     categoryId: string,
     updates: Partial<Pick<Category, 'name' | 'icon' | 'color' | 'budgetMonthly'>>
   ) => {
-    const res = await fetch('/api/ledger/categories/update', {
+    const res = await apiFetch('/api/ledger/categories/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ categoryId, ...updates }),
@@ -610,7 +683,7 @@ export default function App() {
 
   // Delete a category (its transactions get reassigned server-side)
   const handleDeleteCategory = async (categoryId: string) => {
-    const res = await fetch('/api/ledger/categories/delete', {
+    const res = await apiFetch('/api/ledger/categories/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ categoryId }),
@@ -636,7 +709,7 @@ export default function App() {
   // Wipe all household data (transactions/goals/alerts), keeping household setup intact
   const handleResetHousehold = async () => {
     try {
-      const res = await fetch('/api/ledger/reset', { method: 'POST' });
+      const res = await apiFetch('/api/ledger/reset', { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         if (data.ledger) setLedger(data.ledger);
@@ -654,6 +727,12 @@ export default function App() {
 
   const unreadAlertsCount = ledger.alerts.filter((a) => !a.read).length;
 
+  // A genuinely new device with no household yet — nothing to fetch, so this
+  // check comes before the ledger-loaded gate below.
+  if (!householdId) {
+    return <GetStartedScreen onHouseholdReady={handleHouseholdReady} />;
+  }
+
   // Wait for the initial fetch before deciding which screen to show, so a
   // returning user doesn't flash the setup screen while the real ledger loads.
   if (!isLedgerLoaded) {
@@ -662,6 +741,16 @@ export default function App() {
 
   if (!ledger.setupComplete) {
     return <HouseholdSetupScreen onComplete={handleHouseholdSetup} />;
+  }
+
+  if (justInvited) {
+    return (
+      <InvitePartnerScreen
+        familyName={ledger.familyName}
+        inviteUrl={buildInviteUrl(householdId)}
+        onContinue={() => setJustInvited(false)}
+      />
+    );
   }
 
   if (!identity) {
@@ -673,6 +762,19 @@ export default function App() {
         onSelect={handleWhoAreYou}
       />
     );
+  }
+
+  if (!lockConfig) {
+    return (
+      <AppLockSetupScreen
+        personLabel={authenticatedUser === 'husband' ? ledger.husbandName : ledger.wifeName}
+        onComplete={handleLockSetupComplete}
+      />
+    );
+  }
+
+  if (!isUnlocked) {
+    return <AppLockScreen lockConfig={lockConfig} onUnlock={() => setIsUnlocked(true)} onForgotPin={handleForgotPin} />;
   }
 
   return (
@@ -695,6 +797,7 @@ export default function App() {
           lastSyncTime={ledger.lastSyncTime}
           onLockLedger={handleSwitchUser}
           onSwitchUser={handleSwitchUser}
+          onLockNow={() => setIsUnlocked(false)}
         />
 
         {/* Main Body Content */}
@@ -776,6 +879,7 @@ export default function App() {
                   onSwitchUser={handleSwitchUser}
                   onOpenSyncModal={() => setShowSyncModal(true)}
                   onOpenLiveMobile={() => setShowLiveMobileModal(true)}
+                  onLockConfigChanged={() => setLockConfig(loadLockConfig())}
                 />
               )}
             </motion.div>
@@ -865,6 +969,7 @@ export default function App() {
             isOpen={showSyncModal}
             onClose={() => setShowSyncModal(false)}
             ledger={ledger}
+            inviteUrl={buildInviteUrl(householdId)}
             onTriggerSync={fetchLedger}
             isSyncing={isSyncing}
             onResetHousehold={handleResetHousehold}
@@ -926,6 +1031,7 @@ export default function App() {
             key="live-mobile-modal"
             isOpen={showLiveMobileModal}
             onClose={() => setShowLiveMobileModal(false)}
+            inviteUrl={buildInviteUrl(householdId)}
           />
         )}
 

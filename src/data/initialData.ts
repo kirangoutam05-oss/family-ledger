@@ -93,15 +93,10 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
 ];
 
-function generateFamilyId(): string {
-  return `FAM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-}
-
 // Real starting state for a brand-new household: no seeded people, transactions,
 // goals, alerts, or devices. Categories keep sensible default budgets, which
 // remain fully editable from the Budget Alerts screen.
 export const EMPTY_LEDGER_STATE: LedgerState = {
-  familyId: generateFamilyId(),
   familyName: '',
   husbandName: '',
   wifeName: '',

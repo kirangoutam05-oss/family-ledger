@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserCog, Save, CheckCircle2, LogOut, Smartphone, UserPlus } from 'lucide-react';
 import { LedgerState, SpenderId } from '../types';
+import { AppLockSettings } from './AppLockSettings';
 
 interface AccountSettingsProps {
   ledger: LedgerState;
@@ -14,6 +15,7 @@ interface AccountSettingsProps {
   onSwitchUser: () => void;
   onOpenSyncModal: () => void;
   onOpenLiveMobile: () => void;
+  onLockConfigChanged: () => void;
 }
 
 const CURRENCIES = [
@@ -30,6 +32,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   onSwitchUser,
   onOpenSyncModal,
   onOpenLiveMobile,
+  onLockConfigChanged,
 }) => {
   const [familyName, setFamilyName] = useState(ledger.familyName);
   const [husbandName, setHusbandName] = useState(ledger.husbandName);
@@ -199,6 +202,9 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
         </button>
       </form>
 
+      {/* Per-device app lock: change PIN, toggle Face ID / Touch ID */}
+      <AppLockSettings personLabel={currentName} onLockConfigChanged={onLockConfigChanged} />
+
       {/* Invite partner shortcut */}
       <button
         type="button"
@@ -212,7 +218,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           <div className="text-left">
             <div className="text-sm font-semibold text-neutral-900 dark:text-white">Invite Partner</div>
             <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
-              Get a QR code to install this app on their phone
+              Scan to join this household
             </div>
           </div>
         </div>

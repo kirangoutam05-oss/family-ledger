@@ -16,6 +16,7 @@ interface DeviceSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
   ledger: LedgerState;
+  inviteUrl: string;
   onTriggerSync: () => Promise<void>;
   isSyncing: boolean;
   onResetHousehold: () => Promise<void>;
@@ -27,6 +28,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
   isOpen,
   onClose,
   ledger,
+  inviteUrl,
   onTriggerSync,
   isSyncing,
   onResetHousehold,
@@ -36,7 +38,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const { familyId, connectedDevices, husbandName, wifeName } = ledger;
+  const { connectedDevices, husbandName, wifeName } = ledger;
 
   const handleConfirmReset = async () => {
     setIsResetting(true);
@@ -51,7 +53,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
   if (!isOpen) return null;
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(familyId);
+    navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -101,23 +103,23 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
           </button>
         </div>
 
-        {/* Pairing Code Card */}
+        {/* Invite Link Card */}
         <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-700/80 space-y-2">
           <div className="text-[11px] font-medium text-neutral-500 flex items-center justify-between">
-            <span>Family Pairing Key</span>
+            <span>Household Invite Link</span>
             <span className="text-emerald-600 font-semibold flex items-center gap-1">
               <Wifi className="w-3 h-3" />
               Real-time Polling Active
             </span>
           </div>
 
-          <div className="flex items-center justify-between bg-white dark:bg-neutral-900 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
-            <span className="font-mono font-bold text-sm text-neutral-900 dark:text-white tracking-wider">
-              {familyId}
+          <div className="flex items-center justify-between gap-2 bg-white dark:bg-neutral-900 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-800">
+            <span className="font-mono text-xs text-neutral-900 dark:text-white truncate min-w-0">
+              {inviteUrl}
             </span>
             <button
               onClick={handleCopyCode}
-              className="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1 transition-colors"
+              className="px-2.5 py-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1 shrink-0 transition-colors"
             >
               {copied ? (
                 <>
@@ -133,7 +135,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
             </button>
           </div>
           <p className="text-[11px] text-neutral-400">
-            Open Family Ledger on your partner's iPhone or Mac to sync real-time UPI alerts.
+            Share this link with your partner so they can join this household on their own phone.
           </p>
         </div>
 

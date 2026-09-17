@@ -129,7 +129,6 @@ export interface DeviceInfo {
 }
 
 export interface LedgerState {
-  familyId: string;
   familyName: string;
   husbandName: string;
   wifeName: string;
