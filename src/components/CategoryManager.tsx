@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, Pencil, X, Check, ShieldAlert, Tags, ChevronDown, PenLine } from 'lucide-react';
 import { LedgerState, Category, Transaction, CATEGORY_ICON_OPTIONS } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon } from '../utils/helpers';
+import { isInCurrentBillingCycle } from '../utils/billingCycle';
+import { MonthlyWaveChart } from './MonthlyWaveChart';
 
 interface CategoryManagerProps {
   ledger: LedgerState;
@@ -46,10 +48,12 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   const manageableCategories = categories.filter((c) => c.id !== 'grey_area');
 
   // Spend-vs-budget, moved here from the Overview screen so budget tracking
-  // lives alongside the categories themselves.
+  // lives alongside the categories themselves. Scoped to the current billing
+  // cycle — the same window Overview uses — so "% of monthly budget" doesn't
+  // just climb forever against all-time spend.
   const categorySpend: Record<string, number> = {};
   transactions.forEach((tx) => {
-    if (tx.type === 'debit') {
+    if (tx.type === 'debit' && isInCurrentBillingCycle(tx.date)) {
       categorySpend[tx.category] = (categorySpend[tx.category] || 0) + tx.amount;
     }
   });
@@ -80,12 +84,12 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
 
   // Most recent transactions for whichever category is expanded — computed
   // once here rather than per-row, since only one can be open at a time.
-  const expandedCategoryTransactions = expandedCategoryId
-    ? transactions
-        .filter((t) => t.category === expandedCategoryId)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 15)
+  const expandedCategoryAllTransactions = expandedCategoryId
+    ? transactions.filter((t) => t.category === expandedCategoryId)
     : [];
+  const expandedCategoryTransactions = [...expandedCategoryAllTransactions]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 15);
 
   const openAddForm = () => {
     setForm(EMPTY_FORM);
@@ -265,6 +269,19 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                   className="overflow-hidden"
                 >
                   <div className="px-4 pb-3 pt-1 border-t border-black/[0.04] dark:border-white/[0.04]">
+                    {expandedCategoryAllTransactions.length > 0 && (
+                      <div className="pt-2 pb-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-1 px-0.5">
+                          Monthly Trend
+                        </p>
+                        <MonthlyWaveChart
+                          transactions={expandedCategoryAllTransactions}
+                          husbandName={husbandName}
+                          wifeName={wifeName}
+                          currency={currency}
+                        />
+                      </div>
+                    )}
                     {expandedCategoryTransactions.length === 0 ? (
                       <p className="text-xs text-neutral-400 py-3 text-center">
                         No transactions in this category yet.

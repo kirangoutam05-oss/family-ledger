@@ -110,7 +110,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
-            Log New Family Expense
+            Log New Household Expense
           </h3>
           <button
             onClick={onClose}

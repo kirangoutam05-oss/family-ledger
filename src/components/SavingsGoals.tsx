@@ -10,6 +10,7 @@ import {
   Plus,
   Calendar,
   CheckCircle2,
+  PiggyBank,
 } from 'lucide-react';
 
 interface SavingsGoalsProps {
@@ -94,7 +95,9 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
             Savings Goals
           </h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-            {formatCurrency(totalSavedAcrossAll, currency)} of {formatCurrency(totalTargetAcrossAll, currency)} total saved ({overallProgress}%)
+            {goals.length === 0
+              ? "You haven't set any savings goals yet"
+              : `${formatCurrency(totalSavedAcrossAll, currency)} of ${formatCurrency(totalTargetAcrossAll, currency)} total saved (${overallProgress}%)`}
           </p>
         </div>
 
@@ -108,6 +111,17 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
       </div>
 
       {/* Goals Grid */}
+      {goals.length === 0 ? (
+        <div className="p-8 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] text-center space-y-1.5">
+          <PiggyBank className="w-6 h-6 text-neutral-300 dark:text-neutral-600 mx-auto" />
+          <div className="text-xs font-semibold text-neutral-900 dark:text-white">
+            No Savings Goals Yet
+          </div>
+          <p className="text-[11px] text-neutral-400 max-w-xs mx-auto">
+            Start one to track something you're both saving toward — a trip, an emergency fund, anything.
+          </p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {goals.map((goal, index) => {
           const percent = Math.min(
@@ -223,6 +237,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Contribution Sheet */}
       <AnimatePresence>

@@ -7,6 +7,7 @@ import {
   SpenderId,
 } from '../types';
 import { formatCurrency, getCategoryIcon } from '../utils/helpers';
+import { isInCurrentBillingCycle } from '../utils/billingCycle';
 import {
   AlertTriangle,
   AlertOctagon,
@@ -63,10 +64,24 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
     (a) => a.actionType !== 'review_ack' && a.actionType !== 'approve_lock_reset'
   ).length;
 
-  // Compute spending per category
+  // A household that logs a few transactions a day can accumulate a lot of
+  // purely-informational "your partner added an expense" notices — enough to
+  // bury the one alert that actually needs a decision. Splitting into two
+  // groups keeps action items visible regardless of how much FYI noise piles
+  // up underneath them.
+  const isActionable = (a: LedgerState['alerts'][number]) =>
+    a.actionType === 'resolve_grey' || a.actionType === 'review_ack' || a.actionType === 'approve_lock_reset';
+  const actionableAlerts = alerts.filter(isActionable);
+  const awarenessAlerts = alerts.filter((a) => !isActionable(a));
+  const showGroupHeaders = actionableAlerts.length > 0 && awarenessAlerts.length > 0;
+
+  // Compute spending per category — scoped to the current billing cycle, the
+  // same window Overview's "Amount vs Category" uses, so "% of monthly
+  // budget" means the same thing everywhere instead of climbing forever
+  // against all-time spend.
   const categorySpend: Record<string, number> = {};
   transactions
-    .filter((t) => t.type === 'debit')
+    .filter((t) => t.type === 'debit' && isInCurrentBillingCycle(t.date))
     .forEach((t) => {
       categorySpend[t.category] = (categorySpend[t.category] || 0) + t.amount;
     });
@@ -79,6 +94,124 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
   const handleSaveBudget = (catId: CategoryId) => {
     onUpdateBudget(catId, editLimit);
     setEditingCatId(null);
+  };
+
+  const renderAlert = (alert: LedgerState['alerts'][number], index: number) => {
+    const isCritical = alert.type === 'critical';
+    const isWarning = alert.type === 'warning';
+    const isGrey = alert.type === 'grey_area';
+    const isAck = alert.type === 'ack_needed';
+    const isLockReset = alert.type === 'lock_reset_requested';
+    const isExpenseAdded = alert.type === 'expense_added';
+    const isRecurring = alert.type === 'recurring_due';
+    const isDailyReminder = alert.type === 'daily_reminder';
+
+    return (
+      <motion.div
+        key={alert.id}
+        layout
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, x: 120, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
+        transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3), ease: [0.16, 1, 0.3, 1] }}
+        className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+              isCritical
+                ? 'bg-red-500/10 text-red-600'
+                : isWarning
+                ? 'bg-amber-500/10 text-amber-600'
+                : isGrey
+                ? 'bg-orange-500/10 text-orange-600'
+                : isAck
+                ? 'bg-amber-500/10 text-amber-600'
+                : isLockReset
+                ? 'bg-amber-500/10 text-amber-600'
+                : isRecurring || isDailyReminder
+                ? 'bg-violet-500/10 text-violet-600'
+                : 'bg-blue-500/10 text-blue-600'
+            }`}
+          >
+            {isCritical ? (
+              <AlertOctagon className="w-4 h-4" />
+            ) : isWarning ? (
+              <AlertTriangle className="w-4 h-4" />
+            ) : isGrey ? (
+              <HelpCircle className="w-4 h-4" />
+            ) : isAck ? (
+              <HandCoins className="w-4 h-4" />
+            ) : isLockReset ? (
+              <KeyRound className="w-4 h-4" />
+            ) : isExpenseAdded ? (
+              <Receipt className="w-4 h-4" />
+            ) : isRecurring ? (
+              <Repeat className="w-4 h-4" />
+            ) : isDailyReminder ? (
+              <BellRing className="w-4 h-4" />
+            ) : (
+              <TrendingUp className="w-4 h-4" />
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-neutral-900 dark:text-white">
+                {alert.title}
+              </span>
+              <span className="text-[10px] text-neutral-400">
+                {alert.timestamp}
+              </span>
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 leading-relaxed">
+              {alert.message}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+          {alert.actionType === 'resolve_grey' && alert.targetId && (
+            <button
+              onClick={() => onResolveGreyArea(alert.targetId!)}
+              className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium flex items-center gap-1 transition-colors"
+            >
+              <span>Clarify</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
+
+          {alert.actionType === 'review_ack' && alert.targetId && (
+            <button
+              onClick={() => onReviewAck(alert.targetId!)}
+              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium flex items-center gap-1 transition-colors"
+            >
+              <span>Review</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
+
+          {alert.actionType === 'approve_lock_reset' && alert.targetId && (
+            <button
+              onClick={() => onReviewLockReset(alert.targetId!)}
+              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium flex items-center gap-1 transition-colors"
+            >
+              <span>Review</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
+
+          {alert.actionType !== 'review_ack' && alert.actionType !== 'approve_lock_reset' && (
+            <button
+              onClick={() => onDismissAlert(alert.id)}
+              className="px-2.5 py-1 rounded-lg text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+            >
+              Dismiss
+            </button>
+          )}
+        </div>
+      </motion.div>
+    );
   };
 
   return (
@@ -124,126 +257,32 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            <AnimatePresence initial={false}>
-            {alerts.map((alert, index) => {
-              const isCritical = alert.type === 'critical';
-              const isWarning = alert.type === 'warning';
-              const isGrey = alert.type === 'grey_area';
-              const isAck = alert.type === 'ack_needed';
-              const isLockReset = alert.type === 'lock_reset_requested';
-              const isExpenseAdded = alert.type === 'expense_added';
-              const isRecurring = alert.type === 'recurring_due';
-              const isDailyReminder = alert.type === 'daily_reminder';
+          <div className="space-y-4">
+            {actionableAlerts.length > 0 && (
+              <div className="space-y-2">
+                {showGroupHeaders && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-orange-600 dark:text-orange-400 px-1">
+                    Needs Your Action
+                  </p>
+                )}
+                <AnimatePresence initial={false}>
+                  {actionableAlerts.map((alert, index) => renderAlert(alert, index))}
+                </AnimatePresence>
+              </div>
+            )}
 
-              return (
-                <motion.div
-                  key={alert.id}
-                  layout
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: 120, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
-                  transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3), ease: [0.16, 1, 0.3, 1] }}
-                  className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        isCritical
-                          ? 'bg-red-500/10 text-red-600'
-                          : isWarning
-                          ? 'bg-amber-500/10 text-amber-600'
-                          : isGrey
-                          ? 'bg-orange-500/10 text-orange-600'
-                          : isAck
-                          ? 'bg-amber-500/10 text-amber-600'
-                          : isLockReset
-                          ? 'bg-amber-500/10 text-amber-600'
-                          : isRecurring || isDailyReminder
-                          ? 'bg-violet-500/10 text-violet-600'
-                          : 'bg-blue-500/10 text-blue-600'
-                      }`}
-                    >
-                      {isCritical ? (
-                        <AlertOctagon className="w-4 h-4" />
-                      ) : isWarning ? (
-                        <AlertTriangle className="w-4 h-4" />
-                      ) : isGrey ? (
-                        <HelpCircle className="w-4 h-4" />
-                      ) : isAck ? (
-                        <HandCoins className="w-4 h-4" />
-                      ) : isLockReset ? (
-                        <KeyRound className="w-4 h-4" />
-                      ) : isExpenseAdded ? (
-                        <Receipt className="w-4 h-4" />
-                      ) : isRecurring ? (
-                        <Repeat className="w-4 h-4" />
-                      ) : isDailyReminder ? (
-                        <BellRing className="w-4 h-4" />
-                      ) : (
-                        <TrendingUp className="w-4 h-4" />
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-neutral-900 dark:text-white">
-                          {alert.title}
-                        </span>
-                        <span className="text-[10px] text-neutral-400">
-                          {alert.timestamp}
-                        </span>
-                      </div>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 leading-relaxed">
-                        {alert.message}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                    {alert.actionType === 'resolve_grey' && alert.targetId && (
-                      <button
-                        onClick={() => onResolveGreyArea(alert.targetId!)}
-                        className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium flex items-center gap-1 transition-colors"
-                      >
-                        <span>Clarify</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    )}
-
-                    {alert.actionType === 'review_ack' && alert.targetId && (
-                      <button
-                        onClick={() => onReviewAck(alert.targetId!)}
-                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium flex items-center gap-1 transition-colors"
-                      >
-                        <span>Review</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    )}
-
-                    {alert.actionType === 'approve_lock_reset' && alert.targetId && (
-                      <button
-                        onClick={() => onReviewLockReset(alert.targetId!)}
-                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium flex items-center gap-1 transition-colors"
-                      >
-                        <span>Review</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    )}
-
-                    {alert.actionType !== 'review_ack' && alert.actionType !== 'approve_lock_reset' && (
-                      <button
-                        onClick={() => onDismissAlert(alert.id)}
-                        className="px-2.5 py-1 rounded-lg text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-                      >
-                        Dismiss
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-            </AnimatePresence>
+            {awarenessAlerts.length > 0 && (
+              <div className="space-y-2">
+                {showGroupHeaders && (
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 px-1">
+                    For Your Awareness
+                  </p>
+                )}
+                <AnimatePresence initial={false}>
+                  {awarenessAlerts.map((alert, index) => renderAlert(alert, index))}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -10,6 +10,7 @@ import { createServer as createViteServer } from 'vite';
 import { EMPTY_LEDGER_STATE } from './src/data/initialData';
 import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS, PendingAcknowledgement, LockResetRequest } from './src/types';
 import { detectRecurringGroups } from './src/utils/recurringDetector';
+import { isInCurrentBillingCycle } from './src/utils/billingCycle';
 
 dotenv.config();
 
@@ -761,9 +762,13 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
       return res.status(400).json({ error: 'Amount must be a positive number under ₹5,00,00,000' });
     }
 
-    const category: CategoryId = getValidCategoryIds(state).includes(rawTx.category as string)
-      ? (rawTx.category as CategoryId)
-      : 'bills';
+    // An unrecognized category (a deleted category, a stale client, an
+    // SMS-suggested category that doesn't exist yet) used to silently land
+    // in "Bills" — a real spending category, with zero signal that anything
+    // was substituted. Falling back to the household's reserved grey-area
+    // bucket instead makes the substitution visible rather than confusing.
+    const categoryFellBack = !getValidCategoryIds(state).includes(rawTx.category as string);
+    const category: CategoryId = categoryFellBack ? 'grey_area' : (rawTx.category as CategoryId);
 
     const spender: SpenderId = rawTx.spender === 'wife' ? 'wife' : 'husband';
     const type: 'debit' | 'credit' = rawTx.type === 'credit' ? 'credit' : 'debit';
@@ -784,9 +789,19 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
       upiRef: sanitizeString(rawTx.upiRef, 60) || undefined,
       bankName: sanitizeString(rawTx.bankName, 50) || undefined,
       rawSms: rawTx.rawSms ? maskSensitiveFinancialData(rawTx.rawSms) : undefined,
-      status: rawTx.status === 'grey_area' ? 'grey_area' : rawTx.status === 'resolved' ? 'resolved' : 'verified',
-      greyAreaReason: sanitizeString(rawTx.greyAreaReason, 150) || undefined,
-      contextQuestion: sanitizeString(rawTx.contextQuestion, 200) || undefined,
+      status: categoryFellBack
+        ? 'grey_area'
+        : rawTx.status === 'grey_area'
+        ? 'grey_area'
+        : rawTx.status === 'resolved'
+        ? 'resolved'
+        : 'verified',
+      greyAreaReason: categoryFellBack
+        ? "Original category no longer exists on this household — recheck and recategorize."
+        : sanitizeString(rawTx.greyAreaReason, 150) || undefined,
+      contextQuestion: categoryFellBack
+        ? undefined
+        : sanitizeString(rawTx.contextQuestion, 200) || undefined,
       notes: sanitizeString(rawTx.notes, 250) || undefined,
     };
 
@@ -794,11 +809,13 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
     state.lastSyncTime = new Date().toISOString();
     notifyExpenseAdded(state, req.householdId!, spender, tx);
 
-    // Check if budget exceeded for this category
+    // Check if budget exceeded for this category — scoped to the current
+    // billing cycle (same window the client uses), so this stays a "monthly"
+    // figure instead of climbing against all-time spend forever.
     const cat = state.categories.find((c) => c.id === tx.category);
     if (cat && cat.budgetMonthly > 0) {
       const totalSpent = state.transactions
-        .filter((t) => t.category === cat.id && t.type === 'debit')
+        .filter((t) => t.category === cat.id && t.type === 'debit' && isInCurrentBillingCycle(t.date))
         .reduce((sum, t) => sum + t.amount, 0);
 
       const pct = (totalSpent / cat.budgetMonthly) * 100;
@@ -926,7 +943,7 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), async (req, res) => {
       return res.status(400).json({ error: 'paidBy and paidFor must be different people' });
     }
 
-    const validCategory: CategoryId = getValidCategoryIds(state).includes(category) ? category : 'bills';
+    const validCategory: CategoryId = getValidCategoryIds(state).includes(category) ? category : 'grey_area';
     const validPaymentMode = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(paymentMode)
       ? paymentMode
       : 'UPI';
@@ -1663,11 +1680,12 @@ app.post('/api/ledger/categories/delete', rateLimit(30, 60000), async (req, res)
     }
 
     state.categories = state.categories.filter((c) => c.id !== categoryId);
-    const fallbackCategoryId = state.categories.some((c) => c.id === 'bills')
-      ? 'bills'
-      : state.categories[0]?.id || 'grey_area';
+    // Orphaned transactions move to the reserved grey-area bucket (always
+    // present, can't be deleted) rather than a real category like "Bills" —
+    // a deleted category's old transactions deserve a visible "needs a new
+    // category" state, not a silent, unrelated new home.
     state.transactions.forEach((tx) => {
-      if (tx.category === categoryId) tx.category = fallbackCategoryId;
+      if (tx.category === categoryId) tx.category = 'grey_area';
     });
 
     state.lastSyncTime = new Date().toISOString();
@@ -1762,7 +1780,7 @@ Determine:
 
       const parsedJson = JSON.parse(geminiResponse.text || '{}');
 
-      let validCat: CategoryId = 'bills';
+      let validCat: CategoryId = 'grey_area';
       if (getValidCategoryIds(state).includes(parsedJson.category)) {
         validCat = parsedJson.category as CategoryId;
       }

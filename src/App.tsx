@@ -1170,17 +1170,22 @@ export default function App() {
               <span className="text-[10px] font-medium tracking-tight">Category</span>
             </button>
 
-            {/* Import SMS — elevated, highlighted center action */}
-            <div className="flex-1 flex flex-col items-center">
-              <button
-                onClick={() => handleTabChange('auto_parser')}
-                className={`-mt-7 w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/30 ring-4 ring-white dark:ring-[#1C1C1E] transition-transform active:scale-95 ${
+            {/* Import SMS — elevated, highlighted center action. The whole
+                column (circle + label) is one button, like every other nav
+                item — previously only the circle was clickable, so a tap on
+                the label itself (the larger, more natural target) did nothing. */}
+            <button
+              onClick={() => handleTabChange('auto_parser')}
+              className="flex-1 flex flex-col items-center active:scale-95 transition-transform"
+            >
+              <span
+                className={`-mt-7 w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/30 ring-4 ring-white dark:ring-[#1C1C1E] transition-transform ${
                   activeTab === 'auto_parser' ? 'scale-105' : ''
                 }`}
                 style={{ background: 'linear-gradient(135deg, #0A84FF, #5856D6)' }}
               >
                 <Sparkles className="w-6 h-6 text-white" />
-              </button>
+              </span>
               <span
                 className={`text-[10px] font-medium tracking-tight mt-0.5 ${
                   activeTab === 'auto_parser' ? 'text-[#007AFF]' : 'text-neutral-400 dark:text-neutral-500'
@@ -1188,7 +1193,7 @@ export default function App() {
               >
                 Import SMS
               </span>
-            </div>
+            </button>
 
             <button
               onClick={() => handleTabChange('savings_goals')}

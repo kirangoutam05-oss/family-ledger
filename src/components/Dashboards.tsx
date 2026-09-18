@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel, localDateKey } from '../utils/helpers';
 import { detectRecurringGroups } from '../utils/recurringDetector';
+import { billingCycleStart, billingCycleEnd, billingCycleLabel } from '../utils/billingCycle';
 import { ExportSection } from './ExportSection';
 import { BulkEditSheet } from './BulkEditSheet';
 import { TransactionFilterSheet, TransactionFilters, EMPTY_FILTERS, countActiveFilters } from './TransactionFilterSheet';
@@ -29,19 +30,6 @@ import {
   CreditCard,
 } from 'lucide-react';
 
-// The household's billing cycle runs the 21st of one month through the 20th
-// of the next, not the calendar month — shared by the "This Month" KPI and
-// the Spending Trends month view so both agree on what a "month" means.
-function billingCycleStart(d: Date): Date {
-  const start = new Date(d.getFullYear(), d.getMonth() - (d.getDate() < 21 ? 1 : 0), 21);
-  start.setHours(0, 0, 0, 0);
-  return start;
-}
-
-function billingCycleLabel(start: Date): string {
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 20);
-  return `${start.getDate()}/${start.getMonth() + 1} – ${end.getDate()}/${end.getMonth() + 1}`;
-}
 
 interface DashboardsProps {
   ledger: LedgerState;
@@ -90,7 +78,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   // "This Month" — scoped to the current 21st-to-20th billing cycle, not
   // all-time, so the headline number reads as an actual monthly cash flow.
   const currentCycleStart = billingCycleStart(new Date());
-  const currentCycleEnd = new Date(currentCycleStart.getFullYear(), currentCycleStart.getMonth() + 1, 21);
+  const currentCycleEnd = billingCycleEnd(currentCycleStart);
   const currentCycleDebitTxs = relevantTransactions.filter((t) => {
     if (t.type !== 'debit') return false;
     const d = new Date(t.date);
@@ -460,8 +448,8 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           category; an individual view (Kiran/Mageswari) shows only that
           person's bars. */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 px-1">
+          <div className="min-w-0">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Amount vs Category</span>
@@ -476,7 +464,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             </p>
           </div>
           {isShared && (
-            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-neutral-400">
+            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-neutral-400 shrink-0">
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{husbandName}</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-purple-500" />{wifeName}</span>
             </div>
@@ -658,7 +646,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         style={{ width: trendBarWidth }}
                         title={`${b.label}: ${formatCurrency(b.amount, currency)}`}
                       >
-                        <div className="w-full h-44 sm:h-52 relative">
+                        <div className="w-full h-44 sm:h-52 relative border-b border-black/[0.06] dark:border-white/[0.08]">
                           <motion.div
                             className={`absolute bottom-0 left-0 w-full rounded-t-md ${
                               b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
