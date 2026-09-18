@@ -33,6 +33,8 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
   const [inviteCodeError, setInviteCodeError] = useState<string | null>(null);
   const canUseBiometric = !!lockConfig.webauthnCredentialId && isWebAuthnAvailable();
   const autoSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Configs saved before pinLength existed fall back to 6, the old fixed dot count.
+  const pinLength = lockConfig.pinLength ?? 6;
 
   const tryBiometric = async () => {
     if (!lockConfig.webauthnCredentialId) return;
@@ -60,16 +62,16 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
   };
 
   const handleDigit = (digit: string) => {
-    if (pin.length >= 6) return;
+    if (pin.length >= pinLength) return;
     if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current);
     const next = pin + digit;
     setPin(next);
     setError(null);
-    if (next.length >= 4) {
-      // Auto-submit once a plausible PIN length is reached, giving a 6-digit
-      // PIN room to keep typing without submitting the first 4 digits early —
+    if (next.length >= Math.min(4, pinLength)) {
+      // Auto-submit once the configured PIN length is reached; for a longer
+      // PIN, submit a beat after the minimum so there's room to keep typing —
       // each new digit cancels the previous pending submit.
-      autoSubmitTimer.current = setTimeout(() => submitPin(next), next.length === 6 ? 0 : 250);
+      autoSubmitTimer.current = setTimeout(() => submitPin(next), next.length === pinLength ? 0 : 250);
     }
   };
 
@@ -127,7 +129,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
         </div>
 
         <div className="flex items-center justify-center gap-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
+          {Array.from({ length: pinLength }, (_, i) => i).map((i) => (
             <div
               key={i}
               className={`w-3.5 h-3.5 rounded-full border-2 ${

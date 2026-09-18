@@ -62,7 +62,7 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
     setIsSaving(true);
     const salt = generateSalt();
     const pinHash = await hashPin(pin, salt);
-    saveLockConfig({ pinHash, salt, webauthnCredentialId: credentialId });
+    saveLockConfig({ pinHash, salt, pinLength: pin.length, webauthnCredentialId: credentialId });
     onComplete();
   };
 

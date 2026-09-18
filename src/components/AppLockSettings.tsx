@@ -90,7 +90,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
     try {
       const salt = generateSalt();
       const pinHash = await hashPin(newPin, salt);
-      const updated = { ...lockConfig, pinHash, salt };
+      const updated = { ...lockConfig, pinHash, salt, pinLength: newPin.length };
       saveLockConfig(updated);
       setLockConfig(updated);
       onLockConfigChanged();

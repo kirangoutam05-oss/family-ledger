@@ -14,6 +14,10 @@ const LOCK_STORAGE_KEY = 'family-ledger:lock';
 export interface LockConfig {
   pinHash: string;
   salt: string;
+  // How many digits the PIN is — only the hash is kept, so the unlock screen
+  // needs this separately to know how many dots to show. Configs saved before
+  // this field existed fall back to 6 (the old fixed dot count) wherever it's read.
+  pinLength?: number;
   webauthnCredentialId?: string;
 }
 
