@@ -36,6 +36,7 @@ import {
   Briefcase,
   Palette,
   PiggyBank,
+  Repeat,
 } from 'lucide-react';
 import { CategoryId } from '../types';
 export { CATEGORY_ICON_OPTIONS } from '../types';
@@ -122,6 +123,8 @@ export function getCategoryIcon(iconName: string, className = 'w-5 h-5') {
       return React.createElement(Palette, { className });
     case 'PiggyBank':
       return React.createElement(PiggyBank, { className });
+    case 'Repeat':
+      return React.createElement(Repeat, { className });
     case 'HelpCircle':
     default:
       return React.createElement(HelpCircle, { className });

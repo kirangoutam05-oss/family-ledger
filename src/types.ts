@@ -35,6 +35,7 @@ export const CATEGORY_ICON_OPTIONS = [
   'Briefcase',
   'Palette',
   'PiggyBank',
+  'Repeat',
 ] as const;
 
 export interface Category {
@@ -182,6 +183,9 @@ export interface LedgerState {
   // ISO date (YYYY-MM-DD) the daily-reminder cron last ran for this household —
   // keeps a second same-day ping from re-sending everything.
   lastReminderRun?: string;
+  // Which window the "Amount vs Category" card sums over. Unset (older
+  // households) is treated as 'month' client-side.
+  categoryBreakdownPeriod?: 'month' | 'year' | 'all';
 }
 
 export interface DeviceIdentity {

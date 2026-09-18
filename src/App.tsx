@@ -308,6 +308,20 @@ export default function App() {
     if (data.ledger) setLedger(data.ledger);
   };
 
+  const handleUpdateCategoryPeriod = async (period: 'month' | 'year' | 'all') => {
+    const res = await apiFetch('/api/ledger/settings/category-period', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ period }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to update this setting');
+    }
+    const data = await res.json();
+    if (data.ledger) setLedger(data.ledger);
+  };
+
   const handleWhoAreYou = async (role: SpenderId) => {
     saveLocalIdentity(role);
     setIdentity({ role, setAt: new Date().toISOString() });
@@ -454,6 +468,34 @@ export default function App() {
       console.error('Failed to update transaction:', err);
       alert(err.message || 'Permission denied: You can only edit your own expenses.');
       throw err;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Apply the same category/payment-mode change to many transactions at once —
+  // same ownership enforcement as a single update, just batched server-side.
+  const handleBulkUpdateTransactions = async (
+    transactionIds: string[],
+    updates: { category?: CategoryId; paymentMode?: Transaction['paymentMode'] }
+  ) => {
+    setIsSyncing(true);
+    try {
+      const res = await apiFetch('/api/ledger/transaction/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactionIds,
+          updates,
+          authenticatedSpender: authenticatedUser,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update transactions');
+      }
+      if (data.ledger) setLedger(data.ledger);
+      return { updatedCount: data.updatedCount as number, skippedIds: data.skippedIds as string[] };
     } finally {
       setIsSyncing(false);
     }
@@ -1028,6 +1070,7 @@ export default function App() {
                   onSelectSpender={handleSelectSpender}
                   onResolveGreyArea={handleOpenGreyAreaDirect}
                   onEditTransaction={(tx) => setEditingTransaction(tx)}
+                  onBulkUpdateTransactions={handleBulkUpdateTransactions}
                 />
               )}
 
@@ -1087,6 +1130,7 @@ export default function App() {
                   ledger={ledger}
                   authenticatedUser={authenticatedUser}
                   onUpdateHousehold={handleUpdateHousehold}
+                  onUpdateCategoryPeriod={handleUpdateCategoryPeriod}
                   onSwitchUser={handleSwitchUser}
                   onOpenSyncModal={() => setShowSyncModal(true)}
                   onOpenLiveMobile={() => setShowLiveMobileModal(true)}

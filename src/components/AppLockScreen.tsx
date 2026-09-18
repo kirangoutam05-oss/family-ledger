@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Lock, ScanFace, Delete, KeyRound, Users } from 'lucide-react';
+import { ScanFace, Delete, KeyRound, Users } from 'lucide-react';
 import { LockConfig, hashPin, isWebAuthnAvailable, verifyBiometric } from '../utils/appLock';
 
 interface AppLockScreenProps {
@@ -115,8 +115,13 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-16 h-16 rounded-[22px] bg-white dark:bg-neutral-900 shadow-lg border border-black/[0.08] dark:border-white/[0.12] flex items-center justify-center text-[#007AFF]">
-            <Lock className="w-7 h-7" />
+          <div className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
+            <img
+              src="/app-logo.jpg?v=4"
+              alt="Family Ledger Logo"
+              className="w-full h-full object-cover object-center block"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <h1 className="text-xl font-bold tracking-tight">Family Ledger is locked</h1>
         </div>

@@ -3,6 +3,7 @@ import { UserCog, Save, CheckCircle2, LogOut, Smartphone, UserPlus } from 'lucid
 import { LedgerState, SpenderId } from '../types';
 import { AppLockSettings } from './AppLockSettings';
 import { NotificationSettings } from './NotificationSettings';
+import { CategoryPeriodSettings } from './CategoryPeriodSettings';
 
 interface AccountSettingsProps {
   ledger: LedgerState;
@@ -13,6 +14,7 @@ interface AccountSettingsProps {
     wifeName: string;
     currency: string;
   }) => Promise<void>;
+  onUpdateCategoryPeriod: (period: 'month' | 'year' | 'all') => Promise<void>;
   onSwitchUser: () => void;
   onOpenSyncModal: () => void;
   onOpenLiveMobile: () => void;
@@ -31,6 +33,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   ledger,
   authenticatedUser,
   onUpdateHousehold,
+  onUpdateCategoryPeriod,
   onSwitchUser,
   onOpenSyncModal,
   onOpenLiveMobile,
@@ -210,6 +213,12 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
 
       {/* Per-device push notification opt-in */}
       <NotificationSettings authenticatedUser={authenticatedUser} />
+
+      {/* Shared "Amount vs Category" time window */}
+      <CategoryPeriodSettings
+        period={ledger.categoryBreakdownPeriod ?? 'month'}
+        onChange={onUpdateCategoryPeriod}
+      />
 
       {/* Invite partner shortcut */}
       <button

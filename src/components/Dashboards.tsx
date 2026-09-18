@@ -4,10 +4,12 @@ import {
   Transaction,
   SpenderId,
   LedgerState,
+  CategoryId,
 } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel, localDateKey } from '../utils/helpers';
 import { detectRecurringGroups } from '../utils/recurringDetector';
 import { ExportSection } from './ExportSection';
+import { BulkEditSheet } from './BulkEditSheet';
 import { TransactionFilterSheet, TransactionFilters, EMPTY_FILTERS, countActiveFilters } from './TransactionFilterSheet';
 import {
   TrendingDown,
@@ -20,6 +22,11 @@ import {
   BarChart3,
   SlidersHorizontal,
   Repeat,
+  CheckSquare,
+  Square,
+  X,
+  Tag,
+  CreditCard,
 } from 'lucide-react';
 
 // The household's billing cycle runs the 21st of one month through the 20th
@@ -43,6 +50,10 @@ interface DashboardsProps {
   onSelectSpender: (spender: SpenderId | 'shared') => void;
   onResolveGreyArea: (transactionId: string) => void;
   onEditTransaction: (transaction: Transaction) => void;
+  onBulkUpdateTransactions: (
+    transactionIds: string[],
+    updates: { category?: CategoryId; paymentMode?: Transaction['paymentMode'] }
+  ) => Promise<{ updatedCount: number; skippedIds: string[] }>;
 }
 
 export const Dashboards: React.FC<DashboardsProps> = ({
@@ -51,6 +62,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   authenticatedUser,
   onResolveGreyArea,
   onEditTransaction,
+  onBulkUpdateTransactions,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trendGranularity, setTrendGranularity] = useState<'day' | 'week' | 'month'>('day');
@@ -58,6 +70,9 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const RECENT_ACTIVITY_PAGE_SIZE = 15;
   const [visibleCount, setVisibleCount] = useState(RECENT_ACTIVITY_PAGE_SIZE);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkEditField, setBulkEditField] = useState<'category' | 'paymentMode' | null>(null);
 
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
@@ -129,13 +144,25 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const householdTotal = husbandSpent + wifeSpent;
   const husbandSharePercent = householdTotal > 0 ? Math.round((husbandSpent / householdTotal) * 100) : 50;
 
+  // "Amount vs Category" window — a shared household setting (both partners
+  // see the same view), defaulting to the current billing cycle for anyone
+  // who hasn't set it yet.
+  const categoryBreakdownPeriod = ledger.categoryBreakdownPeriod ?? 'month';
+  const currentYear = new Date().getFullYear();
+  const categoryPeriodTransactions = relevantTransactions.filter((t) => {
+    if (categoryBreakdownPeriod === 'all') return true;
+    const d = new Date(t.date);
+    if (categoryBreakdownPeriod === 'year') return d.getFullYear() === currentYear;
+    return d >= currentCycleStart && d < currentCycleEnd;
+  });
+
   // Category breakdown
   const categoryTotals: Record<string, { total: number; count: number }> = {};
   categories.forEach((cat) => {
     categoryTotals[cat.id] = { total: 0, count: 0 };
   });
 
-  relevantTransactions.forEach((tx) => {
+  categoryPeriodTransactions.forEach((tx) => {
     if (tx.type === 'debit') {
       if (!categoryTotals[tx.category]) {
         categoryTotals[tx.category] = { total: 0, count: 0 };
@@ -197,12 +224,14 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 
   // Per-person category totals — the Overview chart overlays both partners'
   // bars per category; an individual view only ever needed its own total,
-  // already isolated above via relevantTransactions/categoryTotals.
+  // already isolated above via relevantTransactions/categoryTotals. Reuses
+  // categoryPeriodTransactions since, when isShared, relevantTransactions
+  // (and therefore categoryPeriodTransactions) already covers both spenders.
   const categoryPersonTotals: Record<string, { husband: number; wife: number }> = {};
   categories.forEach((cat) => {
     categoryPersonTotals[cat.id] = { husband: 0, wife: 0 };
   });
-  transactions.forEach((tx) => {
+  categoryPeriodTransactions.forEach((tx) => {
     if (tx.type === 'debit') {
       if (!categoryPersonTotals[tx.category]) categoryPersonTotals[tx.category] = { husband: 0, wife: 0 };
       categoryPersonTotals[tx.category][tx.spender] += tx.amount;
@@ -351,7 +380,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   }, [trendGranularity, trendBuckets.length]);
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isSelectMode && selectedIds.size > 0 ? 'pb-20' : ''}`}>
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Outflow Card — Today alongside the current billing cycle, both
@@ -432,10 +461,20 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           person's bars. */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Amount vs Category</span>
-          </h2>
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Amount vs Category</span>
+            </h2>
+            <p className="text-[10px] text-neutral-400 mt-0.5">
+              {categoryBreakdownPeriod === 'month'
+                ? `This month (${currentCycleLabel})`
+                : categoryBreakdownPeriod === 'year'
+                ? `This year (${currentYear})`
+                : 'All time'}
+              {' · change in Account settings'}
+            </p>
+          </div>
           {isShared && (
             <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-neutral-400">
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{husbandName}</span>
@@ -693,6 +732,24 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                 </span>
               )}
             </button>
+
+            {/* Select mode toggle — bulk-editing only ever applies to the
+                signed-in user's own transactions, matching the single-edit
+                ownership rule below. */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSelectMode((v) => !v);
+                setSelectedIds(new Set());
+              }}
+              className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                isSelectMode
+                  ? 'bg-[#007AFF] text-white'
+                  : 'bg-black/[0.04] dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-300'
+              }`}
+            >
+              {isSelectMode ? 'Cancel' : 'Select'}
+            </button>
           </div>
         </div>
 
@@ -723,26 +780,57 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               const isGrey = tx.status === 'grey_area';
               const isMine = tx.spender === authenticatedUser;
               const ownerName = tx.spender === 'husband' ? husbandName : wifeName;
+              const isSelected = selectedIds.has(tx.id);
+              const isSelectable = isSelectMode && isMine;
+
+              const handleRowClick = () => {
+                if (isSelectMode) {
+                  if (!isMine) return;
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(tx.id)) next.delete(tx.id);
+                    else next.add(tx.id);
+                    return next;
+                  });
+                  return;
+                }
+                onEditTransaction(tx);
+              };
 
               return (
                 <div
                   key={tx.id}
-                  onClick={() => onEditTransaction(tx)}
-                  className={`animate-fade-slide-up p-4 flex items-center justify-between gap-3 transition-colors cursor-pointer group ${
-                    isGrey
+                  onClick={handleRowClick}
+                  className={`animate-fade-slide-up p-4 flex items-center justify-between gap-3 transition-colors group ${
+                    isSelectMode && !isMine ? 'cursor-default opacity-50' : 'cursor-pointer'
+                  } ${
+                    isSelected
+                      ? 'bg-blue-50/60 dark:bg-blue-950/20'
+                      : isGrey
                       ? 'bg-amber-50/40 dark:bg-amber-950/15'
                       : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.02]'
                   }`}
                   style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
-                    {/* Category icon avatar */}
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-                      style={{ backgroundColor: isGrey ? '#FF9500' : cat.color }}
-                    >
-                      {getCategoryIcon(cat.icon, 'w-5 h-5')}
-                    </div>
+                    {/* Category icon avatar — swaps to a checkbox in select
+                        mode for the user's own transactions only. */}
+                    {isSelectable ? (
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-[#007AFF] text-white' : 'bg-black/[0.04] dark:bg-white/[0.08] text-neutral-400'
+                        }`}
+                      >
+                        {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                      </div>
+                    ) : (
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
+                        style={{ backgroundColor: isGrey ? '#FF9500' : cat.color }}
+                      >
+                        {getCategoryIcon(cat.icon, 'w-5 h-5')}
+                      </div>
+                    )}
 
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -832,7 +920,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                       </div>
                     </div>
 
-                    <div className="hidden sm:flex items-center">
+                    <div className={`items-center ${isSelectMode ? 'hidden' : 'hidden sm:flex'}`}>
                       {isMine ? (
                         <button
                           type="button"
@@ -882,6 +970,63 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         husbandName={husbandName}
         wifeName={wifeName}
       />
+
+      {/* Floating bulk-action bar — only ever acts on the selected ids, which
+          only ever contain the signed-in user's own transactions. */}
+      {isSelectMode && selectedIds.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="fixed left-1/2 -translate-x-1/2 bottom-24 z-40 w-[calc(100%-1.5rem)] max-w-md px-4 py-3 rounded-2xl bg-neutral-900 dark:bg-neutral-800 text-white shadow-xl flex items-center justify-between gap-3"
+        >
+          <span className="text-xs font-semibold shrink-0">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBulkEditField('category')}
+              className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-medium flex items-center gap-1 transition-colors"
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Category</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkEditField('paymentMode')}
+              className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-medium flex items-center gap-1 transition-colors"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Payment</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSelectMode(false);
+                setSelectedIds(new Set());
+              }}
+              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {bulkEditField && (
+        <BulkEditSheet
+          field={bulkEditField}
+          count={selectedIds.size}
+          categories={categories}
+          onClose={() => setBulkEditField(null)}
+          onApply={async (value) => {
+            const updates =
+              bulkEditField === 'category' ? { category: value as CategoryId } : { paymentMode: value as Transaction['paymentMode'] };
+            await onBulkUpdateTransactions(Array.from(selectedIds), updates);
+            setSelectedIds(new Set());
+            setIsSelectMode(false);
+          }}
+        />
+      )}
     </div>
   );
 };

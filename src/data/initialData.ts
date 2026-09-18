@@ -82,6 +82,16 @@ export const INITIAL_CATEGORIES: Category[] = [
     budgetMonthly: 40000,
   },
   {
+    id: 'subscription',
+    name: 'Subscriptions',
+    color: '#5AC8FA', // Apple System Light Blue
+    badgeBg: 'bg-sky-50 dark:bg-sky-950/30',
+    badgeText: 'text-sky-700 dark:text-sky-400',
+    badgeBorder: 'border-sky-200 dark:border-sky-800/40',
+    icon: 'Repeat',
+    budgetMonthly: 3000,
+  },
+  {
     id: 'grey_area',
     name: 'Grey Area / Needs Context',
     color: '#8E8E93', // Apple System Gray

@@ -559,8 +559,11 @@ function parseSmsHeuristic(
   } else if (/cult|pharmacy|apollo|1mg|doctor|clinic|hospital|wellness/i.test(lower)) {
     title = 'Health & Pharmacy';
     category = 'health';
-  } else if (/netflix|spotify|apple\.com|prime|hotstar|cinema|pvr|inox/i.test(lower)) {
-    title = 'Entertainment & Subscription';
+  } else if (/google\s*play|apple\s*media|apple\.com|itunes|app\s*store|subscription|netflix|spotify|prime\s*(video)?|linkedin|icloud/i.test(lower)) {
+    title = 'Subscription';
+    category = 'subscription';
+  } else if (/hotstar|cinema|pvr|inox/i.test(lower)) {
+    title = 'Entertainment';
     category = 'entertainment';
   } else if (/groww|zerodha|sip|mutual fund|uti|hdfc mf|etf/i.test(lower)) {
     title = 'Investment SIP';
@@ -1245,6 +1248,59 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), async (req, res
   }
 });
 
+// Apply the same category/payment mode/notes change to many transactions at
+// once (e.g. recategorizing a batch of subscription charges). Same ownership
+// rule as the single-transaction update — an id that isn't the caller's own
+// is silently skipped (reported back, not treated as an error) rather than
+// failing the whole batch.
+app.post('/api/ledger/transaction/bulk-update', rateLimit(20, 60000), async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { authenticatedSpender, transactionIds, updates } = req.body;
+
+    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
+    }
+    if (transactionIds.length > 200) {
+      return res.status(400).json({ error: 'Cannot bulk-update more than 200 transactions at once' });
+    }
+    if (!updates || typeof updates !== 'object') {
+      return res.status(400).json({ error: 'updates is required' });
+    }
+
+    const validCategoryIds = getValidCategoryIds(state);
+    const hasCategory = updates.category && validCategoryIds.includes(updates.category);
+    const hasPaymentMode =
+      updates.paymentMode && ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(updates.paymentMode);
+    const hasNotes = updates.notes !== undefined;
+
+    if (!hasCategory && !hasPaymentMode && !hasNotes) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const skippedIds: string[] = [];
+    let updatedCount = 0;
+
+    for (const id of transactionIds) {
+      const tx = state.transactions.find((t) => t.id === id);
+      if (!tx || (authenticatedSpender && tx.spender !== authenticatedSpender)) {
+        skippedIds.push(id);
+        continue;
+      }
+      if (hasCategory) tx.category = updates.category;
+      if (hasPaymentMode) tx.paymentMode = updates.paymentMode;
+      if (hasNotes) tx.notes = sanitizeString(updates.notes, 250) || undefined;
+      updatedCount += 1;
+    }
+
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, updatedCount, skippedIds, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while bulk-updating transactions.' });
+  }
+});
+
 // Delete a transaction with strict ownership check
 app.post('/api/ledger/transaction/delete', rateLimit(60, 60000), async (req, res) => {
   try {
@@ -1392,6 +1448,25 @@ app.post('/api/household/update', async (req, res) => {
     res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while updating the household.' });
+  }
+});
+
+// A single shared toggle for the "Amount vs Category" card's time window —
+// its own endpoint rather than folded into /api/household/update, since that
+// route requires the full household-identity form together and this is an
+// unrelated one-field preference.
+app.post('/api/ledger/settings/category-period', async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { period } = req.body;
+    if (period !== 'month' && period !== 'year' && period !== 'all') {
+      return res.status(400).json({ error: 'period must be "month", "year", or "all"' });
+    }
+    state.categoryBreakdownPeriod = period;
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while updating this setting.' });
   }
 });
 
