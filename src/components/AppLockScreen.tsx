@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScanFace, Delete, KeyRound, Users } from 'lucide-react';
-import { LockConfig, hashPin, isWebAuthnAvailable, verifyBiometric } from '../utils/appLock';
+import { LockConfig, hashPin, isWebAuthnAvailable, verifyBiometric, saveLockConfig } from '../utils/appLock';
 
 interface AppLockScreenProps {
   lockConfig: LockConfig;
@@ -54,6 +54,14 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
   const submitPin = async (candidate: string) => {
     const candidateHash = await hashPin(candidate, lockConfig.salt);
     if (candidateHash === lockConfig.pinHash) {
+      // A config saved before pinLength existed has no way to know its real
+      // length from the hash alone — but the moment someone unlocks with it,
+      // the digit count they just typed *is* the answer. Self-heal here so
+      // the dot count is never wrong again after this one unlock, instead of
+      // requiring a manual "change your PIN" round-trip to fix a display bug.
+      if (lockConfig.pinLength !== candidate.length) {
+        saveLockConfig({ ...lockConfig, pinLength: candidate.length });
+      }
       onUnlock();
     } else {
       setError('Incorrect PIN');
