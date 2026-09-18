@@ -23,10 +23,12 @@ function monthKey(date: string): string {
 }
 
 // Groups debit transactions by normalized title and flags a group as recurring
-// once it spans at least two different calendar months and *some* pair of its
-// occurrences is spaced roughly a month apart (20-40 days) — deliberately not
-// requiring every consecutive pair to line up, since one skipped/adjusted/
-// double-billed month shouldn't erase an otherwise-monthly bill's flag.
+// either because someone explicitly marked an occurrence as recurring (the
+// stronger, immediate signal — even a single just-logged bill counts), or
+// because it spans at least two different calendar months and *some* pair of
+// its occurrences is spaced roughly a month apart (20-40 days) — deliberately
+// not requiring every consecutive pair to line up, since one skipped/
+// adjusted/double-billed month shouldn't erase an otherwise-monthly bill's flag.
 export function detectRecurringGroups(transactions: Transaction[]): RecurringGroup[] {
   const byTitle = new Map<string, Transaction[]>();
   for (const tx of transactions) {
@@ -39,22 +41,26 @@ export function detectRecurringGroups(transactions: Transaction[]): RecurringGro
 
   const groups: RecurringGroup[] = [];
   for (const occurrences of byTitle.values()) {
-    if (occurrences.length < 2) continue;
-
     const sorted = [...occurrences].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
-    const distinctMonths = new Set(sorted.map((t) => monthKey(t.date)));
-    if (distinctMonths.size < 2) continue;
+    const userConfirmed = sorted.some((t) => t.isRecurring);
 
-    const hasMonthlyPair = sorted.some((a, i) =>
-      sorted.slice(i + 1).some((b) => {
-        const gap = daysBetween(a.date, b.date);
-        return gap >= MIN_GAP_DAYS && gap <= MAX_GAP_DAYS;
-      })
-    );
-    if (!hasMonthlyPair) continue;
+    if (!userConfirmed) {
+      if (sorted.length < 2) continue;
+
+      const distinctMonths = new Set(sorted.map((t) => monthKey(t.date)));
+      if (distinctMonths.size < 2) continue;
+
+      const hasMonthlyPair = sorted.some((a, i) =>
+        sorted.slice(i + 1).some((b) => {
+          const gap = daysBetween(a.date, b.date);
+          return gap >= MIN_GAP_DAYS && gap <= MAX_GAP_DAYS;
+        })
+      );
+      if (!hasMonthlyPair) continue;
+    }
 
     const last = sorted[sorted.length - 1];
     const avgAmount =

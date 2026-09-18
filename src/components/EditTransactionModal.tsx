@@ -66,9 +66,10 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [title, setTitle] = useState(transaction.title);
   const [amount, setAmount] = useState<number | ''>(transaction.amount);
   const [category, setCategory] = useState<CategoryId>(transaction.category);
-  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater'>(
+  const [paymentMode, setPaymentMode] = useState<Transaction['paymentMode']>(
     transaction.paymentMode
   );
+  const [isRecurring, setIsRecurring] = useState(transaction.isRecurring || false);
   const [notes, setNotes] = useState(transaction.notes || '');
   const [dateStr, setDateStr] = useState(() => toDateTimeStrs(transaction.date).dateStr);
   const [timeStr, setTimeStr] = useState(() => toDateTimeStrs(transaction.date).timeStr);
@@ -84,6 +85,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setAmount(transaction.amount);
       setCategory(transaction.category);
       setPaymentMode(transaction.paymentMode);
+      setIsRecurring(transaction.isRecurring || false);
       setNotes(transaction.notes || '');
       const { dateStr: d, timeStr: t } = toDateTimeStrs(transaction.date);
       setDateStr(d);
@@ -117,6 +119,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         amount: Number(amount),
         category,
         paymentMode,
+        isRecurring,
         notes: notes.trim() || undefined,
         ...(isoDate ? { date: isoDate } : {}),
       });
@@ -325,7 +328,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 Payment Mode
               </label>
               <div className="grid grid-cols-2 gap-2">
-                {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'] as const).map((mode) => (
+                {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'] as const).map((mode) => (
                   <button
                     key={mode}
                     type="button"
@@ -341,6 +344,24 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Recurring */}
+            <label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-black/[0.06] dark:border-white/[0.06] cursor-pointer">
+              <div>
+                <div className="text-xs font-semibold text-neutral-900 dark:text-white">
+                  This repeats every month
+                </div>
+                <div className="text-[10.5px] text-neutral-400 mt-0.5">
+                  We'll flag it as recurring and remind you before it's due again
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+                className="w-4 h-4 accent-[#007AFF] shrink-0"
+              />
+            </label>
 
             {/* Notes */}
             <div>

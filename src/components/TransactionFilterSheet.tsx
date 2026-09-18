@@ -36,7 +36,7 @@ export function countActiveFilters(f: TransactionFilters): number {
   return n;
 }
 
-const PAYMENT_MODES = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'] as const;
+const PAYMENT_MODES = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'] as const;
 
 const SORT_OPTIONS: { id: SortOption; label: string }[] = [
   { id: 'date_desc', label: 'Newest first' },

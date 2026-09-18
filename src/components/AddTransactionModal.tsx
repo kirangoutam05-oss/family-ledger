@@ -39,7 +39,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<CategoryId>('groceries');
-  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater'>('UPI');
+  const [paymentMode, setPaymentMode] = useState<Transaction['paymentMode']>('UPI');
+  const [isRecurring, setIsRecurring] = useState(false);
   const [notes, setNotes] = useState('');
   const [dateStr, setDateStr] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
   const [timeStr, setTimeStr] = useState(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
@@ -81,6 +82,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           bankName: paymentMode === 'UPI' ? 'GPay UPI' : 'Card',
           status: 'verified',
           notes: notes.trim(),
+          isRecurring: isRecurring || undefined,
         };
         await onAddTransaction(newTx);
       }
@@ -290,7 +292,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               Payment Mode
             </label>
             <div className="grid grid-cols-2 gap-1.5">
-              {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'] as const).map((mode) => (
+              {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -306,6 +308,25 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               ))}
             </div>
           </div>
+
+          {!paidForOther && (
+            <label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 cursor-pointer">
+              <div>
+                <div className="text-xs font-semibold text-neutral-900 dark:text-white">
+                  This repeats every month
+                </div>
+                <div className="text-[10.5px] text-neutral-400 mt-0.5">
+                  We'll flag it as recurring and remind you before it's due again
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+                className="w-4 h-4 accent-[#007AFF] shrink-0"
+              />
+            </label>
+          )}
 
           <button
             type="submit"

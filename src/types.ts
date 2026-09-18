@@ -49,6 +49,8 @@ export interface Category {
   budgetMonthly: number;
 }
 
+export type PaymentMode = 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'Pluxee';
+
 export interface Transaction {
   id: string;
   title: string;
@@ -57,7 +59,7 @@ export interface Transaction {
   date: string; // ISO string or YYYY-MM-DD HH:mm
   spender: SpenderId;
   category: CategoryId;
-  paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater';
+  paymentMode: PaymentMode;
   upiRef?: string;
   bankName?: string;
   rawSms?: string;
@@ -69,6 +71,10 @@ export interface Transaction {
     resolvedAt?: string;
   };
   notes?: string;
+  // Set by the person logging it, not inferred — "yes, this repeats" is a
+  // stronger, immediate signal than waiting for the same title to reappear
+  // for two months before the recurring detector notices on its own.
+  isRecurring?: boolean;
 }
 
 // Created when one spouse pays for something that's really the other's
@@ -81,7 +87,7 @@ export interface PendingAcknowledgement {
   amount: number;
   date: string;
   category: CategoryId;
-  paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater';
+  paymentMode: PaymentMode;
   notes?: string;
   bankName?: string;
   upiRef?: string;

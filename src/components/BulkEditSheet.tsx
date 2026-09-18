@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Layers, ShieldAlert } from 'lucide-react';
-import { Category, CategoryId } from '../types';
+import { Category, CategoryId, PaymentMode } from '../types';
 import { getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 
 type BulkField = 'category' | 'paymentMode';
-type PaymentMode = 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater';
 
 interface BulkEditSheetProps {
   field: BulkField;
@@ -101,7 +100,7 @@ export const BulkEditSheet: React.FC<BulkEditSheetProps> = ({ field, count, cate
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'] as const).map((mode) => (
+            {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"

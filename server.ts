@@ -498,11 +498,13 @@ function parseSmsHeuristic(
   const type: 'debit' | 'credit' = hasDebitKeyword ? 'debit' : hasCreditKeyword ? 'credit' : 'debit';
 
   // Detect payment mode
-  let paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' = 'UPI';
+  let paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'Pluxee' = 'UPI';
   if (/ATM|withdrawn|cash/i.test(cleanSms)) {
     paymentMode = 'Cash';
   } else if (/amazon\s*pay\s*later/i.test(cleanSms)) {
     paymentMode = 'AmazonPayLater';
+  } else if (/pluxee|sodexo/i.test(cleanSms)) {
+    paymentMode = 'Pluxee';
   } else if (/Card|ending|POS|spent at/i.test(cleanSms)) {
     paymentMode = 'Card';
   } else if (/NetBanking|NEFT|RTGS|NACH|mandate/i.test(cleanSms)) {
@@ -772,8 +774,8 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
 
     const spender: SpenderId = rawTx.spender === 'wife' ? 'wife' : 'husband';
     const type: 'debit' | 'credit' = rawTx.type === 'credit' ? 'credit' : 'debit';
-    const paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' =
-      ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(rawTx.paymentMode as any)
+    const paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'Pluxee' =
+      ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(rawTx.paymentMode as any)
         ? (rawTx.paymentMode as any)
         : 'UPI';
 
@@ -803,6 +805,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
         ? undefined
         : sanitizeString(rawTx.contextQuestion, 200) || undefined,
       notes: sanitizeString(rawTx.notes, 250) || undefined,
+      isRecurring: rawTx.isRecurring === true || undefined,
     };
 
     state.transactions.unshift(tx);
@@ -944,7 +947,7 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), async (req, res) => {
     }
 
     const validCategory: CategoryId = getValidCategoryIds(state).includes(category) ? category : 'grey_area';
-    const validPaymentMode = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(paymentMode)
+    const validPaymentMode = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(paymentMode)
       ? paymentMode
       : 'UPI';
 
@@ -1245,12 +1248,15 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), async (req, res
         }
       }
       if (updates.paymentMode) {
-        if (['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(updates.paymentMode)) {
+        if (['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(updates.paymentMode)) {
           tx.paymentMode = updates.paymentMode;
         }
       }
       if (updates.notes !== undefined) {
         tx.notes = sanitizeString(updates.notes, 250) || undefined;
+      }
+      if (updates.isRecurring !== undefined) {
+        tx.isRecurring = updates.isRecurring === true || undefined;
       }
       if (updates.date && typeof updates.date === 'string' && !isNaN(Date.parse(updates.date))) {
         tx.date = updates.date;
@@ -1288,7 +1294,7 @@ app.post('/api/ledger/transaction/bulk-update', rateLimit(20, 60000), async (req
     const validCategoryIds = getValidCategoryIds(state);
     const hasCategory = updates.category && validCategoryIds.includes(updates.category);
     const hasPaymentMode =
-      updates.paymentMode && ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(updates.paymentMode);
+      updates.paymentMode && ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(updates.paymentMode);
     const hasNotes = updates.notes !== undefined;
 
     if (!hasCategory && !hasPaymentMode && !hasNotes) {
@@ -1745,7 +1751,7 @@ Determine:
    the type is "debit" even if a payee's name also appears next to the
    word "credited".
 4. category: one of the above
-5. paymentMode: "UPI" | "Card" | "NetBanking" | "Cash" | "AmazonPayLater"
+5. paymentMode: "UPI" | "Card" | "NetBanking" | "Cash" | "AmazonPayLater" | "Pluxee"
 6. bankName: detected bank (e.g. HDFC Bank, ICICI Bank, SBI, etc.)
 7. upiRef: UPI reference or transaction ID if present
 8. isGreyArea: boolean (true if payee is an individual or ATM or ambiguous transfer)
@@ -1796,7 +1802,7 @@ Determine:
         amount: safeAmount,
         type: parsedJson.type === 'credit' ? 'credit' : 'debit',
         category: validCat,
-        paymentMode: ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater'].includes(parsedJson.paymentMode)
+        paymentMode: ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(parsedJson.paymentMode)
           ? parsedJson.paymentMode
           : 'UPI',
         bankName: sanitizeString(parsedJson.bankName, 50) || 'UPI Bank',
