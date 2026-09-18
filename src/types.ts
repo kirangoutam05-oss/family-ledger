@@ -122,13 +122,37 @@ export interface SavingsGoal {
 
 export interface BudgetAlert {
   id: string;
-  type: 'warning' | 'critical' | 'grey_area' | 'goal' | 'sync' | 'ack_needed' | 'lock_reset_requested';
+  type:
+    | 'warning'
+    | 'critical'
+    | 'grey_area'
+    | 'goal'
+    | 'sync'
+    | 'ack_needed'
+    | 'lock_reset_requested'
+    | 'expense_added'
+    | 'recurring_due'
+    | 'daily_reminder';
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
   actionType?: 'resolve_grey' | 'view_budget' | 'view_goal' | 'review_ack' | 'approve_lock_reset';
   targetId?: string;
+  // When set, this alert is only shown to that spender's own device (e.g. "your
+  // partner added an expense" shouldn't also show up for the partner who added
+  // it). Left unset for every existing alert type, which stays visible to both.
+  forSpender?: SpenderId;
+}
+
+// The JSON shape returned by PushSubscription.toJSON() in the browser — stored
+// as-is so it can be handed straight to web-push's sendNotification on the server.
+export interface StoredPushSubscription {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
 }
 
 export interface DeviceInfo {
@@ -138,6 +162,7 @@ export interface DeviceInfo {
   deviceModel: string;
   lastActive: string;
   isOnline: boolean;
+  pushSubscription?: StoredPushSubscription;
 }
 
 export interface LedgerState {
@@ -154,6 +179,9 @@ export interface LedgerState {
   connectedDevices: DeviceInfo[];
   pendingAcknowledgements: PendingAcknowledgement[];
   lockResetRequests: LockResetRequest[];
+  // ISO date (YYYY-MM-DD) the daily-reminder cron last ran for this household —
+  // keeps a second same-day ping from re-sending everything.
+  lastReminderRun?: string;
 }
 
 export interface DeviceIdentity {

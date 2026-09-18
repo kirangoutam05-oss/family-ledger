@@ -5,9 +5,11 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
+import webpush from 'web-push';
 import { createServer as createViteServer } from 'vite';
 import { EMPTY_LEDGER_STATE } from './src/data/initialData';
 import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS, PendingAcknowledgement, LockResetRequest } from './src/types';
+import { detectRecurringGroups } from './src/utils/recurringDetector';
 
 dotenv.config();
 
@@ -198,6 +200,31 @@ async function loadHouseholdState(id: string): Promise<LedgerState | null> {
   return initial;
 }
 
+// Every household id currently persisted — used only by the daily-reminder
+// cron sweep, which has to visit every household rather than one resolved
+// from a request header.
+async function listHouseholdIds(): Promise<string[]> {
+  if (pool) {
+    try {
+      await ensureLedgerTable();
+      const result = await pool.query('SELECT id FROM ledger_state');
+      return result.rows.map((r) => r.id as string);
+    } catch (err) {
+      console.error('Could not list households from Postgres:', err);
+      return [];
+    }
+  }
+
+  const ids: string[] = [];
+  if (fs.existsSync(LEGACY_DATA_FILE)) ids.push(DEFAULT_HOUSEHOLD_ID);
+  if (fs.existsSync(HOUSEHOLDS_DIR)) {
+    for (const file of fs.readdirSync(HOUSEHOLDS_DIR)) {
+      if (file.endsWith('.json')) ids.push(file.slice(0, -'.json'.length));
+    }
+  }
+  return ids;
+}
+
 async function persistHouseholdState(id: string, state: LedgerState) {
   householdCache.set(id, state);
   try {
@@ -222,6 +249,78 @@ declare global {
       householdState?: LedgerState;
     }
   }
+}
+
+// Web Push is only wired up once real VAPID keys are configured — without them
+// every push send is a silent no-op rather than a crash, so the rest of the app
+// (including the in-app alert half of a notification) still works.
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+  );
+}
+
+function otherSpender(role: SpenderId): SpenderId {
+  return role === 'husband' ? 'wife' : 'husband';
+}
+
+// Sends a push to whichever device is registered for `role` in this household,
+// if any. Clears a subscription the push service reports as gone (410/404 —
+// e.g. the PWA was uninstalled) so we stop wasting sends on it.
+async function sendPushToRole(
+  state: LedgerState,
+  householdId: string,
+  role: SpenderId,
+  payload: { title: string; body: string; tag?: string }
+): Promise<void> {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+  const device = state.connectedDevices.find((d) => d.owner === role);
+  if (!device?.pushSubscription) return;
+
+  try {
+    await webpush.sendNotification(
+      device.pushSubscription as any,
+      JSON.stringify(payload)
+    );
+  } catch (err: any) {
+    if (err?.statusCode === 404 || err?.statusCode === 410) {
+      device.pushSubscription = undefined;
+      await persistHouseholdState(householdId, state);
+    } else {
+      console.error(`Push to ${role} failed:`, err?.message || err);
+    }
+  }
+}
+
+// Notifies the *other* spender the moment a real transaction is created —
+// both as an in-app alert (always) and a push (if they've subscribed).
+// Called right after a transaction is added, before the state is persisted,
+// so the alert lands in the same write.
+function notifyExpenseAdded(state: LedgerState, householdId: string, addedBy: SpenderId, tx: Transaction) {
+  const other = otherSpender(addedBy);
+  const spenderName = addedBy === 'husband' ? state.husbandName : state.wifeName;
+
+  state.alerts.unshift({
+    id: `alert-expense-${Date.now()}`,
+    type: 'expense_added',
+    title: 'New expense logged',
+    message: `${spenderName} added ₹${tx.amount.toLocaleString('en-IN')} for ${tx.title}.`,
+    timestamp: 'Just now',
+    read: false,
+    forSpender: other,
+  });
+
+  // Fire-and-forget — a slow/failed push should never block the transaction
+  // write it's reporting on.
+  sendPushToRole(state, householdId, other, {
+    title: 'New expense logged',
+    body: `${spenderName} added ₹${tx.amount.toLocaleString('en-IN')} for ${tx.title}.`,
+    tag: 'expense-added',
+  }).catch(() => {});
 }
 
 // Resolves which household a request is for (from the X-Household-Id header,
@@ -521,6 +620,88 @@ app.post('/api/household/create', rateLimit(10, 60000), async (req, res) => {
   }
 });
 
+// Fired by an external scheduler (Render's free plan sleeps, so an in-process
+// timer can't be trusted to run at a fixed time) once a day, guarded by a
+// shared secret rather than X-Household-Id since it sweeps every household:
+// - nudges whichever spouse hasn't logged an expense today
+// - flags any recurring bill (see recurringDetector) due in the next 3 days
+app.post('/api/cron/daily-reminder', async (req, res) => {
+  if (!process.env.CRON_SECRET || req.header('X-Cron-Secret') !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const householdIds = await listHouseholdIds();
+  const results: Record<string, string> = {};
+
+  for (const id of householdIds) {
+    try {
+      const state = await loadHouseholdState(id);
+      if (!state || state.lastReminderRun === today) {
+        results[id] = 'skipped';
+        continue;
+      }
+
+      const rolesMissingToday = (['husband', 'wife'] as SpenderId[]).filter(
+        (role) =>
+          !state.transactions.some(
+            (t) => t.spender === role && t.type === 'debit' && t.date.slice(0, 10) === today
+          )
+      );
+
+      for (const role of rolesMissingToday) {
+        state.alerts.unshift({
+          id: `alert-reminder-${role}-${Date.now()}`,
+          type: 'daily_reminder',
+          title: "Don't forget today's expenses",
+          message: "You haven't logged any expenses today — add them before you forget.",
+          timestamp: 'Just now',
+          read: false,
+          forSpender: role,
+        });
+        await sendPushToRole(state, id, role, {
+          title: 'Family Ledger',
+          body: "Don't forget to log today's expenses.",
+          tag: 'daily-reminder',
+        });
+      }
+
+      const dueSoon = detectRecurringGroups(state.transactions).filter((g) => {
+        const daysUntil = (new Date(g.nextExpectedDate).getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+        return daysUntil >= 0 && daysUntil <= 3;
+      });
+
+      for (const group of dueSoon) {
+        for (const role of ['husband', 'wife'] as SpenderId[]) {
+          state.alerts.unshift({
+            id: `alert-recurring-${role}-${group.title}-${Date.now()}`,
+            type: 'recurring_due',
+            title: 'Recurring expense due soon',
+            message: `${group.title} (~₹${Math.round(group.avgAmount).toLocaleString('en-IN')}) usually recurs around now.`,
+            timestamp: 'Just now',
+            read: false,
+            forSpender: role,
+          });
+          await sendPushToRole(state, id, role, {
+            title: 'Recurring expense due soon',
+            body: `${group.title} (~₹${Math.round(group.avgAmount).toLocaleString('en-IN')}) usually recurs around now.`,
+            tag: `recurring-${group.title}`,
+          });
+        }
+      }
+
+      state.lastReminderRun = today;
+      await persistHouseholdState(id, state);
+      results[id] = 'sent';
+    } catch (err) {
+      console.error(`Daily reminder failed for household ${id}:`, err);
+      results[id] = 'error';
+    }
+  }
+
+  res.json({ success: true, results });
+});
+
 // Every route below operates on a specific household, resolved from the
 // X-Household-Id header (defaulting to the legacy pre-multi-tenancy household).
 app.use('/api/ledger', resolveHousehold);
@@ -608,6 +789,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
 
     state.transactions.unshift(tx);
     state.lastSyncTime = new Date().toISOString();
+    notifyExpenseAdded(state, req.householdId!, spender, tx);
 
     // Check if budget exceeded for this category
     const cat = state.categories.find((c) => c.id === tx.category);
@@ -833,6 +1015,7 @@ app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), async (req, res
     state.alerts = state.alerts.filter(
       (a) => !(a.actionType === 'review_ack' && a.targetId === id)
     );
+    notifyExpenseAdded(state, req.householdId!, pending.paidFor, tx);
 
     state.lastSyncTime = new Date().toISOString();
     await persistHouseholdState(req.householdId!, state);
@@ -1231,6 +1414,7 @@ app.post('/api/ledger/register-device', async (req, res) => {
       deviceModel: 'Web / PWA',
       lastActive: 'Just now',
       isOnline: true,
+      pushSubscription: existing?.pushSubscription,
     };
 
     if (existing) {
@@ -1246,6 +1430,60 @@ app.post('/api/ledger/register-device', async (req, res) => {
     res.json({ success: true, ledger: state });
   } catch {
     res.status(500).json({ error: 'An error occurred while registering this device.' });
+  }
+});
+
+// The client needs the VAPID public key to call pushManager.subscribe(); this
+// is intentionally public (not household-scoped) since it carries no secret.
+app.get('/api/push/vapid-key', (req, res) => {
+  if (!VAPID_PUBLIC_KEY) {
+    return res.status(503).json({ error: 'Push notifications are not configured on this server.' });
+  }
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/ledger/push/subscribe', rateLimit(30, 60000), async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { role, subscription } = req.body;
+    if (role !== 'husband' && role !== 'wife') {
+      return res.status(400).json({ error: 'role must be "husband" or "wife"' });
+    }
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      return res.status(400).json({ error: 'Invalid push subscription' });
+    }
+
+    const device = state.connectedDevices.find((d) => d.owner === role);
+    if (!device) {
+      return res.status(404).json({ error: 'Register this device before subscribing to push.' });
+    }
+    device.pushSubscription = {
+      endpoint: sanitizeString(subscription.endpoint, 500) || subscription.endpoint,
+      keys: {
+        p256dh: sanitizeString(subscription.keys.p256dh, 200) || subscription.keys.p256dh,
+        auth: sanitizeString(subscription.keys.auth, 100) || subscription.keys.auth,
+      },
+    };
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while subscribing to push notifications.' });
+  }
+});
+
+app.post('/api/ledger/push/unsubscribe', rateLimit(30, 60000), async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { role } = req.body;
+    if (role !== 'husband' && role !== 'wife') {
+      return res.status(400).json({ error: 'role must be "husband" or "wife"' });
+    }
+    const device = state.connectedDevices.find((d) => d.owner === role);
+    if (device) device.pushSubscription = undefined;
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while unsubscribing from push notifications.' });
   }
 });
 

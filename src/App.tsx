@@ -884,12 +884,18 @@ export default function App() {
 
   // Clear every dismissible alert at once — "review" alerts (paid-for-spouse,
   // lock-reset requests) are left alone since they point at a pending request
-  // that still needs a decision, not just a notice to acknowledge.
+  // that still needs a decision, not just a notice to acknowledge. Alerts
+  // targeted at the *other* spender (e.g. "your partner added an expense")
+  // are left alone too — clicking Clear All on this device shouldn't wipe out
+  // a notice the other spouse hasn't seen yet.
   const handleClearAllAlerts = () => {
     const updated = {
       ...ledger,
       alerts: ledger.alerts.filter(
-        (a) => a.actionType === 'review_ack' || a.actionType === 'approve_lock_reset'
+        (a) =>
+          a.actionType === 'review_ack' ||
+          a.actionType === 'approve_lock_reset' ||
+          (a.forSpender && a.forSpender !== authenticatedUser)
       ),
     };
     setLedger(updated);
@@ -1066,6 +1072,7 @@ export default function App() {
               {activeTab === 'budget_alerts' && (
                 <BudgetAlerts
                   ledger={ledger}
+                  authenticatedUser={authenticatedUser}
                   onDismissAlert={handleDismissAlert}
                   onClearAllAlerts={handleClearAllAlerts}
                   onUpdateBudget={handleUpdateBudget}

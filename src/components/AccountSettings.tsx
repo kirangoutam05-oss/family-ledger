@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { UserCog, Save, CheckCircle2, LogOut, Smartphone, UserPlus } from 'lucide-react';
 import { LedgerState, SpenderId } from '../types';
 import { AppLockSettings } from './AppLockSettings';
+import { NotificationSettings } from './NotificationSettings';
 
 interface AccountSettingsProps {
   ledger: LedgerState;
@@ -206,6 +207,9 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
 
       {/* Per-device app lock: change PIN, toggle Face ID / Touch ID */}
       <AppLockSettings personLabel={currentName} onLockConfigChanged={onLockConfigChanged} onEnableLock={onEnableLock} />
+
+      {/* Per-device push notification opt-in */}
+      <NotificationSettings authenticatedUser={authenticatedUser} />
 
       {/* Invite partner shortcut */}
       <button

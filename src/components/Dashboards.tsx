@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Transaction,
@@ -6,6 +6,7 @@ import {
   LedgerState,
 } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel, localDateKey } from '../utils/helpers';
+import { detectRecurringGroups } from '../utils/recurringDetector';
 import { ExportSection } from './ExportSection';
 import { TransactionFilterSheet, TransactionFilters, EMPTY_FILTERS, countActiveFilters } from './TransactionFilterSheet';
 import {
@@ -18,6 +19,7 @@ import {
   Edit3,
   BarChart3,
   SlidersHorizontal,
+  Repeat,
 } from 'lucide-react';
 
 // The household's billing cycle runs the 21st of one month through the 20th
@@ -142,6 +144,14 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       categoryTotals[tx.category].count += 1;
     }
   });
+
+  // Titles that look like a recurring bill/subscription (same title, roughly
+  // once a month, across 2+ months) — computed from the full history, not just
+  // whatever's currently filtered, so the badge doesn't flicker off as you filter.
+  const recurringTitles = useMemo(
+    () => new Set(detectRecurringGroups(transactions).map((g) => g.title)),
+    [transactions]
+  );
 
   // Filtered + sorted transactions for the list
   const displayTransactions = relevantTransactions
@@ -755,6 +765,16 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                           <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-semibold flex items-center gap-1 shrink-0">
                             <HelpCircle className="w-3 h-3" />
                             Context needed
+                          </span>
+                        )}
+
+                        {recurringTitles.has(tx.title) && (
+                          <span
+                            className="px-1.5 py-0.5 rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[10px] font-medium flex items-center gap-1 shrink-0"
+                            title="This expense recurs roughly monthly"
+                          >
+                            <Repeat className="w-2.5 h-2.5" />
+                            Recurring
                           </span>
                         )}
                       </div>

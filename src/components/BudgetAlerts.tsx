@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Category,
   LedgerState,
   CategoryId,
+  SpenderId,
 } from '../types';
 import { formatCurrency, getCategoryIcon } from '../utils/helpers';
 import {
@@ -16,10 +17,14 @@ import {
   Check,
   HandCoins,
   KeyRound,
+  Receipt,
+  Repeat,
+  BellRing,
 } from 'lucide-react';
 
 interface BudgetAlertsProps {
   ledger: LedgerState;
+  authenticatedUser: SpenderId;
   onDismissAlert: (alertId: string) => void;
   onClearAllAlerts: () => void;
   onUpdateBudget: (categoryId: CategoryId, newLimit: number) => void;
@@ -30,6 +35,7 @@ interface BudgetAlertsProps {
 
 export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
   ledger,
+  authenticatedUser,
   onDismissAlert,
   onClearAllAlerts,
   onUpdateBudget,
@@ -37,7 +43,14 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
   onReviewAck,
   onReviewLockReset,
 }) => {
-  const { alerts, categories, transactions, currency } = ledger;
+  const { categories, transactions, currency } = ledger;
+
+  // Some alerts (e.g. "your partner added an expense") are only meant for the
+  // one spouse they're about — everything else has no `forSpender` and stays
+  // visible to both, matching every alert that existed before this filter.
+  const alerts = ledger.alerts.filter(
+    (a) => !a.forSpender || a.forSpender === authenticatedUser
+  );
 
   const [editingCatId, setEditingCatId] = useState<CategoryId | null>(null);
   const [editLimit, setEditLimit] = useState<number>(0);
@@ -112,18 +125,26 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
           </div>
         ) : (
           <div className="space-y-2">
+            <AnimatePresence initial={false}>
             {alerts.map((alert, index) => {
               const isCritical = alert.type === 'critical';
               const isWarning = alert.type === 'warning';
               const isGrey = alert.type === 'grey_area';
               const isAck = alert.type === 'ack_needed';
               const isLockReset = alert.type === 'lock_reset_requested';
+              const isExpenseAdded = alert.type === 'expense_added';
+              const isRecurring = alert.type === 'recurring_due';
+              const isDailyReminder = alert.type === 'daily_reminder';
 
               return (
-                <div
+                <motion.div
                   key={alert.id}
-                  className="animate-fade-slide-up p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
+                  layout
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: 120, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
+                  transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3), ease: [0.16, 1, 0.3, 1] }}
+                  className="p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <div className="flex items-start gap-3">
                     <div
@@ -138,6 +159,8 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                           ? 'bg-amber-500/10 text-amber-600'
                           : isLockReset
                           ? 'bg-amber-500/10 text-amber-600'
+                          : isRecurring || isDailyReminder
+                          ? 'bg-violet-500/10 text-violet-600'
                           : 'bg-blue-500/10 text-blue-600'
                       }`}
                     >
@@ -151,6 +174,12 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                         <HandCoins className="w-4 h-4" />
                       ) : isLockReset ? (
                         <KeyRound className="w-4 h-4" />
+                      ) : isExpenseAdded ? (
+                        <Receipt className="w-4 h-4" />
+                      ) : isRecurring ? (
+                        <Repeat className="w-4 h-4" />
+                      ) : isDailyReminder ? (
+                        <BellRing className="w-4 h-4" />
                       ) : (
                         <TrendingUp className="w-4 h-4" />
                       )}
@@ -211,9 +240,10 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                       </button>
                     )}
                   </div>
-                </div>
+                </motion.div>
               );
             })}
+            </AnimatePresence>
           </div>
         )}
       </div>
