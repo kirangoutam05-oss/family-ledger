@@ -354,8 +354,15 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       {/* Household Outflow — full-bleed black banner continuing straight down
           from the header above (same solid black, no seam), with just a
           soft purple glow behind the numbers rather than a bright gradient
-          sweep. Roughly half the screen together with the header. */}
-      <div
+          sweep. Roughly half the screen together with the header.
+          Each top-level section below fades/slides in with a small stagger
+          on mount (see SECTION_STAGGER) — quick enough not to feel sluggish
+          on a return visit, slow enough that the page doesn't just pop in
+          as one flat block. */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         className="-mx-4 sm:-mx-6 -mt-6 px-4 sm:px-6 pt-3 sm:pt-4 pb-6 rounded-b-[2.5rem] text-white"
         style={{ background: 'radial-gradient(70% 85% at 50% 100%, rgba(147,51,234,0.28) 0%, rgba(147,51,234,0) 72%), #050308' }}
       >
@@ -411,14 +418,19 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             <Download className="w-4.5 h-4.5" />
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Latest activity — each entry its own pod in a horizontal strip
           rather than a stacked list, rolling into place on mount. Carries
           the "Recent Activity" heading that used to sit on the full list
           further down, which is now "Past Activity" instead. */}
       {latestTransactions.length > 0 && (
-        <div className="space-y-3">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+          className="space-y-3"
+        >
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 px-1">
             Recent Activity
           </h2>
@@ -460,14 +472,19 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               );
             })}
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Spending Trends — Day/Week/Month filter drives an auto-generated bar
           chart. This is the primary chart on the page now that Category
           Budgets moved to the Category tab, so it runs bigger and carries
           summary stats alongside the bars. */}
-      <div className="space-y-3">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
+        className="space-y-3"
+      >
         <div className="flex items-center justify-between px-1">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
             Spending Trends
@@ -595,7 +612,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             </>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Export modal — CSV/XLSX/PDF/DOC of the transaction list, plus the
           charts above. Triggered from the button next to Add Expense in the
@@ -612,7 +629,12 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       />
 
       {/* Transaction List - Apple Wallet Grouped View */}
-      <div className="space-y-3">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        className="space-y-3"
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
             Past Activity
@@ -876,7 +898,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             View more ({displayTransactions.length - visibleCount} left)
           </button>
         )}
-      </div>
+      </motion.div>
 
       <TransactionFilterSheet
         isOpen={isFilterSheetOpen}
