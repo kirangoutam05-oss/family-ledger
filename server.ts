@@ -1445,6 +1445,21 @@ app.get('/api/auth/me', resolveSession, async (req, res) => {
   }
 });
 
+// Diagnostic only — reports whether email-sending is configured, never the
+// secret values themselves. Gated behind an active login session so it's
+// not publicly probeable.
+app.get('/api/auth/debug-email-config', resolveSession, async (req, res) => {
+  if (!req.authSession) {
+    return res.status(401).json({ error: 'Not logged in.' });
+  }
+  res.json({
+    resendApiKeySet: !!process.env.RESEND_API_KEY,
+    resendFromEmailSet: !!process.env.RESEND_FROM_EMAIL,
+    appUrlSet: !!process.env.APP_URL,
+    appUrlValue: process.env.APP_URL || null,
+  });
+});
+
 // Re-sends the verification link — used by Account Settings' "Resend" when
 // the first email didn't arrive, or an existing unverified account wants
 // another shot at it. Rate-limited per-IP the same as everything else here.
