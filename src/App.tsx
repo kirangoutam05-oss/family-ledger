@@ -30,6 +30,8 @@ import { HouseholdSetupScreen } from './components/HouseholdSetupScreen';
 import { WhoAreYouScreen } from './components/WhoAreYouScreen';
 import { GetStartedScreen } from './components/GetStartedScreen';
 import { InvitePartnerScreen } from './components/InvitePartnerScreen';
+import { SecureAccountScreen } from './components/SecureAccountScreen';
+import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { AppLockSetupScreen } from './components/AppLockSetupScreen';
 import { AppLockScreen } from './components/AppLockScreen';
 import { StartupScreen } from './components/StartupScreen';
@@ -48,6 +50,7 @@ import {
   setStoredHouseholdId,
 } from './utils/household';
 import { LockConfig, clearLockConfig, isLockSkipped, loadLockConfig, setLockSkipped } from './utils/appLock';
+import { authHouseholdStatus, authLogout, authMe, AuthAccount } from './utils/auth';
 
 type NavTab =
   | 'dashboards'
@@ -175,6 +178,19 @@ export default function App() {
   const [householdId, setHouseholdId] = useState<string | null>(household.householdId);
   const [justInvited, setJustInvited] = useState(false);
 
+  // Real per-person login, layered on top of the household id above — see
+  // SecureAccountScreen/GetStartedScreen's login mode. `resetToken` is set
+  // only when landing on /reset-password?token=... from an emailed link,
+  // and short-circuits every other screen until it's handled.
+  const [resetToken, setResetToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined' || window.location.pathname !== '/reset-password') return null;
+    return new URLSearchParams(window.location.search).get('token');
+  });
+  const [authAccount, setAuthAccount] = useState<AuthAccount | null>(null);
+  const [authStatusChecked, setAuthStatusChecked] = useState(false);
+  const [roleHasAccount, setRoleHasAccount] = useState(false);
+  const [secureAccountDismissed, setSecureAccountDismissed] = useState(false);
+
   // Device-level app lock (Face ID/Touch ID/PIN) — always starts locked; only
   // AppLockSetupScreen/AppLockScreen ever flip it to true.
   const [lockConfig, setLockConfig] = useState<LockConfig | null>(() => loadLockConfig());
@@ -199,6 +215,25 @@ export default function App() {
       window.history.replaceState({}, '', '/');
     }
   }, [household]);
+
+  // Once we know both which household this is and which of the two people is
+  // using this device, check whether a real login already exists for them —
+  // drives the "Secure your account" prompt below for legacy devices and
+  // freshly-invited partners alike, without a separate migration script.
+  useEffect(() => {
+    if (!householdId || !identity) return;
+    let cancelled = false;
+    (async () => {
+      const [me, status] = await Promise.all([authMe(), authHouseholdStatus(householdId)]);
+      if (cancelled) return;
+      setAuthAccount(me);
+      setRoleHasAccount(identity.role === 'husband' ? status.husbandHasAccount : status.wifeHasAccount);
+      setAuthStatusChecked(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [householdId, identity]);
 
   // Re-lock after the app has been backgrounded past the grace period —
   // switching away briefly (e.g. to reply to a text) doesn't re-prompt, but a
@@ -329,7 +364,39 @@ export default function App() {
     await registerDevice(role);
   };
 
+  // A real login already tells us both the household and the role — this
+  // replaces handleHouseholdReady + handleWhoAreYou for anyone who logs in,
+  // rather than falling through to WhoAreYouScreen's unverified self-select.
+  const handleLoginSuccess = async (account: AuthAccount) => {
+    setStoredHouseholdId(account.householdId);
+    setHouseholdId(account.householdId);
+    saveLocalIdentity(account.role);
+    setIdentity({ role: account.role, setAt: new Date().toISOString() });
+    setActiveSpender('shared');
+    setAuthAccount(account);
+    setAuthStatusChecked(true);
+    setRoleHasAccount(true);
+    await registerDevice(account.role);
+  };
+
+  const handleSecureAccountComplete = (account: AuthAccount) => {
+    setAuthAccount(account);
+    setRoleHasAccount(true);
+  };
+
+  // Swapping "who's using this phone" — a device-identity change, not
+  // necessarily a real logout (the login session, if any, stays valid).
   const handleSwitchUser = () => {
+    clearLocalIdentity();
+    setIdentity(null);
+  };
+
+  // Destroys the actual login session server-side, distinct from
+  // handleSwitchUser above — see AccountSettings' "Log Out" vs "Switch".
+  const handleLogout = async () => {
+    await authLogout();
+    setAuthAccount(null);
+    setAuthStatusChecked(false);
     clearLocalIdentity();
     setIdentity(null);
   };
@@ -965,10 +1032,25 @@ export default function App() {
 
   const unreadAlertsCount = ledger.alerts.filter((a) => !a.read).length;
 
+  // A password-reset link short-circuits everything else — it needs no
+  // household or identity resolved yet, since the token alone identifies
+  // the account being reset.
+  if (resetToken) {
+    return (
+      <ResetPasswordScreen
+        token={resetToken}
+        onDone={() => {
+          setResetToken(null);
+          window.history.replaceState({}, '', '/');
+        }}
+      />
+    );
+  }
+
   // A genuinely new device with no household yet — nothing to fetch, so this
   // check comes before the ledger-loaded gate below.
   if (!householdId) {
-    return <GetStartedScreen onHouseholdReady={handleHouseholdReady} />;
+    return <GetStartedScreen onHouseholdReady={handleHouseholdReady} onLoginSuccess={handleLoginSuccess} />;
   }
 
   // Wait for the initial fetch before deciding which screen to show, so a
@@ -998,6 +1080,24 @@ export default function App() {
         husbandName={ledger.husbandName}
         wifeName={ledger.wifeName}
         onSelect={handleWhoAreYou}
+      />
+    );
+  }
+
+  // Prompts a real login for whoever's device doesn't have one yet — the
+  // same check covers a brand-new signup, an invited partner, and every
+  // pre-existing device from before this shipped, uniformly. Skippable
+  // ("Not now") so no one already using the app gets hard-blocked.
+  if (authStatusChecked && !authAccount && !roleHasAccount && !secureAccountDismissed) {
+    return (
+      <SecureAccountScreen
+        familyName={ledger.familyName}
+        husbandName={ledger.husbandName}
+        wifeName={ledger.wifeName}
+        householdId={householdId}
+        knownRole={identity.role}
+        onComplete={handleSecureAccountComplete}
+        onSkip={() => setSecureAccountDismissed(true)}
       />
     );
   }
@@ -1138,6 +1238,9 @@ export default function App() {
                   onOpenLiveMobile={() => setShowLiveMobileModal(true)}
                   onLockConfigChanged={() => setLockConfig(loadLockConfig())}
                   onEnableLock={handleEnableLock}
+                  authAccount={authAccount}
+                  onLogout={handleLogout}
+                  onSecureAccount={() => setSecureAccountDismissed(false)}
                 />
               )}
             </motion.div>

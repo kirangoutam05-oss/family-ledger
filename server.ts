@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import { Pool } from 'pg';
 import { GoogleGenAI, Type } from '@google/genai';
 import webpush from 'web-push';
+import bcrypt from 'bcryptjs';
+import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
 import { EMPTY_LEDGER_STATE } from './src/data/initialData';
 import { LedgerState, Transaction, SavingsGoal, BudgetAlert, Category, CategoryId, SpenderId, DeviceInfo, CATEGORY_ICON_OPTIONS, PendingAcknowledgement, LockResetRequest } from './src/types';
@@ -16,6 +18,11 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+
+// Render terminates TLS at its edge and proxies plain HTTP internally — without
+// this, Express never sees the request as "secure" and the session cookie's
+// `Secure` flag (and req.secure generally) would behave incorrectly in production.
+app.set('trust proxy', 1);
 
 // Security Headers
 app.use((req, res, next) => {
@@ -28,6 +35,10 @@ app.use((req, res, next) => {
 
 // Tight JSON payload limit to prevent memory exhaustion DoS
 app.use(express.json({ limit: '500kb' }));
+// Signs the login session cookie (see resolveSession below) — COOKIE_SECRET
+// must be set for real login to work; without it, cookie-parser still runs
+// but signed cookies won't verify, so resolveSession just finds nothing.
+app.use(cookieParser(process.env.COOKIE_SECRET));
 
 // In-memory sliding-window rate limiter for sensitive operations
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -248,8 +259,400 @@ declare global {
     interface Request {
       householdId?: string;
       householdState?: LedgerState;
+      // Set by `resolveSession` when a valid `knku_sid` cookie is present —
+      // absent for legacy devices that haven't logged in yet, which is fine:
+      // every route that reads it treats it as optional during the rollout
+      // described where it's consumed below.
+      authSession?: { accountId: string; householdId: string; role: SpenderId };
     }
   }
+}
+
+// ------------------- LOGIN / PASSWORD AUTH -------------------
+//
+// A real, per-person login layered on top of the household-id model above.
+// The household id (and Postgres row) it persists to are untouched; these
+// three tables are deliberately separate because an email must be unique
+// *across* households, which doesn't fit inside one household's own JSON
+// document. See `.env.example` for the two new secrets this needs
+// (RESEND_API_KEY, COOKIE_SECRET).
+
+interface Account {
+  id: string;
+  householdId: string;
+  role: SpenderId;
+  email: string;
+  emailNormalized: string;
+  passwordHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AuthSessionRecord {
+  id: string;
+  accountId: string;
+  householdId: string;
+  role: SpenderId;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  userAgent?: string;
+  revokedAt?: string;
+}
+
+interface PasswordResetToken {
+  tokenHash: string;
+  accountId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string;
+}
+
+const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const RESET_TOKENS_FILE = path.join(DATA_DIR, 'password_reset_tokens.json');
+const SESSION_COOKIE = 'knku_sid';
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, sliding
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function readJsonArray<T>(filePath: string): T[] {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T[];
+  } catch {
+    return [];
+  }
+}
+
+function writeJsonArray<T>(filePath: string, arr: T[]) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(arr, null, 2), 'utf-8');
+}
+
+async function ensureAuthTables() {
+  if (!pool) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS accounts (
+      id                TEXT PRIMARY KEY,
+      household_id      TEXT NOT NULL,
+      role              TEXT NOT NULL CHECK (role IN ('husband','wife')),
+      email             TEXT NOT NULL,
+      email_normalized  TEXT NOT NULL UNIQUE,
+      password_hash     TEXT NOT NULL,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (household_id, role)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      token_hash   TEXT PRIMARY KEY,
+      account_id   TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at   TIMESTAMPTZ NOT NULL,
+      used_at      TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id            TEXT PRIMARY KEY,
+      account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      household_id  TEXT NOT NULL,
+      role          TEXT NOT NULL CHECK (role IN ('husband','wife')),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at    TIMESTAMPTZ NOT NULL,
+      user_agent    TEXT,
+      revoked_at    TIMESTAMPTZ
+    )
+  `);
+}
+
+function rowToAccount(row: any): Account {
+  return {
+    id: row.id,
+    householdId: row.household_id,
+    role: row.role,
+    email: row.email,
+    emailNormalized: row.email_normalized,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+  };
+}
+
+async function findAccountByEmail(emailNormalized: string): Promise<Account | null> {
+  if (pool) {
+    const r = await pool.query('SELECT * FROM accounts WHERE email_normalized = $1', [emailNormalized]);
+    return r.rows[0] ? rowToAccount(r.rows[0]) : null;
+  }
+  return readJsonArray<Account>(ACCOUNTS_FILE).find((a) => a.emailNormalized === emailNormalized) ?? null;
+}
+
+async function findAccountByHouseholdRole(householdId: string, role: SpenderId): Promise<Account | null> {
+  if (pool) {
+    const r = await pool.query('SELECT * FROM accounts WHERE household_id = $1 AND role = $2', [householdId, role]);
+    return r.rows[0] ? rowToAccount(r.rows[0]) : null;
+  }
+  return readJsonArray<Account>(ACCOUNTS_FILE).find((a) => a.householdId === householdId && a.role === role) ?? null;
+}
+
+async function findAccountById(id: string): Promise<Account | null> {
+  if (pool) {
+    const r = await pool.query('SELECT * FROM accounts WHERE id = $1', [id]);
+    return r.rows[0] ? rowToAccount(r.rows[0]) : null;
+  }
+  return readJsonArray<Account>(ACCOUNTS_FILE).find((a) => a.id === id) ?? null;
+}
+
+async function insertAccount(account: Account): Promise<void> {
+  if (pool) {
+    await pool.query(
+      `INSERT INTO accounts (id, household_id, role, email, email_normalized, password_hash, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`,
+      [account.id, account.householdId, account.role, account.email, account.emailNormalized, account.passwordHash, account.createdAt]
+    );
+    return;
+  }
+  const accounts = readJsonArray<Account>(ACCOUNTS_FILE);
+  accounts.push(account);
+  writeJsonArray(ACCOUNTS_FILE, accounts);
+}
+
+async function updateAccountPassword(accountId: string, passwordHash: string): Promise<void> {
+  if (pool) {
+    await pool.query('UPDATE accounts SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, accountId]);
+    return;
+  }
+  const accounts = readJsonArray<Account>(ACCOUNTS_FILE);
+  const acc = accounts.find((a) => a.id === accountId);
+  if (acc) {
+    acc.passwordHash = passwordHash;
+    acc.updatedAt = new Date().toISOString();
+    writeJsonArray(ACCOUNTS_FILE, accounts);
+  }
+}
+
+async function createSession(account: Account, userAgent?: string): Promise<AuthSessionRecord> {
+  const session: AuthSessionRecord = {
+    id: crypto.randomBytes(32).toString('base64url'),
+    accountId: account.id,
+    householdId: account.householdId,
+    role: account.role,
+    createdAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+    userAgent,
+  };
+  if (pool) {
+    await pool.query(
+      `INSERT INTO sessions (id, account_id, household_id, role, created_at, last_seen_at, expires_at, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$5,$6,$7)`,
+      [session.id, session.accountId, session.householdId, session.role, session.createdAt, session.expiresAt, userAgent || null]
+    );
+  } else {
+    const sessions = readJsonArray<AuthSessionRecord>(SESSIONS_FILE);
+    sessions.push(session);
+    writeJsonArray(SESSIONS_FILE, sessions);
+  }
+  return session;
+}
+
+// Looks up a session and, if valid, slides its expiry forward another 30
+// days — an active device never gets logged out mid-use, only one that's
+// been idle for the full window.
+async function findValidSession(sessionId: string): Promise<AuthSessionRecord | null> {
+  const now = new Date();
+  const newExpiry = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  if (pool) {
+    const r = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
+    const row = r.rows[0];
+    if (!row || row.revoked_at || new Date(row.expires_at) < now) return null;
+    pool
+      .query('UPDATE sessions SET last_seen_at = now(), expires_at = $1 WHERE id = $2', [newExpiry, sessionId])
+      .catch((err) => console.error('Failed to refresh session expiry:', err));
+    return {
+      id: row.id,
+      accountId: row.account_id,
+      householdId: row.household_id,
+      role: row.role,
+      createdAt: row.created_at,
+      lastSeenAt: row.last_seen_at,
+      expiresAt: newExpiry,
+      userAgent: row.user_agent,
+      revokedAt: row.revoked_at,
+    };
+  }
+  const sessions = readJsonArray<AuthSessionRecord>(SESSIONS_FILE);
+  const session = sessions.find((s) => s.id === sessionId);
+  if (!session || session.revokedAt || new Date(session.expiresAt) < now) return null;
+  session.lastSeenAt = new Date().toISOString();
+  session.expiresAt = newExpiry;
+  writeJsonArray(SESSIONS_FILE, sessions);
+  return session;
+}
+
+async function revokeSession(sessionId: string): Promise<void> {
+  if (pool) {
+    await pool.query('UPDATE sessions SET revoked_at = now() WHERE id = $1', [sessionId]);
+    return;
+  }
+  const sessions = readJsonArray<AuthSessionRecord>(SESSIONS_FILE);
+  const session = sessions.find((s) => s.id === sessionId);
+  if (session) {
+    session.revokedAt = new Date().toISOString();
+    writeJsonArray(SESSIONS_FILE, sessions);
+  }
+}
+
+// Called on password reset — a reset is a strong signal the old credential
+// may have been compromised, so every device gets signed out, not just the
+// one performing the reset.
+async function revokeAllSessionsForAccount(accountId: string): Promise<void> {
+  if (pool) {
+    await pool.query('UPDATE sessions SET revoked_at = now() WHERE account_id = $1 AND revoked_at IS NULL', [accountId]);
+    return;
+  }
+  const sessions = readJsonArray<AuthSessionRecord>(SESSIONS_FILE);
+  let changed = false;
+  for (const s of sessions) {
+    if (s.accountId === accountId && !s.revokedAt) {
+      s.revokedAt = new Date().toISOString();
+      changed = true;
+    }
+  }
+  if (changed) writeJsonArray(SESSIONS_FILE, sessions);
+}
+
+function hashResetToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+// The raw token only ever exists in the emailed link — only its hash is
+// stored, the same reasoning as a password hash: a leaked database row
+// shouldn't hand out working reset links.
+async function createPasswordResetToken(accountId: string): Promise<string> {
+  const raw = crypto.randomBytes(32).toString('base64url');
+  const token: PasswordResetToken = {
+    tokenHash: hashResetToken(raw),
+    accountId,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString(),
+  };
+  if (pool) {
+    await pool.query(
+      'INSERT INTO password_reset_tokens (token_hash, account_id, created_at, expires_at) VALUES ($1,$2,$3,$4)',
+      [token.tokenHash, token.accountId, token.createdAt, token.expiresAt]
+    );
+  } else {
+    const tokens = readJsonArray<PasswordResetToken>(RESET_TOKENS_FILE);
+    tokens.push(token);
+    writeJsonArray(RESET_TOKENS_FILE, tokens);
+  }
+  return raw;
+}
+
+async function consumePasswordResetToken(raw: string): Promise<PasswordResetToken | null> {
+  const tokenHash = hashResetToken(raw);
+  const now = new Date();
+  if (pool) {
+    const r = await pool.query('SELECT * FROM password_reset_tokens WHERE token_hash = $1', [tokenHash]);
+    const row = r.rows[0];
+    if (!row || row.used_at || new Date(row.expires_at) < now) return null;
+    await pool.query('UPDATE password_reset_tokens SET used_at = now() WHERE token_hash = $1', [tokenHash]);
+    return { tokenHash: row.token_hash, accountId: row.account_id, createdAt: row.created_at, expiresAt: row.expires_at, usedAt: new Date().toISOString() };
+  }
+  const tokens = readJsonArray<PasswordResetToken>(RESET_TOKENS_FILE);
+  const token = tokens.find((t) => t.tokenHash === tokenHash);
+  if (!token || token.usedAt || new Date(token.expiresAt) < now) return null;
+  token.usedAt = new Date().toISOString();
+  writeJsonArray(RESET_TOKENS_FILE, tokens);
+  return token;
+}
+
+function normalizeEmail(email: unknown): string | null {
+  if (typeof email !== 'string') return null;
+  const trimmed = email.trim().toLowerCase();
+  if (trimmed.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function isValidPassword(pw: unknown): pw is string {
+  return typeof pw === 'string' && pw.length >= 8 && pw.length <= 200;
+}
+
+// Sends via Resend's REST API directly (a plain fetch) rather than adding
+// their SDK as a dependency for one call site. A missing key logs and no-ops
+// instead of failing signup/reset — email delivery shouldn't be able to break
+// the rest of auth.
+async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('RESEND_API_KEY not set — skipping password reset email send.');
+    return;
+  }
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM_EMAIL || 'KNKU <onboarding@resend.dev>',
+        to: [toEmail],
+        subject: 'Reset your KNKU password',
+        html: `<p>We received a request to reset your KNKU password.</p><p><a href="${resetUrl}">Click here to set a new password</a>. This link expires in 30 minutes.</p><p>If you didn't request this, you can safely ignore this email.</p>`,
+      }),
+    });
+    if (!res.ok) {
+      console.error('Resend email send failed:', res.status, await res.text());
+    }
+  } catch (err) {
+    console.error('Resend email send error:', err);
+  }
+}
+
+function setSessionCookie(res: express.Response, sessionId: string) {
+  res.cookie(SESSION_COOKIE, sessionId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    signed: true,
+    maxAge: SESSION_TTL_MS,
+    path: '/',
+  });
+}
+
+function clearSessionCookie(res: express.Response) {
+  res.clearCookie(SESSION_COOKIE, { path: '/' });
+}
+
+// Optional/best-effort — a missing or invalid session cookie does NOT reject
+// the request, so legacy devices that haven't logged in yet keep working
+// unchanged. Routes that require a real login check `req.authSession` for
+// themselves (see /api/auth/logout, /change-password, /me below).
+async function resolveSession(req: express.Request, res: express.Response, next: express.NextFunction) {
+  try {
+    const sid = req.signedCookies?.[SESSION_COOKIE];
+    if (sid && typeof sid === 'string') {
+      const session = await findValidSession(sid);
+      if (session) {
+        req.authSession = { accountId: session.accountId, householdId: session.householdId, role: session.role };
+      }
+    }
+  } catch (err) {
+    console.error('resolveSession failed:', err);
+  }
+  next();
+}
+
+// The single point of truth for "who is making this request" across the
+// ownership-enforcement routes below: a verified session always wins; the
+// client-claimed body field is only trusted as a fallback for devices that
+// haven't logged in yet (Phase A of the rollout — see the plan this shipped
+// from). `bodyValue` is whatever field that route already reads (different
+// routes historically used different names: authenticatedSpender, approvedBy,
+// requestedBy).
+function ownerSpender(req: express.Request, bodyValue: unknown): SpenderId | null {
+  if (req.authSession?.role) return req.authSession.role;
+  return bodyValue === 'husband' || bodyValue === 'wife' ? bodyValue : null;
 }
 
 // Web Push is only wired up once real VAPID keys are configured — without them
@@ -330,8 +733,11 @@ function notifyExpenseAdded(state: LedgerState, householdId: string, addedBy: Sp
 // and mutates `req.householdState`, never a shared global, so concurrent requests
 // for different households can't cross-contaminate each other mid-`await`.
 async function resolveHousehold(req: express.Request, res: express.Response, next: express.NextFunction) {
+  // A verified session (see resolveSession, mounted before this everywhere
+  // it matters) always wins over the header — a stale or forged
+  // X-Household-Id becomes irrelevant the moment someone is logged in.
   const headerValue = req.header('X-Household-Id');
-  const id = headerValue ? headerValue.trim() : DEFAULT_HOUSEHOLD_ID;
+  const id = req.authSession?.householdId ?? (headerValue ? headerValue.trim() : DEFAULT_HOUSEHOLD_ID);
 
   if (!isValidHouseholdId(id)) {
     return res.status(400).json({ error: 'Invalid household id' });
@@ -708,12 +1114,209 @@ app.post('/api/cron/daily-reminder', async (req, res) => {
   res.json({ success: true, results });
 });
 
-// Every route below operates on a specific household, resolved from the
-// X-Household-Id header (defaulting to the legacy pre-multi-tenancy household).
-app.use('/api/ledger', resolveHousehold);
-app.use('/api/household/setup', resolveHousehold);
-app.use('/api/household/update', resolveHousehold);
-app.use('/api/parse-sms', resolveHousehold);
+// ------------------- AUTH ROUTES -------------------
+// Email is the login identifier (doubles as the recovery destination — no
+// separate "recovery email" field). Each household has exactly two accounts,
+// one per role, created via signup below.
+
+app.post('/api/auth/signup', rateLimit(10, 60000), resolveHousehold, async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const householdId = req.householdId!;
+    const emailNormalized = normalizeEmail(req.body?.email);
+    const rawPassword = req.body?.password;
+    const role: unknown = req.body?.role;
+
+    if (!emailNormalized) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+    if (!isValidPassword(rawPassword)) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+    if (role !== 'husband' && role !== 'wife') {
+      return res.status(400).json({ error: 'role must be "husband" or "wife"' });
+    }
+
+    const existingForRole = await findAccountByHouseholdRole(householdId, role);
+    if (existingForRole) {
+      const ownerName = role === 'husband' ? state.husbandName : state.wifeName;
+      return res.status(409).json({ error: `${ownerName} already has a login for this household.` });
+    }
+    const existingForEmail = await findAccountByEmail(emailNormalized);
+    if (existingForEmail) {
+      return res.status(409).json({ error: 'This email is already registered — log in instead.' });
+    }
+
+    const passwordHash = await bcrypt.hash(rawPassword, 12);
+    const account: Account = {
+      id: crypto.randomBytes(9).toString('base64url'),
+      householdId,
+      role,
+      email: sanitizeString(req.body.email, 254) || emailNormalized,
+      emailNormalized,
+      passwordHash,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await insertAccount(account);
+
+    const session = await createSession(account, req.header('User-Agent'));
+    setSessionCookie(res, session.id);
+
+    res.json({ success: true, account: { id: account.id, email: account.email, role: account.role, householdId } });
+  } catch (err) {
+    console.error('Signup failed:', err);
+    res.status(500).json({ error: 'An error occurred while creating your login.' });
+  }
+});
+
+// Lets the client know which of the two roles already has a login — used to
+// auto-infer an invited partner's role (whichever slot is still open) and to
+// decide whether the migration prompt should appear for an existing device.
+app.get('/api/auth/household-status', resolveHousehold, async (req, res) => {
+  try {
+    const householdId = req.householdId!;
+    const [husband, wife] = await Promise.all([
+      findAccountByHouseholdRole(householdId, 'husband'),
+      findAccountByHouseholdRole(householdId, 'wife'),
+    ]);
+    res.json({ husbandHasAccount: !!husband, wifeHasAccount: !!wife });
+  } catch (err) {
+    console.error('household-status failed:', err);
+    res.status(500).json({ error: 'An error occurred.' });
+  }
+});
+
+// Not household-scoped — the email alone finds the household. Deliberately
+// generic error on any failure (wrong email vs wrong password) so a login
+// attempt can't be used to enumerate registered emails.
+app.post('/api/auth/login', rateLimit(10, 60000), async (req, res) => {
+  try {
+    const emailNormalized = normalizeEmail(req.body?.email);
+    const rawPassword = req.body?.password;
+    if (!emailNormalized || typeof rawPassword !== 'string') {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const account = await findAccountByEmail(emailNormalized);
+    if (!account || !(await bcrypt.compare(rawPassword, account.passwordHash))) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const session = await createSession(account, req.header('User-Agent'));
+    setSessionCookie(res, session.id);
+    res.json({ success: true, householdId: account.householdId, role: account.role, email: account.email });
+  } catch (err) {
+    console.error('Login failed:', err);
+    res.status(500).json({ error: 'An error occurred while logging in.' });
+  }
+});
+
+app.post('/api/auth/logout', resolveSession, async (req, res) => {
+  try {
+    const sid = req.signedCookies?.[SESSION_COOKIE];
+    if (sid) await revokeSession(sid);
+    clearSessionCookie(res);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Logout failed:', err);
+    res.status(500).json({ error: 'An error occurred while logging out.' });
+  }
+});
+
+// Always returns the same response regardless of whether the email is
+// registered — the whole point is that a failed attempt can't be used to
+// find out who has an account.
+app.post('/api/auth/forgot-password', rateLimit(5, 60000), async (req, res) => {
+  try {
+    const emailNormalized = normalizeEmail(req.body?.email);
+    if (emailNormalized) {
+      const account = await findAccountByEmail(emailNormalized);
+      if (account) {
+        const rawToken = await createPasswordResetToken(account.id);
+        const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+        await sendPasswordResetEmail(account.email, `${appUrl}/reset-password?token=${rawToken}`);
+      }
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Forgot-password failed:', err);
+    res.json({ success: true });
+  }
+});
+
+app.post('/api/auth/reset-password', rateLimit(10, 60000), async (req, res) => {
+  try {
+    const { token, newPassword } = req.body || {};
+    if (typeof token !== 'string' || !token) {
+      return res.status(400).json({ error: 'Missing reset token.' });
+    }
+    if (!isValidPassword(newPassword)) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+    const consumed = await consumePasswordResetToken(token);
+    if (!consumed) {
+      return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await updateAccountPassword(consumed.accountId, passwordHash);
+    await revokeAllSessionsForAccount(consumed.accountId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reset-password failed:', err);
+    res.status(500).json({ error: 'An error occurred while resetting your password.' });
+  }
+});
+
+app.post('/api/auth/change-password', resolveSession, async (req, res) => {
+  try {
+    if (!req.authSession) {
+      return res.status(401).json({ error: 'You need to be logged in to change your password.' });
+    }
+    const { currentPassword, newPassword } = req.body || {};
+    const account = await findAccountById(req.authSession.accountId);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found.' });
+    }
+    if (typeof currentPassword !== 'string' || !(await bcrypt.compare(currentPassword, account.passwordHash))) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+    if (!isValidPassword(newPassword)) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+    }
+    await updateAccountPassword(account.id, await bcrypt.hash(newPassword, 12));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Change-password failed:', err);
+    res.status(500).json({ error: 'An error occurred while changing your password.' });
+  }
+});
+
+// Used on client boot to silently skip the login screen when a valid session
+// cookie already exists.
+app.get('/api/auth/me', resolveSession, async (req, res) => {
+  try {
+    if (!req.authSession) {
+      return res.json({ authenticated: false });
+    }
+    const account = await findAccountById(req.authSession.accountId);
+    if (!account) {
+      return res.json({ authenticated: false });
+    }
+    res.json({ authenticated: true, email: account.email, role: account.role, householdId: account.householdId });
+  } catch (err) {
+    console.error('/api/auth/me failed:', err);
+    res.json({ authenticated: false });
+  }
+});
+
+// Every route below operates on a specific household, resolved from a
+// verified login session if one exists, else the X-Household-Id header
+// (defaulting to the legacy pre-multi-tenancy household).
+app.use('/api/ledger', resolveSession, resolveHousehold);
+app.use('/api/household/setup', resolveSession, resolveHousehold);
+app.use('/api/household/update', resolveSession, resolveHousehold);
+app.use('/api/parse-sms', resolveSession, resolveHousehold);
 
 // Get current state
 app.get('/api/ledger', (req, res) => {
@@ -995,7 +1598,8 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), async (req, res) => {
 app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), async (req, res) => {
   try {
     const state = req.householdState!;
-    const { id, authenticatedSpender, updates } = req.body;
+    const { id, updates } = req.body;
+    const authenticatedSpender = ownerSpender(req, req.body?.authenticatedSpender);
     if (!id || typeof id !== 'string') {
       return res.status(400).json({ error: 'Valid id is required' });
     }
@@ -1053,7 +1657,8 @@ app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), async (req, res
 app.post('/api/ledger/pending-ack/reject', rateLimit(60, 60000), async (req, res) => {
   try {
     const state = req.householdState!;
-    const { id, authenticatedSpender } = req.body;
+    const { id } = req.body;
+    const authenticatedSpender = ownerSpender(req, req.body?.authenticatedSpender);
     if (!id || typeof id !== 'string') {
       return res.status(400).json({ error: 'Valid id is required' });
     }
@@ -1136,7 +1741,8 @@ app.post('/api/ledger/lock-reset/request', rateLimit(10, 60000), async (req, res
 app.post('/api/ledger/lock-reset/approve', rateLimit(30, 60000), async (req, res) => {
   try {
     const state = req.householdState!;
-    const { id, approvedBy } = req.body;
+    const { id } = req.body;
+    const approvedBy = ownerSpender(req, req.body?.approvedBy);
     if (!id || typeof id !== 'string') {
       return res.status(400).json({ error: 'Valid id is required' });
     }
@@ -1187,7 +1793,8 @@ app.post('/api/ledger/lock-reset/deny', rateLimit(30, 60000), async (req, res) =
 app.post('/api/ledger/lock-reset/consume', rateLimit(30, 60000), async (req, res) => {
   try {
     const state = req.householdState!;
-    const { id, requestedBy } = req.body;
+    const { id } = req.body;
+    const requestedBy = ownerSpender(req, req.body?.requestedBy);
     if (!id || typeof id !== 'string') {
       return res.status(400).json({ error: 'Valid id is required' });
     }
@@ -1214,7 +1821,7 @@ app.post('/api/ledger/lock-reset/consume', rateLimit(30, 60000), async (req, res
 app.post('/api/ledger/transaction/update', rateLimit(60, 60000), async (req, res) => {
   try {
     const state = req.householdState!;
-    const { authenticatedSpender } = req.body;
+    const authenticatedSpender = ownerSpender(req, req.body?.authenticatedSpender);
     const transactionId = req.body.transactionId || req.body.transaction?.id;
     const updates = req.body.updates || req.body.transaction;
 
@@ -1279,7 +1886,8 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), async (req, res
 app.post('/api/ledger/transaction/bulk-update', rateLimit(20, 60000), async (req, res) => {
   try {
     const state = req.householdState!;
-    const { authenticatedSpender, transactionIds, updates } = req.body;
+    const { transactionIds, updates } = req.body;
+    const authenticatedSpender = ownerSpender(req, req.body?.authenticatedSpender);
 
     if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
       return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
@@ -1328,7 +1936,8 @@ app.post('/api/ledger/transaction/bulk-update', rateLimit(20, 60000), async (req
 app.post('/api/ledger/transaction/delete', rateLimit(60, 60000), async (req, res) => {
   try {
     const state = req.householdState!;
-    const { transactionId, authenticatedSpender } = req.body;
+    const { transactionId } = req.body;
+    const authenticatedSpender = ownerSpender(req, req.body?.authenticatedSpender);
     if (!transactionId || typeof transactionId !== 'string') {
       return res.status(400).json({ error: 'Valid transactionId is required' });
     }
@@ -1842,6 +2451,7 @@ async function startServer() {
   // Households are loaded lazily, per request, by loadHouseholdState — there's no
   // single state to load eagerly anymore.
   console.log(`Ledger storage: ${pool ? 'Postgres (persistent across deploys)' : 'local files under data/'}`);
+  await ensureAuthTables();
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

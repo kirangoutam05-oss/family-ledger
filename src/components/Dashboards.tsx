@@ -441,6 +441,13 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                     <div className="text-xs font-semibold text-neutral-900 dark:text-white truncate">{tx.title}</div>
                     <div className="text-[10px] text-neutral-400 mt-0.5 truncate">{formatDate(tx.date)}</div>
                   </div>
+                  {/* Category marker + amount, same dot-label-amount pattern
+                      as the hero graph's legend, so a pod reads at a glance
+                      without opening the transaction. */}
+                  <div className="flex items-center gap-1 min-w-0 w-full text-[10px] text-neutral-500 dark:text-neutral-400">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                    <span className="truncate">{cat.name}</span>
+                  </div>
                   <div
                     className={`text-sm font-bold ${
                       tx.type === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-900 dark:text-white'

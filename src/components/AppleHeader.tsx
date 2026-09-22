@@ -71,7 +71,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
       }`}
       style={{ paddingTop: 'env(safe-area-inset-top)', background: isHero ? 'rgba(5,3,8,0.72)' : undefined }}
     >
-      <div className="relative max-w-5xl mx-auto px-3 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
+      <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Brand mark + household name/spender picker */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <img
