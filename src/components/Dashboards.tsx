@@ -66,6 +66,20 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const [bulkEditField, setBulkEditField] = useState<'category' | 'paymentMode' | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
 
+  // Drives the section-reveal stagger below via an explicit state flip
+  // (rather than relying on Framer Motion's own initial->animate mount
+  // detection) — the mount-detection heuristic turned out to silently skip
+  // the animation specifically right after unlocking the App Lock screen,
+  // since that's the first-ever mount of its ancestor AnimatePresence with
+  // an already-present child, a case Framer Motion treats specially. A
+  // one-frame-delayed state change always animates, regardless of how or
+  // why Dashboards came to mount.
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setRevealed(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
   // Filter transactions based on activeSpender
@@ -361,7 +375,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           as one flat block. */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
+        animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
         className="-mx-4 sm:-mx-6 -mt-6 px-4 sm:px-6 pt-3 sm:pt-4 pb-6 rounded-b-[2.5rem] text-white"
         style={{ background: 'radial-gradient(70% 85% at 50% 100%, rgba(147,51,234,0.28) 0%, rgba(147,51,234,0) 72%), #050308' }}
@@ -427,7 +441,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       {latestTransactions.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
+          animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
           transition={{ duration: 0.45, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
           className="space-y-3"
         >
@@ -481,7 +495,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           summary stats alongside the bars. */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
+        animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
         transition={{ duration: 0.45, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
         className="space-y-3"
       >
@@ -631,7 +645,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       {/* Transaction List - Apple Wallet Grouped View */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
+        animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
         transition={{ duration: 0.45, delay: 0.36, ease: [0.16, 1, 0.3, 1] }}
         className="space-y-3"
       >
