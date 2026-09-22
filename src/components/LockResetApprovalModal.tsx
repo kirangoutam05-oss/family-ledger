@@ -82,7 +82,7 @@ export const LockResetApprovalModal: React.FC<LockResetApprovalModalProps> = ({
             type="button"
             onClick={handleApprove}
             disabled={isApproving || isDenying}
-            className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] active:scale-95 text-white text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+            className="flex-1 px-3.5 py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] active:scale-95 text-white text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
             <span>{isApproving ? 'Approving…' : 'Approve'}</span>

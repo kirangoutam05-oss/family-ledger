@@ -361,7 +361,7 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                         />
                         <button
                           onClick={() => handleSaveBudget(cat.id)}
-                          className="p-1 rounded-lg bg-[#007AFF] text-white hover:bg-[#0071E3]"
+                          className="p-1 rounded-lg bg-[#9333EA] text-white hover:bg-[#7E22CE]"
                         >
                           <Check className="w-3.5 h-3.5" />
                         </button>
@@ -369,7 +369,7 @@ export const BudgetAlerts: React.FC<BudgetAlertsProps> = ({
                     ) : (
                       <button
                         onClick={() => handleStartEdit(cat)}
-                        className="px-2.5 py-1 rounded-lg text-xs text-[#007AFF] hover:bg-[#007AFF]/10 transition-colors font-medium"
+                        className="px-2.5 py-1 rounded-lg text-xs text-[#9333EA] hover:bg-[#9333EA]/10 transition-colors font-medium"
                       >
                         Edit
                       </button>

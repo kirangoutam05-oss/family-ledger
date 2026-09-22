@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Manrope replaces the system font stack app-wide — a geometric sans with
+   the weight range (400-800) to carry both the hero currency figures and
+   small uppercase labels, loaded via index.html's Google Fonts link. Falls
+   back to the previous system-ui stack while it loads or if it fails. */
+@theme {
+  --font-sans: 'Manrope', -apple-system, 'system-ui', 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial,
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
 /* html/body have no background of their own otherwise (only the app's root
    div paints one), so the status-bar's "black-translucent" safe area and any
    scroll-bounce overshoot show the browser's default white instead of the
@@ -13,6 +22,16 @@ body {
   body {
     background-color: #0a0a0c;
   }
+}
+
+/* For horizontal-scroll strips (pods, pill rows, bar charts) where the
+   native scrollbar is just visual noise — swipe/drag still works fine. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Lightweight entrance animation for list rows/cards — cheaper than a motion.div

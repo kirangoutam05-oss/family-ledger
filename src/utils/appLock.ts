@@ -114,7 +114,7 @@ export async function registerBiometric(label: string): Promise<string | null> {
     const userId = crypto.getRandomValues(new Uint8Array(16));
     const credential = (await navigator.credentials.create({
       publicKey: {
-        rp: { name: 'Family Ledger' },
+        rp: { name: 'KNKU' },
         user: { id: userId, name: label, displayName: label },
         challenge,
         pubKeyCredParams: [{ alg: -7, type: 'public-key' }],

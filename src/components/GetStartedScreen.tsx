@@ -48,20 +48,27 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onHouseholdR
   };
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
+    <div
+      className="fixed inset-0 z-[100] overflow-y-auto bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white"
+      style={{
+        backgroundImage:
+          'radial-gradient(60% 40% at 50% 100%, rgba(147,51,234,0.16) 0%, rgba(147,51,234,0) 70%)',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
       <div className="min-h-full flex flex-col items-center justify-center p-5 sm:p-8">
         <div className="w-full max-w-sm space-y-6 py-8">
           <div className="flex flex-col items-center text-center space-y-3">
-            <div className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-[20px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
               <img
-                src="/app-logo.jpg?v=4"
-                alt="Family Ledger Logo"
+                src="/knku-icon.png?v=1"
+                alt="KNKU Logo"
                 className="w-full h-full object-cover object-center block"
                 referrerPolicy="no-referrer"
               />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">Family Ledger</h1>
+              <h1 className="text-xl font-bold tracking-tight">KNKU</h1>
               <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 max-w-xs">
                 A shared expense ledger for you and your partner — private to your household.
               </p>
@@ -74,7 +81,7 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onHouseholdR
                 type="button"
                 onClick={handleCreate}
                 disabled={isCreating}
-                className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
               >
                 <Heart className="w-4 h-4" />
                 <span>{isCreating ? 'Creating…' : 'Create a new household'}</span>
@@ -86,7 +93,7 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onHouseholdR
                   setMode('join');
                   setError(null);
                 }}
-                className="w-full py-3 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2 transition-colors"
+                className="w-full py-3 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2 transition-colors"
               >
                 <KeyRound className="w-4 h-4" />
                 <span>I have an invite code</span>
@@ -105,13 +112,13 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onHouseholdR
                   placeholder="Paste the link your partner sent you"
                   autoFocus
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
                 />
               </div>
               <button
                 type="submit"
                 disabled={isJoining}
-                className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
               >
                 <span>{isJoining ? 'Checking…' : 'Join household'}</span>
                 {!isJoining && <ArrowRight className="w-4 h-4" />}

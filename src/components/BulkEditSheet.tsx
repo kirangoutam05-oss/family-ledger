@@ -55,7 +55,7 @@ export const BulkEditSheet: React.FC<BulkEditSheetProps> = ({ field, count, cate
       >
         <div className="flex items-center justify-between pb-3 border-b border-black/[0.05] dark:border-white/[0.08]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-500/10 text-[#007AFF]">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#9333EA]/10 text-[#9333EA]">
               <Layers className="w-5 h-5" />
             </div>
             <div>
@@ -84,7 +84,7 @@ export const BulkEditSheet: React.FC<BulkEditSheetProps> = ({ field, count, cate
                 onClick={() => setValue(cat.id)}
                 className={`min-h-[48px] p-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white dark:bg-neutral-800 transition-all ${
                   value === cat.id
-                    ? 'ring-2 ring-[#007AFF] border-blue-200 dark:border-blue-800 text-[#007AFF]'
+                    ? 'ring-2 ring-[#9333EA] border-blue-200 dark:border-blue-800 text-[#9333EA]'
                     : 'border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white hover:border-neutral-300 dark:hover:border-neutral-600'
                 }`}
               >
@@ -107,7 +107,7 @@ export const BulkEditSheet: React.FC<BulkEditSheetProps> = ({ field, count, cate
                 onClick={() => setValue(mode)}
                 className={`py-2 rounded-xl border text-xs font-medium transition-all whitespace-nowrap ${
                   value === mode
-                    ? 'border-[#007AFF] bg-blue-50/50 dark:bg-blue-950/30 text-[#007AFF] font-semibold'
+                    ? 'border-[#9333EA] bg-blue-50/50 dark:bg-blue-950/30 text-[#9333EA] font-semibold'
                     : 'border-black/[0.06] dark:border-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                 }`}
               >
@@ -128,7 +128,7 @@ export const BulkEditSheet: React.FC<BulkEditSheetProps> = ({ field, count, cate
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-800"
+            className="px-4 py-2.5 rounded-lg border border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-800"
           >
             Cancel
           </button>
@@ -136,7 +136,7 @@ export const BulkEditSheet: React.FC<BulkEditSheetProps> = ({ field, count, cate
             type="button"
             onClick={handleApply}
             disabled={!value || isSubmitting}
-            className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] active:scale-95 text-white text-xs font-semibold shadow-md transition-all disabled:opacity-50"
+            className="px-5 py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] active:scale-95 text-white text-xs font-semibold shadow-md transition-all disabled:opacity-50"
           >
             {isSubmitting ? 'Applying…' : `Apply to ${count}`}
           </button>

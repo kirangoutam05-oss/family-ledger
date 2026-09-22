@@ -93,7 +93,7 @@ export function exportDOC(transactions: Transaction[], ledger: LedgerState) {
     .join('');
 
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>Family Ledger Export</title></head>
+<head><meta charset="utf-8"><title>KNKU Export</title></head>
 <body style="font-family:Calibri,Arial,sans-serif;">
   <h2>${escapeHtml(ledger.familyName)} — Expense Report</h2>
   <p style="color:#666;font-size:12px;">Generated ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })} • ${rows.length} transactions</p>

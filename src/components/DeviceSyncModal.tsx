@@ -79,7 +79,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl overflow-hidden shadow-xs border border-black/[0.08] dark:border-white/[0.1] shrink-0 flex items-center justify-center">
               <img
-                src="/app-logo.jpg?v=4"
+                src="/knku-icon.png?v=1"
                 alt="Couple Ledger Logo"
                 className="w-full h-full object-cover object-center block"
                 referrerPolicy="no-referrer"
@@ -156,7 +156,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
           </div>
           <button
             onClick={onSwitchUser}
-            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5 shrink-0 hover:border-[#007AFF] transition-colors"
+            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-xs font-medium text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5 shrink-0 hover:border-[#9333EA] transition-colors"
           >
             <UserCog className="w-3.5 h-3.5" />
             <span>Switch</span>
@@ -245,7 +245,7 @@ export const DeviceSyncModal: React.FC<DeviceSyncModalProps> = ({
               <button
                 onClick={onTriggerSync}
                 disabled={isSyncing}
-                className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                className="px-4 py-2 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-50 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
                 <span>{isSyncing ? 'Syncing...' : 'Sync Cloud Now'}</span>

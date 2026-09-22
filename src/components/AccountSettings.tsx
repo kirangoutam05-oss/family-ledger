@@ -109,7 +109,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
         <button
           type="button"
           onClick={onSwitchUser}
-          className="px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:border-[#007AFF] hover:text-[#007AFF] transition-colors flex items-center gap-1.5 shrink-0"
+          className="px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:border-[#9333EA] hover:text-[#9333EA] transition-colors flex items-center gap-1.5 shrink-0"
         >
           <LogOut className="w-3.5 h-3.5" />
           <span>Switch</span>
@@ -130,7 +130,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
             value={familyName}
             onChange={(e) => setFamilyName(e.target.value)}
             required
-            className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+            className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
           />
         </div>
 
@@ -144,7 +144,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
               value={husbandName}
               onChange={(e) => setHusbandName(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
             />
           </div>
           <div>
@@ -156,7 +156,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
               value={wifeName}
               onChange={(e) => setWifeName(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
             />
           </div>
         </div>
@@ -173,7 +173,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
                 onClick={() => setCurrency(c.symbol)}
                 className={`py-2 rounded-xl border text-xs font-semibold transition-all ${
                   currency === c.symbol
-                    ? 'bg-[#007AFF] border-[#007AFF] text-white shadow-xs'
+                    ? 'bg-[#9333EA] border-[#9333EA] text-white shadow-xs'
                     : 'border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300'
                 }`}
               >
@@ -192,7 +192,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
         <button
           type="submit"
           disabled={!canSave || !isDirty || isSaving}
-          className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+          className="w-full py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
         >
           {justSaved ? (
             <>
@@ -224,10 +224,10 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
       <button
         type="button"
         onClick={onOpenLiveMobile}
-        className="w-full p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex items-center justify-between gap-3 hover:border-[#007AFF] transition-colors"
+        className="w-full p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex items-center justify-between gap-3 hover:border-[#9333EA] transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-[#007AFF] shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-[#9333EA] shrink-0">
             <UserPlus className="w-5 h-5" />
           </div>
           <div className="text-left">
@@ -243,7 +243,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
       <button
         type="button"
         onClick={onOpenSyncModal}
-        className="w-full p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex items-center justify-between gap-3 hover:border-[#007AFF] transition-colors"
+        className="w-full p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex items-center justify-between gap-3 hover:border-[#9333EA] transition-colors"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-neutral-600 dark:text-neutral-300 shrink-0">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Download, FileSpreadsheet, FileText, File, Table2, CheckCircle2, RefreshCw, X, ChevronRight } from 'lucide-react';
+import { FileSpreadsheet, FileText, File, Table2, CheckCircle2, RefreshCw, X } from 'lucide-react';
 import { Transaction, LedgerState, SpenderId, Category } from '../types';
 import { localDateKey } from '../utils/helpers';
 
@@ -22,6 +22,10 @@ interface ExportSectionProps {
   trendBuckets: TrendBucket[];
   trendGranularity: 'day' | 'week' | 'month';
   categoryBarData: CategoryBarRow[];
+  // Controlled from outside — the trigger now lives next to Add Expense in
+  // the Overview hero rather than as its own section here.
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'doc';
@@ -39,8 +43,9 @@ export const ExportSection: React.FC<ExportSectionProps> = ({
   relevantTransactions,
   trendBuckets,
   categoryBarData,
+  isOpen,
+  onClose,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [justExported, setJustExported] = useState<ExportFormat | null>(null);
@@ -85,35 +90,12 @@ export const ExportSection: React.FC<ExportSectionProps> = ({
   };
 
   const closeModal = () => {
-    setIsOpen(false);
+    onClose();
     setJustExported(null);
   };
 
   return (
-    <div className="space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 px-1">
-        <Download className="w-3.5 h-3.5" />
-        <span>Export</span>
-      </h2>
-
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className="w-full p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex items-center justify-between gap-3 hover:border-[#007AFF]/40 dark:hover:border-[#007AFF]/40 transition-colors active:scale-[0.99]"
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-[#007AFF] flex items-center justify-center shrink-0">
-            <Download className="w-4.5 h-4.5" />
-          </div>
-          <div className="text-left min-w-0">
-            <div className="text-sm font-semibold text-neutral-900 dark:text-white">Export Data</div>
-            <div className="text-xs text-neutral-400 truncate">CSV, Excel, PDF, or Word — pick a date range first</div>
-          </div>
-        </div>
-        <ChevronRight className="w-4 h-4 text-neutral-400 shrink-0" />
-      </button>
-
-      <AnimatePresence>
+    <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -128,7 +110,7 @@ export const ExportSection: React.FC<ExportSectionProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-              className="glass-sheet rounded-t-[28px] sm:rounded-[28px] max-w-md w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-5 max-h-[88dvh] overflow-y-auto"
+              className="glass-sheet rounded-t-[28px] sm:rounded-[28px] max-w-md w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-6 max-h-[88dvh] overflow-y-auto"
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -146,27 +128,27 @@ export const ExportSection: React.FC<ExportSectionProps> = ({
               {/* Date range — stacked full-width, not side-by-side: native
                   date inputs carry their own internal minimum render width
                   that can overflow a narrow column on a real device. */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
                   Date range <span className="font-normal text-neutral-400">(optional — leave blank for everything)</span>
                 </label>
-                <div className="space-y-2">
+                <div className="space-y-3.5">
                   <div>
-                    <label className="text-[10px] text-neutral-400 block mb-1">From</label>
+                    <label className="text-[10px] text-neutral-400 block mb-1.5">From</label>
                     <input
                       type="date"
                       value={dateFrom}
                       onChange={(e) => setDateFrom(e.target.value)}
-                      className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+                      className="w-full h-11 px-3.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#9333EA] outline-none"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-neutral-400 block mb-1">To</label>
+                    <label className="text-[10px] text-neutral-400 block mb-1.5">To</label>
                     <input
                       type="date"
                       value={dateTo}
                       onChange={(e) => setDateTo(e.target.value)}
-                      className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+                      className="w-full h-11 px-3.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#9333EA] outline-none"
                     />
                   </div>
                 </div>
@@ -177,29 +159,29 @@ export const ExportSection: React.FC<ExportSectionProps> = ({
                       setDateFrom('');
                       setDateTo('');
                     }}
-                    className="text-[11px] font-medium text-[#007AFF]"
+                    className="text-[11px] font-medium text-[#9333EA] pt-0.5"
                   >
                     Clear dates
                   </button>
                 )}
               </div>
 
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
                 {filteredTransactions.length} transaction{filteredTransactions.length === 1 ? '' : 's'} will be included, plus the
                 category and trend charts above.
               </p>
 
               {/* Format */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">File format</label>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-3">
                   {FORMATS.map((f) => (
                     <button
                       key={f.id}
                       type="button"
                       onClick={() => handleExport(f.id)}
                       disabled={filteredTransactions.length === 0 || isExporting !== null}
-                      className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:border-[#007AFF] dark:hover:border-[#007AFF] disabled:opacity-40 disabled:hover:border-neutral-200 dark:disabled:hover:border-neutral-700 bg-white dark:bg-neutral-800/60 transition-all active:scale-[0.97] flex flex-col items-center gap-1.5 text-center"
+                      className="p-4 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:border-[#9333EA] dark:hover:border-[#9333EA] disabled:opacity-40 disabled:hover:border-neutral-200 dark:disabled:hover:border-neutral-700 bg-white dark:bg-neutral-800/60 transition-all active:scale-[0.97] flex flex-col items-center gap-2 text-center"
                     >
                       {isExporting === f.id ? (
                         <RefreshCw className="w-4 h-4 text-neutral-400 animate-spin" />
@@ -225,7 +207,6 @@ export const ExportSection: React.FC<ExportSectionProps> = ({
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
-    </div>
+    </AnimatePresence>
   );
 };

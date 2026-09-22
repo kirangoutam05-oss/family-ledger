@@ -113,7 +113,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                     onClick={() => handleOpenResolve(tx)}
                     className={`animate-fade-slide-up w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.98] ${
                       isSelected
-                        ? 'border-[#007AFF] bg-blue-50/20 dark:bg-blue-950/20 ring-1 ring-[#007AFF]'
+                        ? 'border-[#9333EA] bg-blue-50/20 dark:bg-blue-950/20 ring-1 ring-[#9333EA]'
                         : 'border-black/[0.04] dark:border-white/[0.06] bg-white dark:bg-neutral-900 hover:border-black/[0.1] dark:hover:border-white/[0.1]'
                     }`}
                     style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
@@ -164,7 +164,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <div className="px-3.5 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-2 text-xs text-[#007AFF] font-medium">
+                  <div className="px-3.5 py-2 rounded-lg bg-[#9333EA]/10 border border-[#9333EA]/20 flex items-center gap-2 text-xs text-[#9333EA] font-medium">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>This is your expense. Please provide context to keep the couple balance synchronized.</span>
                   </div>
@@ -192,7 +192,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
                     placeholder="Who was this paid to?"
-                    className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                    className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                   />
                 </div>
 
@@ -213,7 +213,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                             onClick={() => setSelectedCategory(cat.id)}
                             className={`p-2 rounded-xl border text-xs flex items-center gap-2 transition-all ${
                               isChosen
-                                ? 'border-[#007AFF] bg-blue-50/30 dark:bg-blue-950/20 font-semibold'
+                                ? 'border-[#9333EA] bg-blue-50/30 dark:bg-blue-950/20 font-semibold'
                                 : 'border-black/[0.04] dark:border-white/[0.06] text-neutral-700 dark:text-neutral-300 hover:bg-black/[0.02]'
                             }`}
                           >
@@ -242,7 +242,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                     value={contextNote}
                     onChange={(e) => setContextNote(e.target.value)}
                     placeholder="e.g., Home maintenance, Electrician repair"
-                    className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                    className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                   />
                 </div>
 
@@ -252,7 +252,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                     <button
                       onClick={handleConfirmResolve}
                       disabled={isSubmitting}
-                      className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
+                      className="px-4 py-2 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Save Context & Rebalance</span>

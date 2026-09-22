@@ -50,7 +50,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
         <button
           type="button"
           onClick={onEnableLock}
-          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-xs font-semibold text-white transition-colors shrink-0"
+          className="px-3 py-1.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-xs font-semibold text-white transition-colors shrink-0"
         >
           Turn On
         </button>
@@ -128,7 +128,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
     <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-[#007AFF] shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-[#9333EA] shrink-0">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div className="min-w-0">
@@ -141,7 +141,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
         <button
           type="button"
           onClick={() => (isEditingPin ? resetPinForm() : setIsEditingPin(true))}
-          className="px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:border-[#007AFF] hover:text-[#007AFF] transition-colors flex items-center gap-1 shrink-0"
+          className="px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:border-[#9333EA] hover:text-[#9333EA] transition-colors flex items-center gap-1 shrink-0"
         >
           <span>{isEditingPin ? 'Cancel' : 'Change PIN'}</span>
           {!isEditingPin && <ChevronDown className="w-3.5 h-3.5" />}
@@ -166,7 +166,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
               // text-lg (18px), not text-sm — anything under 16px makes iOS
               // Safari auto-zoom the whole page on focus, which is what made
               // this field feel like it "resized" and broke normal typing.
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -183,7 +183,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
                 value={newPin}
                 onChange={(e) => setNewPin(digitsOnly(e.target.value))}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
             <div>
@@ -199,7 +199,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
                 value={confirmPin}
                 onChange={(e) => setConfirmPin(digitsOnly(e.target.value))}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-center text-lg font-semibold text-neutral-900 dark:text-white tracking-[0.25em] focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
           </div>
@@ -213,7 +213,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
           <button
             type="submit"
             disabled={isSaving}
-            className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+            className="w-full py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
           >
             <Check className="w-4 h-4" />
             <span>{isSaving ? 'Saving…' : 'Save New PIN'}</span>
@@ -248,7 +248,7 @@ export const AppLockSettings: React.FC<AppLockSettingsProps> = ({ personLabel, o
               type="button"
               onClick={handleEnableBiometric}
               disabled={isRegisteringBiometric}
-              className="px-2.5 py-1.5 rounded-lg bg-[#007AFF]/10 text-xs font-medium text-[#007AFF] hover:bg-[#007AFF]/20 flex items-center gap-1 transition-colors disabled:opacity-50"
+              className="px-2.5 py-1.5 rounded-lg bg-[#9333EA]/10 text-xs font-medium text-[#9333EA] hover:bg-[#9333EA]/20 flex items-center gap-1 transition-colors disabled:opacity-50"
             >
               <span>{isRegisteringBiometric ? 'Waiting…' : 'Enable'}</span>
             </button>

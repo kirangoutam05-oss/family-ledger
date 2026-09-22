@@ -55,7 +55,14 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
   };
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
+    <div
+      className="fixed inset-0 z-[100] overflow-y-auto bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white"
+      style={{
+        backgroundImage:
+          'radial-gradient(60% 40% at 50% 100%, rgba(147,51,234,0.16) 0%, rgba(147,51,234,0) 70%)',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
       <div className="min-h-full flex flex-col items-center justify-center p-5 sm:p-8">
         <form
           onSubmit={handleSubmit}
@@ -63,10 +70,10 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
         >
           {/* Header */}
           <div className="flex flex-col items-center text-center space-y-3">
-            <div className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-[20px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
               <img
-                src="/app-logo.jpg?v=4"
-                alt="Family Ledger Logo"
+                src="/knku-icon.png?v=1"
+                alt="KNKU Logo"
                 className="w-full h-full object-cover object-center block"
                 referrerPolicy="no-referrer"
               />
@@ -90,7 +97,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
               onChange={(e) => setFamilyName(e.target.value)}
               placeholder="e.g. The Sharmas"
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
             />
           </div>
 
@@ -106,7 +113,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
                 onChange={(e) => setPartnerAName(e.target.value)}
                 placeholder="e.g. Arjun"
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
             <div>
@@ -119,7 +126,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
                 onChange={(e) => setPartnerBName(e.target.value)}
                 placeholder="e.g. Priya"
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
           </div>
@@ -137,7 +144,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
                   onClick={() => setCurrency(c.symbol)}
                   className={`py-2 rounded-xl border text-xs font-semibold transition-all ${
                     currency === c.symbol
-                      ? 'bg-[#007AFF] border-[#007AFF] text-white shadow-xs'
+                      ? 'bg-[#9333EA] border-[#9333EA] text-white shadow-xs'
                       : 'border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300'
                   }`}
                 >
@@ -160,7 +167,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
                 disabled={!partnerAName.trim()}
                 className={`py-3 px-3 rounded-xl border text-sm font-semibold transition-all disabled:opacity-40 ${
                   myRole === 'husband'
-                    ? 'border-[#007AFF] bg-blue-50 dark:bg-blue-950/30 text-[#007AFF]'
+                    ? 'border-[#9333EA] bg-blue-50 dark:bg-blue-950/30 text-[#9333EA]'
                     : 'border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300'
                 }`}
               >
@@ -190,7 +197,7 @@ export const HouseholdSetupScreen: React.FC<HouseholdSetupScreenProps> = ({ onCo
           <button
             type="submit"
             disabled={!canSubmit || isSubmitting}
-            className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
           >
             <Heart className="w-4 h-4" />
             <span>{isSubmitting ? 'Setting up…' : 'Create Household'}</span>

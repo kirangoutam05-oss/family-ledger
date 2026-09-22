@@ -323,7 +323,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 type="checkbox"
                 checked={isRecurring}
                 onChange={(e) => setIsRecurring(e.target.checked)}
-                className="w-4 h-4 accent-[#007AFF] shrink-0"
+                className="w-4 h-4 accent-[#9333EA] shrink-0"
               />
             </label>
           )}
@@ -332,7 +332,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             type="submit"
             disabled={isSubmitting || !amount}
             className={`w-full py-2.5 rounded-xl text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 disabled:opacity-50 ${
-              paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#007AFF] hover:bg-blue-600'
+              paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#9333EA] hover:bg-[#7E22CE]'
             }`}
           >
             {paidForOther ? <HandCoins className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}

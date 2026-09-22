@@ -7,11 +7,15 @@ interface MonthlyWaveChartProps {
   husbandName: string;
   wifeName: string;
   currency: string;
+  // "dark" is for embedding on a permanently-dark surface (the Overview
+  // hero) regardless of the app's own light/dark theme — fixed light
+  // labels/gridlines instead of the usual theme-conditional classes.
+  variant?: 'auto' | 'dark';
 }
 
 const HUSBAND_COLOR = '#007AFF';
 const WIFE_COLOR = '#A855F7';
-const MONTHS_SHOWN = 6;
+const MONTHS_SHOWN = 4;
 
 interface Point {
   x: number;
@@ -57,7 +61,14 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
   husbandName,
   wifeName,
   currency,
+  variant = 'auto',
 }) => {
+  const isDark = variant === 'dark';
+  const legendText = isDark ? 'text-white/60' : 'text-neutral-500 dark:text-neutral-400';
+  const gridStroke = isDark ? 'stroke-white/[0.1]' : 'stroke-black/[0.05] dark:stroke-white/[0.07]';
+  const axisLabelFill = isDark ? 'fill-white/40' : 'fill-neutral-400 dark:fill-neutral-500';
+  const emptyText = isDark ? 'text-white/40' : 'text-neutral-400';
+
   const now = new Date();
   const months: { key: string; label: string; start: Date; end: Date }[] = [];
   for (let i = MONTHS_SHOWN - 1; i >= 0; i--) {
@@ -91,7 +102,7 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
 
   if (!hasAnyData) {
     return (
-      <p className="text-xs text-neutral-400 py-4 text-center">
+      <p className={`text-xs py-4 text-center ${emptyText}`}>
         Not enough history yet to chart a trend for this category.
       </p>
     );
@@ -120,7 +131,7 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
 
   return (
     <div className="pt-1">
-      <div className="flex items-center gap-3 text-[10.5px] text-neutral-500 dark:text-neutral-400 mb-1.5 px-0.5">
+      <div className={`flex items-center gap-3 text-[10.5px] mb-1.5 px-0.5 ${legendText}`}>
         <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: HUSBAND_COLOR }} />{husbandName}</span>
         <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: WIFE_COLOR }} />{wifeName}</span>
       </div>
@@ -133,7 +144,7 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
             x2={width - padX}
             y1={padTop + plotHeight * (1 - f)}
             y2={padTop + plotHeight * (1 - f)}
-            className="stroke-black/[0.05] dark:stroke-white/[0.07]"
+            className={gridStroke}
             strokeWidth={1}
           />
         ))}
@@ -161,7 +172,7 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
             x={padX + i * stepX}
             y={height - 6}
             textAnchor="middle"
-            className="fill-neutral-400 dark:fill-neutral-500"
+            className={axisLabelFill}
             style={{ fontSize: 9 }}
           >
             {m.label}

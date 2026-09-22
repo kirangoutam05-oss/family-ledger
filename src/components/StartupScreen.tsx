@@ -12,16 +12,16 @@ export const StartupScreen: React.FC = () => {
         initial={{ opacity: 0, scale: 0.94 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center"
+        className="w-14 h-14 rounded-[20px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center"
       >
         <img
-          src="/app-logo.jpg?v=4"
-          alt="Family Ledger Logo"
+          src="/knku-icon.png?v=1"
+          alt="KNKU Logo"
           className="w-full h-full object-cover object-center block"
           referrerPolicy="no-referrer"
         />
       </motion.div>
-      <div className="w-5 h-5 rounded-full border-2 border-neutral-300 dark:border-neutral-700 border-t-[#007AFF] animate-spin" />
+      <div className="w-5 h-5 rounded-full border-2 border-neutral-300 dark:border-neutral-700 border-t-[#9333EA] animate-spin" />
     </div>
   );
 };

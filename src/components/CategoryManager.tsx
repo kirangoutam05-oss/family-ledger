@@ -5,6 +5,7 @@ import { LedgerState, Category, Transaction, CATEGORY_ICON_OPTIONS } from '../ty
 import { formatCurrency, formatDate, getCategoryIcon } from '../utils/helpers';
 import { isInCurrentBillingCycle } from '../utils/billingCycle';
 import { MonthlyWaveChart } from './MonthlyWaveChart';
+import { TransactionIcon } from './TransactionIcon';
 
 interface CategoryManagerProps {
   ledger: LedgerState;
@@ -57,6 +58,37 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       categorySpend[tx.category] = (categorySpend[tx.category] || 0) + tx.amount;
     }
   });
+
+  // Amount vs Category — moved here from Overview. Same shared household
+  // window setting (Account settings) as before; both partners' bars always
+  // show since this page isn't scoped to a single spender the way Overview is.
+  const categoryBreakdownPeriod = ledger.categoryBreakdownPeriod ?? 'month';
+  const currentYear = new Date().getFullYear();
+  const categoryPeriodTransactions = transactions.filter((t) => {
+    if (categoryBreakdownPeriod === 'all') return true;
+    const d = new Date(t.date);
+    if (categoryBreakdownPeriod === 'year') return d.getFullYear() === currentYear;
+    return isInCurrentBillingCycle(t.date);
+  });
+  const categoryPersonTotals: Record<string, { husband: number; wife: number }> = {};
+  categories.forEach((cat) => {
+    categoryPersonTotals[cat.id] = { husband: 0, wife: 0 };
+  });
+  categoryPeriodTransactions.forEach((tx) => {
+    if (tx.type === 'debit') {
+      if (!categoryPersonTotals[tx.category]) categoryPersonTotals[tx.category] = { husband: 0, wife: 0 };
+      categoryPersonTotals[tx.category][tx.spender] += tx.amount;
+    }
+  });
+  const categoryBarData = categories
+    .filter((cat) => cat.id !== 'grey_area')
+    .map((cat) => {
+      const split = categoryPersonTotals[cat.id] || { husband: 0, wife: 0 };
+      return { cat, spent: split.husband + split.wife, husband: split.husband, wife: split.wife };
+    })
+    .filter((row) => row.spent > 0)
+    .sort((a, b) => b.spent - a.spent);
+  const maxCategorySpend = Math.max(...categoryBarData.map((row) => Math.max(row.husband, row.wife)), 1);
 
   const [formMode, setFormMode] = useState<'add' | 'edit' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -169,7 +201,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
           </button>
           <button
             onClick={openAddForm}
-            className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
+            className="px-3 py-1.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New</span>
@@ -293,9 +325,17 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                             key={tx.id}
                             type="button"
                             onClick={() => onEditTransaction(tx)}
-                            className="w-full flex items-center justify-between gap-3 py-2.5 text-left hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-lg px-1.5 -mx-1.5 transition-colors"
+                            className="w-full flex items-center gap-3 py-2.5 text-left hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-lg px-1.5 -mx-1.5 transition-colors"
                           >
-                            <div className="min-w-0">
+                            <TransactionIcon
+                              title={tx.title}
+                              bankName={tx.bankName}
+                              notes={tx.notes}
+                              category={cat}
+                              className="w-9 h-9 rounded-lg shrink-0"
+                              iconClassName="w-4 h-4"
+                            />
+                            <div className="min-w-0 flex-1">
                               <div className="text-xs font-medium text-neutral-900 dark:text-white truncate">
                                 {tx.title}
                               </div>
@@ -405,7 +445,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                 placeholder="e.g. Home Maintenance"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
               />
             </div>
 
@@ -420,7 +460,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                 placeholder="e.g. 5000"
                 value={form.budgetMonthly}
                 onChange={(e) => setForm((f) => ({ ...f, budgetMonthly: e.target.value === '' ? '' : Number(e.target.value) }))}
-                className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
               />
             </div>
 
@@ -473,7 +513,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+              className="w-full py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-50 text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
             >
               <Check className="w-3.5 h-3.5" />
               <span>{isSubmitting ? 'Saving...' : formMode === 'edit' ? 'Save Changes' : 'Create Category'}</span>

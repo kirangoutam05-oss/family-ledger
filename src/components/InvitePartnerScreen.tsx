@@ -24,7 +24,7 @@ export const InvitePartnerScreen: React.FC<InvitePartnerScreenProps> = ({ family
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-16 h-16 rounded-[22px] bg-white dark:bg-neutral-900 shadow-lg border border-black/[0.08] dark:border-white/[0.12] flex items-center justify-center text-[#007AFF]">
+          <div className="w-16 h-16 rounded-[22px] bg-white dark:bg-neutral-900 shadow-lg border border-black/[0.08] dark:border-white/[0.12] flex items-center justify-center text-[#9333EA]">
             <Users className="w-7 h-7" />
           </div>
           <div>
@@ -36,14 +36,14 @@ export const InvitePartnerScreen: React.FC<InvitePartnerScreenProps> = ({ family
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-white dark:bg-neutral-900 border border-black/10 dark:border-white/10 text-xs font-mono text-neutral-700 dark:text-neutral-300 break-all text-left">
+        <div className="p-3 rounded-lg bg-white dark:bg-neutral-900 border border-black/10 dark:border-white/10 text-xs font-mono text-neutral-700 dark:text-neutral-300 break-all text-left">
           {inviteUrl}
         </div>
 
         <button
           type="button"
           onClick={handleCopy}
-          className="w-full py-3 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2 transition-colors"
+          className="w-full py-3 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2 transition-colors"
         >
           {copied ? (
             <>
@@ -61,7 +61,7 @@ export const InvitePartnerScreen: React.FC<InvitePartnerScreenProps> = ({ family
         <button
           type="button"
           onClick={onContinue}
-          className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
+          className="w-full py-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
         >
           <span>Continue</span>
           <ArrowRight className="w-4 h-4" />

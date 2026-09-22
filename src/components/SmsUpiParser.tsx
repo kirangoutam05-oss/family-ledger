@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import {
   Sparkles,
   CheckCircle2,
   HelpCircle,
   RefreshCw,
   Clock,
-  History,
   Edit3,
   CalendarClock,
   HandCoins,
 } from 'lucide-react';
 import { Transaction, SpenderId, LedgerState, CategoryId } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
+import { TransactionIcon } from './TransactionIcon';
 
 interface SmsUpiParserProps {
   ledger: LedgerState;
@@ -232,26 +233,30 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
 
           <div className="flex items-center gap-1 bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-xl text-xs self-start sm:self-auto">
             <span className="text-neutral-400 px-2 text-[11px]">Paid by:</span>
-            <button
-              onClick={() => setSelectedSpender('husband')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
-                selectedSpender === 'husband'
-                  ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-neutral-600 dark:text-neutral-400'
-              }`}
-            >
-              {husbandName}
-            </button>
-            <button
-              onClick={() => setSelectedSpender('wife')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
-                selectedSpender === 'wife'
-                  ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-neutral-600 dark:text-neutral-400'
-              }`}
-            >
-              {wifeName}
-            </button>
+            {(['husband', 'wife'] as const).map((spender) => (
+              <button
+                key={spender}
+                onClick={() => setSelectedSpender(spender)}
+                className="relative px-2.5 py-1 rounded-lg font-medium"
+              >
+                {selectedSpender === spender && (
+                  <motion.span
+                    layoutId="smsPaidByPill"
+                    className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-lg shadow-xs"
+                    transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                  />
+                )}
+                <span
+                  className={`relative z-10 transition-colors ${
+                    selectedSpender === spender
+                      ? 'text-neutral-900 dark:text-white font-semibold'
+                      : 'text-neutral-600 dark:text-neutral-400'
+                  }`}
+                >
+                  {spender === 'husband' ? husbandName : wifeName}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -262,7 +267,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             onChange={(e) => setSmsInput(e.target.value)}
             placeholder="Paste your bank or UPI alert here, e.g. &quot;Rs. 1,420 debited from HDFC a/c **4012 on 10-09-26 to BLINKIT via UPI&quot;"
             rows={3}
-            className="w-full p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-[#007AFF] resize-none"
+            className="w-full p-3.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-[#9333EA] resize-none"
           />
 
           <div className="mt-3 flex items-center justify-between">
@@ -273,7 +278,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             <button
               onClick={() => handleParse()}
               disabled={isParsing || !smsInput.trim()}
-              className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+              className="px-4 py-2 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
             >
               {isParsing ? (
                 <>
@@ -317,12 +322,13 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
 
           <div className="p-4 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0"
-                style={{ backgroundColor: previewCat.color }}
-              >
-                {getCategoryIcon(previewCat.icon, 'w-5 h-5')}
-              </div>
+              <TransactionIcon
+                title={isGreyArea ? inlineTitle || parsedPreview.title || '' : parsedPreview.title || ''}
+                bankName={parsedPreview.bankName}
+                notes={parsedPreview.notes}
+                category={previewCat}
+                className="w-11 h-11 rounded-xl"
+              />
 
               <div>
                 <div className="text-sm font-semibold text-neutral-900 dark:text-white">
@@ -353,13 +359,13 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                 type="date"
                 value={previewDateStr}
                 onChange={(e) => updatePreviewDateTime(e.target.value, previewTimeStr)}
-                className="w-full h-9 px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="w-full h-9 px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
               />
               <input
                 type="time"
                 value={previewTimeStr}
                 onChange={(e) => updatePreviewDateTime(previewDateStr, e.target.value)}
-                className="w-full h-9 px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="w-full h-9 px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
               />
             </div>
 
@@ -381,28 +387,32 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
               This was:
             </span>
             <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-lg text-xs">
-              <button
-                type="button"
-                onClick={() => setParsedPreview({ ...parsedPreview, type: 'debit' })}
-                className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                  (parsedPreview.type || 'debit') === 'debit'
-                    ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-                    : 'text-neutral-500 dark:text-neutral-400'
-                }`}
-              >
-                Money Out (Debit)
-              </button>
-              <button
-                type="button"
-                onClick={() => setParsedPreview({ ...parsedPreview, type: 'credit' })}
-                className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                  parsedPreview.type === 'credit'
-                    ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-                    : 'text-neutral-500 dark:text-neutral-400'
-                }`}
-              >
-                Money In (Credit)
-              </button>
+              {(['debit', 'credit'] as const).map((txType) => {
+                const isActive = (parsedPreview.type || 'debit') === txType;
+                return (
+                  <button
+                    key={txType}
+                    type="button"
+                    onClick={() => setParsedPreview({ ...parsedPreview, type: txType })}
+                    className="relative px-3 py-1 rounded-md font-medium"
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="smsTxTypePill"
+                        className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-md shadow-xs"
+                        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                      />
+                    )}
+                    <span
+                      className={`relative z-10 transition-colors ${
+                        isActive ? 'text-neutral-900 dark:text-white font-semibold' : 'text-neutral-500 dark:text-neutral-400'
+                      }`}
+                    >
+                      {txType === 'debit' ? 'Money Out (Debit)' : 'Money In (Credit)'}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -470,7 +480,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                   value={inlineTitle}
                   onChange={(e) => setInlineTitle(e.target.value)}
                   placeholder="Who was this paid to?"
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-amber-200 dark:border-amber-900/40 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-amber-200 dark:border-amber-900/40 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                 />
               </div>
 
@@ -516,7 +526,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                   value={inlineNote}
                   onChange={(e) => setInlineNote(e.target.value)}
                   placeholder="e.g., Home maintenance, Electrician repair"
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-amber-200 dark:border-amber-900/40 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-800 border border-amber-200 dark:border-amber-900/40 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                 />
               </div>
             </div>
@@ -542,7 +552,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             <button
               onClick={handleConfirmAndAdd}
               className={`px-4 py-1.5 rounded-xl text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs ${
-                paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#007AFF] hover:bg-[#0071E3]'
+                paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#9333EA] hover:bg-[#7E22CE]'
               }`}
             >
               {paidForOther ? <HandCoins className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
@@ -557,9 +567,8 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
           entry can be caught and fixed immediately instead of hunting for it
           later in Recent Activity. */}
       <div className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 px-1">
-          <History className="w-3.5 h-3.5" />
-          <span>Recently Added</span>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 px-1">
+          Recently Added
         </h2>
 
         <div className="rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs overflow-hidden divide-y divide-black/[0.04] dark:divide-white/[0.04]">
@@ -578,12 +587,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
                   className="w-full p-3.5 flex items-center justify-between gap-3 text-left hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0"
-                      style={{ backgroundColor: cat.color }}
-                    >
-                      {getCategoryIcon(cat.icon, 'w-4 h-4')}
-                    </div>
+                    <TransactionIcon title={tx.title} bankName={tx.bankName} notes={tx.notes} category={cat} className="w-9 h-9 rounded-lg" iconClassName="w-4 h-4" />
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-neutral-900 dark:text-white truncate">
                         {tx.title}

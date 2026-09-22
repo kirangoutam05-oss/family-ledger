@@ -59,7 +59,7 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({ auth
         <div className="flex items-center gap-3 min-w-0">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isSubscribed ? 'bg-[#007AFF]/10 text-[#007AFF]' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400'
+              isSubscribed ? 'bg-[#9333EA]/10 text-[#9333EA]' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400'
             }`}
           >
             {isSubscribed ? <BellRing className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
@@ -80,7 +80,7 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({ auth
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors shrink-0 disabled:opacity-50 ${
             isSubscribed
               ? 'border border-black/[0.08] dark:border-white/[0.12] text-neutral-700 dark:text-neutral-300 hover:border-red-400 hover:text-red-500'
-              : 'bg-[#007AFF] hover:bg-[#0071E3] text-white'
+              : 'bg-[#9333EA] hover:bg-[#7E22CE] text-white'
           }`}
         >
           {isBusy ? 'Working…' : isSubscribed ? 'Turn Off' : 'Enable'}

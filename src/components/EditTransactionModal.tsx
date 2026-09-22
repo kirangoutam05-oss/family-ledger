@@ -153,6 +153,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const currentCategory = categories.find((c) => c.id === (isOwner ? category : transaction.category)) || categories[0];
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -173,7 +174,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           <div className="flex items-center gap-2.5">
             <div
               className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                isOwner ? 'bg-blue-500/10 text-[#007AFF]' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                isOwner ? 'bg-[#9333EA]/10 text-[#9333EA]' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
               }`}
             >
               {isOwner ? <UserCheck className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
@@ -216,7 +217,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             </div>
           </div>
         ) : (
-          <div className="px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-2 text-xs text-[#007AFF] font-medium">
+          <div className="px-3 py-2 rounded-lg bg-[#9333EA]/10 border border-[#9333EA]/20 flex items-center gap-2 text-xs text-[#9333EA] font-medium">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>You own this transaction and have full permission to modify or delete it.</span>
           </div>
@@ -235,7 +236,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
 
@@ -255,7 +256,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
                   required
-                  className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full pl-8 pr-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
                 />
               </div>
             </div>
@@ -276,7 +277,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   required
                   value={dateStr}
                   onChange={(e) => setDateStr(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full h-11 px-3.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
                 />
               </div>
               <div>
@@ -288,7 +289,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   required
                   value={timeStr}
                   onChange={(e) => setTimeStr(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full h-11 px-3.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
                 />
               </div>
             </div>
@@ -306,7 +307,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     onClick={() => setCategory(cat.id)}
                     className={`min-h-[48px] p-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white dark:bg-neutral-800 transition-all ${
                       category === cat.id
-                        ? 'ring-2 ring-[#007AFF] border-blue-200 dark:border-blue-800 text-[#007AFF]'
+                        ? 'ring-2 ring-[#9333EA] border-blue-200 dark:border-blue-800 text-[#9333EA]'
                         : 'border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white hover:border-neutral-300 dark:hover:border-neutral-600'
                     }`}
                   >
@@ -335,7 +336,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     onClick={() => setPaymentMode(mode)}
                     className={`py-2 rounded-xl border text-xs font-medium transition-all whitespace-nowrap ${
                       paymentMode === mode
-                        ? 'border-[#007AFF] bg-blue-50/50 dark:bg-blue-950/30 text-[#007AFF] font-semibold'
+                        ? 'border-[#9333EA] bg-blue-50/50 dark:bg-blue-950/30 text-[#9333EA] font-semibold'
                         : 'border-black/[0.06] dark:border-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800'
                     }`}
                   >
@@ -359,7 +360,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 type="checkbox"
                 checked={isRecurring}
                 onChange={(e) => setIsRecurring(e.target.checked)}
-                className="w-4 h-4 accent-[#007AFF] shrink-0"
+                className="w-4 h-4 accent-[#9333EA] shrink-0"
               />
             </label>
 
@@ -373,7 +374,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="e.g. Dinner with college friends"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
 
@@ -384,54 +385,31 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="pt-3 flex items-center justify-between gap-3 border-t border-black/[0.05] dark:border-white/[0.08]">
-              {!showDeleteConfirm ? (
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="px-3.5 py-2.5 rounded-xl border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Delete Expense</span>
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                    className="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50"
-                  >
-                    {isDeleting ? 'Deleting...' : 'Confirm Delete'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="px-2.5 py-2 rounded-xl border border-black/10 dark:border-white/10 text-xs text-neutral-500"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+            {/* Action Buttons — compact icon+label; the top-right X already
+                covers "cancel", so this row only needs the two real
+                decisions. Delete opens a real confirmation pop-up rather
+                than swapping in place, since destroying data deserves a
+                harder stop. */}
+            <div className="pt-3 flex items-center gap-3 border-t border-black/[0.05] dark:border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                title="Delete expense"
+                className="flex-1 h-12 rounded-xl border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center justify-center gap-1.5 text-sm font-semibold transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete</span>
+              </button>
 
-              <div className="flex items-center gap-2 ml-auto">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl border border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] active:scale-95 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Saving...' : 'Save Changes'}</span>
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                title="Save changes"
+                className="flex-1 h-12 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] active:scale-95 text-white shadow-md flex items-center justify-center gap-1.5 text-sm font-semibold transition-all disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSubmitting ? 'Saving…' : 'Save'}</span>
+              </button>
             </div>
           </form>
         ) : (
@@ -503,5 +481,54 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         )}
       </motion.div>
     </motion.div>
+
+    {/* Delete confirmation — a real pop-up above the edit modal, rather
+        than swapping the trigger button in place. */}
+    {showDeleteConfirm && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        onClick={(e) => e.target === e.currentTarget && setShowDeleteConfirm(false)}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 6 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+          className="glass-sheet rounded-[24px] max-w-xs w-full p-5 border border-black/[0.06] dark:border-white/[0.1] space-y-4 text-center"
+        >
+          <div className="w-11 h-11 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
+            <Trash2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-neutral-900 dark:text-white">Delete this expense?</h4>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+              "{transaction.title}" ({formatCurrency(transaction.amount, currency)}) will be removed for good. This can't be undone.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              className="flex-1 py-2.5 rounded-lg border border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition-colors"
+            >
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+    </>
   );
 };

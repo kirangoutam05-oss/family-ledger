@@ -27,6 +27,10 @@ interface AppleHeaderProps {
   onLockLedger?: () => void;
   onSwitchUser?: () => void;
   onLockNow?: () => void;
+  // "hero" sits directly on top of the Overview page's gradient banner — no
+  // background/border/blur of its own, and its text is always light, since
+  // it's permanently over a dark gradient regardless of the app's own theme.
+  variant?: 'default' | 'hero';
 }
 
 export const AppleHeader: React.FC<AppleHeaderProps> = ({
@@ -45,28 +49,42 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
   onLockLedger,
   onSwitchUser,
   onLockNow,
+  variant = 'default',
 }) => {
   const [spenderMenuOpen, setSpenderMenuOpen] = useState(false);
+  const isHero = variant === 'hero';
+
+  const primaryText = isHero ? 'text-white' : 'text-neutral-900 dark:text-white';
+  const secondaryText = isHero ? 'text-white/65' : 'text-neutral-500 dark:text-neutral-400';
+  const chevronBg = isHero
+    ? 'bg-white/15 hover:bg-white/25'
+    : 'bg-black/[0.06] dark:bg-white/[0.1] hover:bg-black/[0.1] dark:hover:bg-white/[0.16]';
+  const chevronIcon = isHero ? 'text-white' : 'text-neutral-700 dark:text-neutral-200';
+  const iconBtn = isHero
+    ? 'text-white/80 hover:text-white hover:bg-white/10'
+    : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5';
 
   return (
     <header
-      className="glass-nav sticky top-0 z-30 border-b border-black/[0.05] dark:border-white/[0.08] transition-colors"
-      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      className={`sticky top-0 z-30 transition-colors ${
+        isHero ? 'backdrop-blur-2xl backdrop-saturate-150' : 'glass-nav border-b border-black/[0.05] dark:border-white/[0.08]'
+      }`}
+      style={{ paddingTop: 'env(safe-area-inset-top)', background: isHero ? 'rgba(5,3,8,0.72)' : undefined }}
     >
       <div className="relative max-w-5xl mx-auto px-3 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Brand mark + household name/spender picker */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <img
-            src="/app-logo-mark.png?v=1"
+            src="/knku-icon.png?v=1"
             alt=""
-            className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0 -my-1"
+            className="w-8 h-8 sm:w-9 sm:h-9 object-contain shrink-0 -my-1"
             referrerPolicy="no-referrer"
           />
           <div className="flex flex-col justify-center min-w-0">
             <div className="flex items-center gap-0.5 min-w-0">
               <button
                 onClick={onGoToOverview}
-                className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900 dark:text-white leading-tight truncate max-w-[140px] sm:max-w-none text-left active:opacity-60 transition-opacity"
+                className={`text-lg sm:text-xl font-medium tracking-tight leading-tight truncate max-w-[140px] sm:max-w-none text-left active:opacity-60 transition-opacity ${primaryText}`}
                 title="Go to Overview"
               >
                 {familyName}
@@ -74,25 +92,29 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
 
               <button
                 onClick={() => setSpenderMenuOpen((v) => !v)}
-                className="p-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.1] hover:bg-black/[0.1] dark:hover:bg-white/[0.16] flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1"
+                className={`p-1.5 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1 ${chevronBg}`}
                 title="Switch between Overall, Kiran, and Mageswari"
               >
                 <ChevronDown
                   strokeWidth={3}
-                  className={`w-4 h-4 sm:w-5 sm:h-5 text-neutral-700 dark:text-neutral-200 transition-transform ${spenderMenuOpen ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${chevronIcon} ${spenderMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
               <button
                 onClick={onOpenSyncModal}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium transition-colors shrink-0 ml-0.5"
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors shrink-0 ml-0.5 ${
+                  isHero
+                    ? 'bg-white/15 hover:bg-white/25 text-white'
+                    : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                }`}
                 title="Family sync status. Tap to see paired devices or switch who's using this phone."
               >
-                <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isSyncing ? 'animate-ping' : ''}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${isHero ? 'bg-white' : 'bg-emerald-500'} ${isSyncing ? 'animate-ping' : ''}`} />
                 <span className="hidden sm:inline">Synced</span>
               </button>
             </div>
-            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 hidden sm:block leading-normal mt-0.5">
+            <p className={`text-[11px] hidden sm:block leading-normal mt-0.5 ${secondaryText}`}>
               Signed in as {authenticatedUser === 'husband' ? husbandName : wifeName}
             </p>
           </div>
@@ -180,7 +202,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <button
             onClick={onOpenNotifications}
-            className="relative p-2 rounded-xl text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-90"
+            className={`relative p-2 rounded-xl transition-all active:scale-90 ${iconBtn}`}
             title="Budget Alerts & Notifications"
           >
             <Bell className="w-4 h-4" />
@@ -192,7 +214,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
           {onLockNow && (
             <button
               onClick={onLockNow}
-              className="p-2 rounded-xl text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-90"
+              className={`p-2 rounded-xl transition-all active:scale-90 ${iconBtn}`}
               title="Lock the app now"
             >
               <Lock className="w-4 h-4" />
@@ -204,7 +226,11 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
               unlabeled dot here was confusing on a touch screen with no hover to reveal its title. */}
           <button
             onClick={onSwitchUser || onLockLedger}
-            className="hidden sm:flex px-2.5 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-800 text-xs font-semibold items-center gap-1.5 shadow-xs hover:border-[#007AFF] hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-all active:scale-95 cursor-pointer"
+            className={`hidden sm:flex px-2.5 py-1.5 rounded-xl text-xs font-semibold items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
+              isHero
+                ? 'border border-white/20 bg-white/10 hover:bg-white/15'
+                : 'border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-800 shadow-xs hover:border-[#9333EA] hover:bg-neutral-50 dark:hover:bg-neutral-700'
+            }`}
             title={`Signed in as ${authenticatedUser === 'husband' ? husbandName : wifeName} • Tap to switch identity on this device`}
           >
             <span
@@ -212,21 +238,37 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
                 authenticatedUser === 'husband' ? 'bg-blue-500' : 'bg-purple-500'
               }`}
             />
-            <span className="text-neutral-900 dark:text-white font-medium">
+            <span className={`font-medium ${primaryText}`}>
               {authenticatedUser === 'husband' ? husbandName : wifeName}
             </span>
-            <Lock className="w-3 h-3 text-neutral-400" />
+            <Lock className={`w-3 h-3 ${isHero ? 'text-white/50' : 'text-neutral-400'}`} />
           </button>
 
-          <button
-            onClick={onOpenAddModal}
-            className="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-all active:scale-90 shadow-xs shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Add</span>
-          </button>
+          {!isHero && (
+            <button
+              onClick={onOpenAddModal}
+              className="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-all active:scale-90 shadow-xs shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Add</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Progressive blur — extends the frosted effect a little past the
+          header's own edge, fading to nothing, so content doesn't blur then
+          un-blur with a hard cutoff right at the header's bottom border. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-0 right-0 top-full h-7"
+        style={{
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
+          maskImage: 'linear-gradient(to bottom, black, transparent)',
+          WebkitMaskImage: 'linear-gradient(to bottom, black, transparent)',
+        }}
+      />
     </header>
   );
 };

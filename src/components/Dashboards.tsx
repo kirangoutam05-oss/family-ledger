@@ -6,21 +6,20 @@ import {
   LedgerState,
   CategoryId,
 } from '../types';
-import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeIcon, getPaymentModeLabel, localDateKey } from '../utils/helpers';
+import { formatCurrency, formatDate, getPaymentModeLabel, localDateKey } from '../utils/helpers';
 import { detectRecurringGroups } from '../utils/recurringDetector';
 import { billingCycleStart, billingCycleEnd, billingCycleLabel } from '../utils/billingCycle';
 import { ExportSection } from './ExportSection';
 import { BulkEditSheet } from './BulkEditSheet';
+import { MonthlyWaveChart } from './MonthlyWaveChart';
+import { TransactionIcon } from './TransactionIcon';
 import { TransactionFilterSheet, TransactionFilters, EMPTY_FILTERS, countActiveFilters } from './TransactionFilterSheet';
 import {
   TrendingDown,
-  TrendingUp,
-  Users,
   HelpCircle,
   Search,
   Lock,
   Edit3,
-  BarChart3,
   SlidersHorizontal,
   Repeat,
   CheckSquare,
@@ -28,6 +27,8 @@ import {
   X,
   Tag,
   CreditCard,
+  Plus,
+  Download,
 } from 'lucide-react';
 
 
@@ -42,6 +43,7 @@ interface DashboardsProps {
     transactionIds: string[],
     updates: { category?: CategoryId; paymentMode?: Transaction['paymentMode'] }
   ) => Promise<{ updatedCount: number; skippedIds: string[] }>;
+  onOpenAddModal: () => void;
 }
 
 export const Dashboards: React.FC<DashboardsProps> = ({
@@ -51,6 +53,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   onResolveGreyArea,
   onEditTransaction,
   onBulkUpdateTransactions,
+  onOpenAddModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trendGranularity, setTrendGranularity] = useState<'day' | 'week' | 'month'>('day');
@@ -61,6 +64,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEditField, setBulkEditField] = useState<'category' | 'paymentMode' | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
@@ -70,10 +74,11 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     return t.spender === activeSpender;
   });
 
-  // Calculate stats
-  const totalDebits = relevantTransactions
-    .filter((t) => t.type === 'debit')
-    .reduce((sum, t) => sum + t.amount, 0);
+  // Most recent entries, shown right below the hero — a quick "did that just
+  // log?" confirmation sitting close to the button that creates one.
+  const latestTransactions = [...relevantTransactions]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 3);
 
   // "This Month" — scoped to the current 21st-to-20th billing cycle, not
   // all-time, so the headline number reads as an actual monthly cash flow.
@@ -111,26 +116,6 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       : { text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/10' };
   const outflowCardLabel =
     activeSpender === 'shared' ? 'Household Outflow' : `${activeSpender === 'husband' ? husbandName : wifeName}'s Outflow`;
-
-  // Household spending breakdown by partner (informational — not a debt/balance),
-  // scoped to the current billing cycle so it reads as "this month" rather than
-  // an ever-growing all-time figure — same cycle as the Outflow card's "This Month".
-  const husbandSpent = transactions
-    .filter((t) => t.type === 'debit' && t.spender === 'husband')
-    .filter((t) => {
-      const d = new Date(t.date);
-      return d >= currentCycleStart && d < currentCycleEnd;
-    })
-    .reduce((sum, t) => sum + t.amount, 0);
-  const wifeSpent = transactions
-    .filter((t) => t.type === 'debit' && t.spender === 'wife')
-    .filter((t) => {
-      const d = new Date(t.date);
-      return d >= currentCycleStart && d < currentCycleEnd;
-    })
-    .reduce((sum, t) => sum + t.amount, 0);
-  const householdTotal = husbandSpent + wifeSpent;
-  const husbandSharePercent = householdTotal > 0 ? Math.round((husbandSpent / householdTotal) * 100) : 50;
 
   // "Amount vs Category" window — a shared household setting (both partners
   // see the same view), defaulting to the current billing cycle for anyone
@@ -236,9 +221,6 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     })
     .filter((row) => row.spent > 0)
     .sort((a, b) => b.spent - a.spent);
-  const maxCategorySpend = isShared
-    ? Math.max(...categoryBarData.map((row) => Math.max(row.husband, row.wife)), 1)
-    : Math.max(...categoryBarData.map((row) => row.spent), 1);
 
   // Spending Trends — the Day/Week/Month filter drives an auto-generated bar
   // chart of a rolling window (7 days / 6 weeks / 6 months), scoped to
@@ -369,195 +351,110 @@ export const Dashboards: React.FC<DashboardsProps> = ({
 
   return (
     <div className={`space-y-6 ${isSelectMode && selectedIds.size > 0 ? 'pb-20' : ''}`}>
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Outflow Card — Today alongside the current billing cycle, both
-            tinted with the active spender's colour. */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-4">
-            <span>{outflowCardLabel}</span>
-            <span className={`p-1 rounded-md ${spenderAccent.bg} ${spenderAccent.text}`}>
-              <TrendingDown className="w-3.5 h-3.5" />
-            </span>
-          </div>
-          <div className="grid grid-cols-2 divide-x divide-black/[0.06] dark:divide-white/[0.08]">
-            <div className="pr-4">
-              <div className="text-[10px] uppercase tracking-wide text-neutral-400 mb-1">Today</div>
-              <div className={`text-2xl font-bold tracking-tight ${spenderAccent.text}`}>
-                {formatCurrency(todayDebits, currency)}
-              </div>
-              <div className="text-[11px] text-neutral-400 mt-1">
-                {todayDebitTxs.length} transaction{todayDebitTxs.length === 1 ? '' : 's'}
-              </div>
-            </div>
-            <div className="pl-4">
-              <div className="text-[10px] uppercase tracking-wide text-neutral-400 mb-1">This Month</div>
-              <div className={`text-2xl font-bold tracking-tight ${spenderAccent.text}`}>
-                {formatCurrency(currentCycleDebits, currency)}
-              </div>
-              <div className="text-[11px] text-neutral-400 mt-1">
-                {currentCycleDebitTxs.length} txns • {currentCycleLabel}
-              </div>
-            </div>
-          </div>
+      {/* Household Outflow — full-bleed black banner continuing straight down
+          from the header above (same solid black, no seam), with just a
+          soft purple glow behind the numbers rather than a bright gradient
+          sweep. Roughly half the screen together with the header. */}
+      <div
+        className="-mx-4 sm:-mx-6 -mt-6 px-4 sm:px-6 pt-3 sm:pt-4 pb-6 rounded-b-[2.5rem] text-white"
+        style={{ background: 'radial-gradient(70% 85% at 50% 100%, rgba(147,51,234,0.28) 0%, rgba(147,51,234,0) 72%), #050308' }}
+      >
+        <div className="flex items-center justify-between text-xs font-semibold text-white/70">
+          <span>{outflowCardLabel}</span>
+          <span className="p-1.5 rounded-lg bg-white/10 text-white">
+            <TrendingDown className="w-4 h-4" />
+          </span>
+        </div>
+        <p className="text-[11px] text-white/50 mt-1">{currentCycleLabel}</p>
+
+        {/* Currency symbol set apart from the digits — at this size a plain
+            ₹ inline with a heavy weight renders with mismatched glyph
+            proportions in most system fonts, so it gets its own smaller,
+            lighter baseline-aligned span instead. */}
+        <div className="flex items-start gap-1 mt-4">
+          <span className="text-2xl sm:text-3xl font-medium text-white/80 mt-1 sm:mt-1.5">{currency}</span>
+          <span className="text-5xl sm:text-6xl font-semibold tracking-tight">
+            {Number(currentCycleDebits || 0).toLocaleString('en-IN')}
+          </span>
+        </div>
+        <div className="text-xs text-white/60 mt-2">
+          Today: {formatCurrency(todayDebits, currency)} · {todayDebitTxs.length} txn{todayDebitTxs.length === 1 ? '' : 's'}
         </div>
 
-        {/* Household Spending Breakdown Card */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400">
-            <span>Household Spending</span>
-            <span className="p-1 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-              <Users className="w-3.5 h-3.5" />
-            </span>
-          </div>
+        {/* Household Spending, as a wave — Kiran vs Mageswari over the last
+            4 months, right above the buttons that add to it. */}
+        <div className="mt-6">
+          <MonthlyWaveChart
+            transactions={relevantTransactions}
+            husbandName={husbandName}
+            wifeName={wifeName}
+            currency={currency}
+            variant="dark"
+          />
+        </div>
 
-          <div className="my-2 space-y-2">
-            <div className="w-full h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden flex">
-              <motion.div
-                className="h-full bg-blue-500"
-                initial={{ width: 0 }}
-                animate={{ width: `${husbandSharePercent}%` }}
-                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              />
-              <motion.div
-                className="h-full bg-purple-500"
-                initial={{ width: 0 }}
-                animate={{ width: `${100 - husbandSharePercent}%` }}
-                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                {husbandName}: {formatCurrency(husbandSpent, currency)}
-              </span>
-              <span className="flex items-center gap-1.5 text-neutral-700 dark:text-neutral-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                {wifeName}: {formatCurrency(wifeSpent, currency)}
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-1">
-            <span className="text-xs text-neutral-400">This month's split ({currentCycleLabel}), no balance owed</span>
-          </div>
+        <div className="mt-6 flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={onOpenAddModal}
+            className="flex-1 py-4 rounded-lg bg-white text-[#4C1D95] text-sm font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] hover:bg-white/90"
+          >
+            <Plus className="w-4 h-4" />
+            Add Expense
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowExportModal(true)}
+            className="w-14 py-4 rounded-lg bg-white/10 border border-white/20 text-white flex items-center justify-center shrink-0 transition-all active:scale-[0.98] hover:bg-white/15"
+            title="Export data"
+          >
+            <Download className="w-4.5 h-4.5" />
+          </button>
         </div>
       </div>
 
-      {/* Amount vs Category — Overview overlays both partners' bars per
-          category; an individual view (Kiran/Mageswari) shows only that
-          person's bars. */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 px-1">
-          <div className="min-w-0">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>Amount vs Category</span>
-            </h2>
-            <p className="text-[10px] text-neutral-400 mt-0.5">
-              {categoryBreakdownPeriod === 'month'
-                ? `This month (${currentCycleLabel})`
-                : categoryBreakdownPeriod === 'year'
-                ? `This year (${currentYear})`
-                : 'All time'}
-              {' · change in Account settings'}
-            </p>
-          </div>
-          {isShared && (
-            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-neutral-400 shrink-0">
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{husbandName}</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-purple-500" />{wifeName}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs">
-          {categoryBarData.length === 0 ? (
-            <p className="text-xs text-neutral-400 py-6 text-center">
-              No expenses recorded yet. Bars will appear here once you log some.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {categoryBarData.map(({ cat, spent, husband, wife }, index) => {
-                const shareOfTotal = totalDebits > 0 ? Math.round((spent / totalDebits) * 100) : 0;
-                return (
-                  <div
-                    key={cat.id}
-                    className="group animate-fade-slide-up"
-                    style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
-                  >
-                    <div className="flex items-center justify-between mb-1 gap-2">
-                      <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 min-w-0">
-                        <span
-                          className="w-4 h-4 rounded-md flex items-center justify-center text-white shrink-0"
-                          style={{ backgroundColor: cat.color }}
-                        >
-                          {getCategoryIcon(cat.icon, 'w-2.5 h-2.5')}
-                        </span>
-                        <span className="truncate min-w-0">{cat.name}</span>
-                      </span>
-                      <span className="text-xs font-semibold text-neutral-900 dark:text-white shrink-0">
-                        {formatCurrency(spent, currency)}
-                        <span className="hidden sm:inline text-neutral-400 font-normal"> ({shareOfTotal}%)</span>
-                      </span>
-                    </div>
-
-                    {isShared ? (
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="flex-1 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
-                            title={`${husbandName}: ${formatCurrency(husband, currency)}`}
-                          >
-                            <motion.div
-                              className="h-full rounded-full bg-blue-500"
-                              initial={{ width: 0 }}
-                              animate={{ width: `${Math.max((husband / maxCategorySpend) * 100, husband > 0 ? 3 : 0)}%` }}
-                              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
-                            />
-                          </div>
-                          <span className="text-[10px] text-neutral-400 w-16 text-right shrink-0">
-                            {formatCurrency(husband, currency)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="flex-1 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
-                            title={`${wifeName}: ${formatCurrency(wife, currency)}`}
-                          >
-                            <motion.div
-                              className="h-full rounded-full bg-purple-500"
-                              initial={{ width: 0 }}
-                              animate={{ width: `${Math.max((wife / maxCategorySpend) * 100, wife > 0 ? 3 : 0)}%` }}
-                              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
-                            />
-                          </div>
-                          <span className="text-[10px] text-neutral-400 w-16 text-right shrink-0">
-                            {formatCurrency(wife, currency)}
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        className="w-full h-2 rounded-full bg-black/[0.05] dark:bg-white/[0.08] overflow-hidden"
-                        title={`${cat.name}: ${formatCurrency(spent, currency)} (${shareOfTotal}% of total spend)`}
-                      >
-                        <motion.div
-                          className="h-full rounded-full group-hover:opacity-80 transition-opacity"
-                          style={{ backgroundColor: cat.color }}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.max((spent / maxCategorySpend) * 100, 3)}%` }}
-                          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
-                        />
-                      </div>
-                    )}
+      {/* Latest activity — each entry its own pod in a horizontal strip
+          rather than a stacked list, rolling into place on mount. Carries
+          the "Recent Activity" heading that used to sit on the full list
+          further down, which is now "Past Activity" instead. */}
+      {latestTransactions.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 px-1">
+            Recent Activity
+          </h2>
+          <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:-mx-6 sm:px-6 no-scrollbar">
+            {latestTransactions.map((tx, index) => {
+              const cat = ledger.categories.find((c) => c.id === tx.category) || ledger.categories[0];
+              return (
+                <motion.button
+                  key={tx.id}
+                  type="button"
+                  onClick={() => onEditTransaction(tx)}
+                  initial={{ opacity: 0, x: 56, rotate: 8, scale: 0.92 }}
+                  animate={{ opacity: 1, x: 0, rotate: 0, scale: 1 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={{ type: 'spring', stiffness: 280, damping: 22, delay: index * 0.09 }}
+                  className="shrink-0 w-[136px] p-3.5 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs flex flex-col items-start gap-2.5 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
+                >
+                  <TransactionIcon title={tx.title} bankName={tx.bankName} notes={tx.notes} category={cat} />
+                  <div className="min-w-0 w-full">
+                    <div className="text-xs font-semibold text-neutral-900 dark:text-white truncate">{tx.title}</div>
+                    <div className="text-[10px] text-neutral-400 mt-0.5 truncate">{formatDate(tx.date)}</div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div
+                    className={`text-sm font-bold ${
+                      tx.type === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-900 dark:text-white'
+                    }`}
+                  >
+                    {tx.type === 'credit' ? '+' : '-'}
+                    {formatCurrency(tx.amount, currency)}
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Spending Trends — Day/Week/Month filter drives an auto-generated bar
           chart. This is the primary chart on the page now that Category
@@ -565,22 +462,32 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           summary stats alongside the bars. */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>Spending Trends</span>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+            Spending Trends
           </h2>
           <div className="flex items-center bg-black/[0.04] dark:bg-white/[0.06] p-0.5 rounded-lg text-[11px] font-medium">
             {(['day', 'week', 'month'] as const).map((g) => (
               <button
                 key={g}
                 onClick={() => setTrendGranularity(g)}
-                className={`px-2.5 py-1 rounded-md capitalize transition-colors ${
-                  trendGranularity === g
-                    ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-xs font-semibold'
-                    : 'text-neutral-500 dark:text-neutral-400'
-                }`}
+                className="relative px-2.5 py-1 rounded-md capitalize"
               >
-                {g}
+                {trendGranularity === g && (
+                  <motion.span
+                    layoutId="trendGranularityPill"
+                    className="absolute inset-0 bg-white dark:bg-neutral-800 rounded-md shadow-xs"
+                    transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                  />
+                )}
+                <span
+                  className={`relative z-10 transition-colors ${
+                    trendGranularity === g
+                      ? 'text-neutral-900 dark:text-white font-semibold'
+                      : 'text-neutral-500 dark:text-neutral-400'
+                  }`}
+                >
+                  {g}
+                </span>
               </button>
             ))}
           </div>
@@ -599,14 +506,18 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             </p>
           ) : (
             <>
-              {/* Summary stat row */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.04]">
-                  <div className="text-[10px] uppercase tracking-wide text-neutral-400">Total</div>
-                  <div className="text-sm font-semibold text-neutral-900 dark:text-white mt-0.5">
-                    {formatCurrency(trendTotal, currency)}
+              {/* Summary stat row — "Total" is only meaningful for Week/Month,
+                  where the window is a clean period; Day's window is a
+                  scrolling all-history strip, so Total there is just noise. */}
+              <div className={`grid gap-3 ${trendGranularity === 'day' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {trendGranularity !== 'day' && (
+                  <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.04]">
+                    <div className="text-[10px] uppercase tracking-wide text-neutral-400">Total</div>
+                    <div className="text-sm font-semibold text-neutral-900 dark:text-white mt-0.5">
+                      {formatCurrency(trendTotal, currency)}
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.04]">
                   <div className="text-[10px] uppercase tracking-wide text-neutral-400">Avg / {trendPeriodLabel}</div>
                   <div className="text-sm font-semibold text-neutral-900 dark:text-white mt-0.5">
@@ -629,7 +540,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                 )}
                 <div
                   ref={trendScrollRef}
-                  className="flex items-end gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth snap-x snap-mandatory"
+                  className="flex items-end gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth snap-x snap-mandatory no-scrollbar"
                 >
                   {/* Bars only ever grow to BAR_MAX_PCT of the container's
                       height — the rest is reserved headroom so every amount
@@ -649,7 +560,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         <div className="w-full h-44 sm:h-52 relative border-b border-black/[0.06] dark:border-white/[0.08]">
                           <motion.div
                             className={`absolute bottom-0 left-0 w-full rounded-t-md ${
-                              b.key === trendPeak.key ? 'bg-[#0A84FF]' : 'bg-[#0A84FF]/50'
+                              b.key === trendPeak.key ? 'bg-[#9333EA]' : 'bg-[#9333EA]/50'
                             }`}
                             initial={{ height: 0 }}
                             animate={{ height: `${barHeightPct}%` }}
@@ -679,14 +590,25 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         </div>
       </div>
 
-      {/* Export — CSV/XLSX/PDF/DOC of the transaction list, plus the charts above */}
-      <ExportSection ledger={ledger} activeSpender={activeSpender} relevantTransactions={relevantTransactions} trendBuckets={trendBuckets} trendGranularity={trendGranularity} categoryBarData={categoryBarData} />
+      {/* Export modal — CSV/XLSX/PDF/DOC of the transaction list, plus the
+          charts above. Triggered from the button next to Add Expense in the
+          hero rather than its own section here. */}
+      <ExportSection
+        ledger={ledger}
+        activeSpender={activeSpender}
+        relevantTransactions={relevantTransactions}
+        trendBuckets={trendBuckets}
+        trendGranularity={trendGranularity}
+        categoryBarData={categoryBarData}
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+      />
 
       {/* Transaction List - Apple Wallet Grouped View */}
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-            Recent Activity
+            Past Activity
           </h2>
 
           <div className="flex items-center gap-2">
@@ -698,7 +620,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 pr-3 py-1 text-xs rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] w-full sm:w-44 outline-none placeholder:text-neutral-400"
+                className="pl-8 pr-3 py-1 text-xs rounded-lg bg-black/[0.04] dark:bg-white/[0.06] text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#9333EA] w-full sm:w-44 outline-none placeholder:text-neutral-400"
               />
             </div>
 
@@ -708,7 +630,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               onClick={() => setIsFilterSheetOpen(true)}
               className={`relative shrink-0 p-1.5 rounded-lg transition-colors ${
                 activeFilterCount > 0
-                  ? 'bg-[#007AFF] text-white'
+                  ? 'bg-[#9333EA] text-white'
                   : 'bg-black/[0.04] dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-300'
               }`}
               title="Filter & sort transactions"
@@ -732,7 +654,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               }}
               className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
                 isSelectMode
-                  ? 'bg-[#007AFF] text-white'
+                  ? 'bg-[#9333EA] text-white'
                   : 'bg-black/[0.04] dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-300'
               }`}
             >
@@ -749,7 +671,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             <button
               type="button"
               onClick={() => setFilters(EMPTY_FILTERS)}
-              className="text-[11px] font-medium text-[#007AFF]"
+              className="text-[11px] font-medium text-[#9333EA]"
             >
               Clear filters
             </button>
@@ -806,18 +728,19 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                     {isSelectable ? (
                       <div
                         className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          isSelected ? 'bg-[#007AFF] text-white' : 'bg-black/[0.04] dark:bg-white/[0.08] text-neutral-400'
+                          isSelected ? 'bg-[#9333EA] text-white' : 'bg-black/[0.04] dark:bg-white/[0.08] text-neutral-400'
                         }`}
                       >
                         {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                       </div>
                     ) : (
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-                        style={{ backgroundColor: isGrey ? '#FF9500' : cat.color }}
-                      >
-                        {getCategoryIcon(cat.icon, 'w-5 h-5')}
-                      </div>
+                      <TransactionIcon
+                        title={tx.title}
+                        bankName={tx.bankName}
+                        notes={tx.notes}
+                        category={cat}
+                        colorOverride={isGrey ? '#FF9500' : undefined}
+                      />
                     )}
 
                     <div className="min-w-0 space-y-0.5">
@@ -827,7 +750,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         </span>
 
                         {isMine ? (
-                          <span className="px-1.5 py-0.5 rounded-md bg-blue-500/10 text-[#007AFF] text-[10px] font-semibold">
+                          <span className="px-1.5 py-0.5 rounded-md bg-[#9333EA]/10 text-[#9333EA] text-[10px] font-semibold">
                             You
                           </span>
                         ) : (
@@ -860,7 +783,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         <span>•</span>
                         <span>{getPaymentModeLabel(tx.paymentMode)}</span>
                         <span>•</span>
-                        <span className={isMine ? 'text-[#007AFF] font-medium' : 'text-neutral-600 dark:text-neutral-300'}>
+                        <span className={isMine ? 'text-[#9333EA] font-medium' : 'text-neutral-600 dark:text-neutral-300'}>
                           {ownerName}
                         </span>
                         {tx.notes && (
@@ -916,7 +839,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                             e.stopPropagation();
                             onEditTransaction(tx);
                           }}
-                          className="px-2 py-1 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] hover:bg-[#007AFF] hover:text-white text-neutral-600 dark:text-neutral-300 text-xs font-medium flex items-center gap-1 transition-all"
+                          className="px-2 py-1 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] hover:bg-[#9333EA] hover:text-white text-neutral-600 dark:text-neutral-300 text-xs font-medium flex items-center gap-1 transition-all"
                         >
                           <Edit3 className="w-3 h-3" />
                           <span>Edit</span>

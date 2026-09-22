@@ -1048,6 +1048,7 @@ export default function App() {
           onLockLedger={handleSwitchUser}
           onSwitchUser={handleSwitchUser}
           onLockNow={lockConfig ? () => setIsUnlocked(false) : undefined}
+          variant={activeTab === 'dashboards' ? 'hero' : 'default'}
         />
 
         {/* Main Body Content */}
@@ -1071,6 +1072,7 @@ export default function App() {
                   onResolveGreyArea={handleOpenGreyAreaDirect}
                   onEditTransaction={(tx) => setEditingTransaction(tx)}
                   onBulkUpdateTransactions={handleBulkUpdateTransactions}
+                  onOpenAddModal={() => setShowAddModal(true)}
                 />
               )}
 
@@ -1145,12 +1147,12 @@ export default function App() {
         {/* Floating Liquid-Glass tab bar — inset from the edges rather than flush,
             so it reads as a distinct navigation layer hovering over content. */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 flex justify-center px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
-          <div className="glass-nav w-full max-w-md rounded-[28px] border border-black/[0.06] dark:border-white/[0.1] shadow-xl shadow-black/10 dark:shadow-black/40 pt-2 pb-2 px-4 flex items-center justify-around transition-all">
+          <div className="glass-nav w-full max-w-md rounded-full border border-black/[0.06] dark:border-white/[0.1] shadow-xl shadow-black/10 dark:shadow-black/40 py-1 px-4 flex items-end justify-around transition-all">
             <button
               onClick={() => handleTabChange('dashboards')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
+              className={`flex-1 pt-0.5 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
                 activeTab === 'dashboards'
-                  ? 'text-[#007AFF]'
+                  ? 'text-[#9333EA]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
             >
@@ -1160,9 +1162,9 @@ export default function App() {
 
             <button
               onClick={() => handleTabChange('categories')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
+              className={`flex-1 pt-0.5 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
                 activeTab === 'categories'
-                  ? 'text-[#007AFF]'
+                  ? 'text-[#9333EA]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
             >
@@ -1182,13 +1184,13 @@ export default function App() {
                 className={`-mt-7 w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/30 ring-4 ring-white dark:ring-[#1C1C1E] transition-transform ${
                   activeTab === 'auto_parser' ? 'scale-105' : ''
                 }`}
-                style={{ background: 'linear-gradient(135deg, #0A84FF, #5856D6)' }}
+                style={{ background: 'linear-gradient(135deg, #9333EA, #C026D3)' }}
               >
                 <Sparkles className="w-6 h-6 text-white" />
               </span>
               <span
                 className={`text-[10px] font-medium tracking-tight mt-0.5 ${
-                  activeTab === 'auto_parser' ? 'text-[#007AFF]' : 'text-neutral-400 dark:text-neutral-500'
+                  activeTab === 'auto_parser' ? 'text-[#9333EA]' : 'text-neutral-400 dark:text-neutral-500'
                 }`}
               >
                 Import SMS
@@ -1197,9 +1199,9 @@ export default function App() {
 
             <button
               onClick={() => handleTabChange('savings_goals')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
+              className={`flex-1 pt-0.5 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
                 activeTab === 'savings_goals'
-                  ? 'text-[#007AFF]'
+                  ? 'text-[#9333EA]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
             >
@@ -1209,9 +1211,9 @@ export default function App() {
 
             <button
               onClick={() => handleTabChange('account')}
-              className={`flex-1 py-1 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
+              className={`flex-1 pt-0.5 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${
                 activeTab === 'account'
-                  ? 'text-[#007AFF]'
+                  ? 'text-[#9333EA]'
                   : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
               }`}
             >

@@ -130,7 +130,7 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
                 onClick={() => onChange({ ...filters, sortBy: opt.id })}
                 className={`px-2.5 py-2 rounded-xl text-[11px] font-medium text-left transition-colors ${
                   filters.sortBy === opt.id
-                    ? 'bg-[#007AFF] text-white'
+                    ? 'bg-[#9333EA] text-white'
                     : 'bg-black/[0.04] dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-300'
                 }`}
               >
@@ -223,7 +223,7 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
                   onClick={() => togglePaymentMode(mode)}
                   className={`px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-colors ${
                     active
-                      ? 'bg-[#007AFF] text-white border-transparent'
+                      ? 'bg-[#9333EA] text-white border-transparent'
                       : 'bg-black/[0.03] dark:bg-white/[0.05] border-black/[0.06] dark:border-white/[0.08] text-neutral-600 dark:text-neutral-300'
                   }`}
                 >
@@ -246,7 +246,7 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
                 type="date"
                 value={filters.dateFrom}
                 onChange={(e) => onChange({ ...filters, dateFrom: e.target.value })}
-                className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+                className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#9333EA] outline-none"
               />
             </div>
             <div>
@@ -255,7 +255,7 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
                 type="date"
                 value={filters.dateTo}
                 onChange={(e) => onChange({ ...filters, dateTo: e.target.value })}
-                className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#007AFF] outline-none"
+                className="w-full h-10 px-3 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-xs text-neutral-900 dark:text-white border-none focus:ring-1 focus:ring-[#9333EA] outline-none"
               />
             </div>
           </div>
@@ -275,7 +275,7 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl bg-[#007AFF] text-white text-xs font-semibold active:scale-[0.97] transition-all"
+            className="flex-1 py-2.5 rounded-lg bg-[#9333EA] text-white text-xs font-semibold active:scale-[0.97] transition-all"
           >
             Done
           </button>

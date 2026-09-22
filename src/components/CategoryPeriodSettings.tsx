@@ -38,7 +38,7 @@ export const CategoryPeriodSettings: React.FC<CategoryPeriodSettingsProps> = ({ 
         <div className="min-w-0">
           <div className="text-sm font-semibold text-neutral-900 dark:text-white">Amount vs Category window</div>
           <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
-            How far back the Overview category bars sum spending
+            How far back the Category tab's spending bars sum up
           </div>
         </div>
       </div>
@@ -51,7 +51,7 @@ export const CategoryPeriodSettings: React.FC<CategoryPeriodSettingsProps> = ({ 
             onClick={() => handleSelect(opt.value)}
             className={`py-2 rounded-xl border text-xs font-semibold transition-all disabled:opacity-50 ${
               period === opt.value
-                ? 'bg-[#007AFF] border-[#007AFF] text-white shadow-xs'
+                ? 'bg-[#9333EA] border-[#9333EA] text-white shadow-xs'
                 : 'border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300'
             }`}
           >

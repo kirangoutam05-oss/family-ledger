@@ -128,7 +128,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
             />
           </div>
 
@@ -147,7 +147,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
                 value={amount}
                 onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
                 required
-                className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full pl-8 pr-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
           </div>
@@ -163,7 +163,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
                 required
                 value={dateStr}
                 onChange={(e) => setDateStr(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full h-11 px-3.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
             <div>
@@ -173,7 +173,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
                 required
                 value={timeStr}
                 onChange={(e) => setTimeStr(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full h-11 px-3.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-xs focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
               />
             </div>
           </div>
@@ -190,7 +190,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
                     onClick={() => setCategory(cat.id)}
                     className={`min-h-[48px] p-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 bg-white dark:bg-neutral-800 transition-all ${
                       category === cat.id
-                        ? 'ring-2 ring-[#007AFF] border-blue-200 dark:border-blue-800 text-[#007AFF]'
+                        ? 'ring-2 ring-[#9333EA] border-blue-200 dark:border-blue-800 text-[#9333EA]'
                         : 'border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white hover:border-neutral-300 dark:hover:border-neutral-600'
                     }`}
                   >
@@ -215,7 +215,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-[#9333EA]"
             />
           </div>
 
@@ -249,7 +249,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
                 <button
                   type="button"
                   onClick={() => setShowRejectConfirm(false)}
-                  className="px-2.5 py-2 rounded-xl border border-black/10 dark:border-white/10 text-xs text-neutral-500"
+                  className="px-2.5 py-2 rounded-lg border border-black/10 dark:border-white/10 text-xs text-neutral-500"
                 >
                   Cancel
                 </button>
@@ -260,7 +260,7 @@ export const PendingAckModal: React.FC<PendingAckModalProps> = ({ pending, ledge
               type="button"
               onClick={handleAccept}
               disabled={isAccepting}
-              className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] active:scale-95 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50"
+              className="px-5 py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] active:scale-95 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
               <span>{isAccepting ? 'Accepting...' : 'Accept & Add'}</span>

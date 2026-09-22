@@ -79,14 +79,14 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-xs border border-black/[0.08] dark:border-white/[0.1] shrink-0 flex items-center justify-center">
             <img
-              src="/app-logo.jpg?v=4"
+              src="/knku-icon.png?v=1"
               alt="Couple Ledger Logo"
               className="w-full h-full object-cover object-center block"
               referrerPolicy="no-referrer"
             />
           </div>
           <div className="flex-1 pr-6 flex flex-col justify-center">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-[#007AFF] uppercase tracking-wider mb-0.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[#9333EA] uppercase tracking-wider mb-0.5">
               <Smartphone className="w-3.5 h-3.5" />
               <span>Invite Your Partner</span>
             </div>
@@ -127,7 +127,7 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
 
             <div className="space-y-1">
               <div className="text-xs font-semibold text-neutral-900 dark:text-white flex items-center gap-1.5">
-                <PlusSquare className="w-3.5 h-3.5 text-[#007AFF]" />
+                <PlusSquare className="w-3.5 h-3.5 text-[#9333EA]" />
                 <span>2. Add to Home Screen (iOS)</span>
               </div>
               <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
@@ -159,7 +159,7 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
                 href={mobileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="py-2 px-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                className="py-2 px-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors shadow-xs"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Open in Full Tab</span>
@@ -175,7 +175,7 @@ export const LiveOnMobileModal: React.FC<LiveOnMobileModalProps> = ({ isOpen, on
             href={mobileUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-[#007AFF] hover:underline flex items-center gap-1 font-medium shrink-0"
+            className="text-[#9333EA] hover:underline flex items-center gap-1 font-medium shrink-0"
           >
             <span>Open in New Tab</span>
             <ExternalLink className="w-3 h-3" />

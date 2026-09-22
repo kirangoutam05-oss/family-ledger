@@ -67,13 +67,20 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
+    <div
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white"
+      style={{
+        backgroundImage:
+          'radial-gradient(60% 40% at 50% 100%, rgba(147,51,234,0.16) 0%, rgba(147,51,234,0) 70%)',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-[20px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
             <img
-              src="/app-logo.jpg?v=4"
-              alt="Family Ledger Logo"
+              src="/knku-icon.png?v=1"
+              alt="KNKU Logo"
               className="w-full h-full object-cover object-center block"
               referrerPolicy="no-referrer"
             />
@@ -100,12 +107,12 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
               value={pin}
               onChange={(e) => setPin(digitsOnly(e.target.value))}
               placeholder="4–6 digit PIN"
-              className="w-full py-3 px-4 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-lg tracking-normal font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full py-3 px-4 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-lg tracking-normal font-semibold focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
             />
             <button
               type="submit"
               disabled={pin.length < 4}
-              className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
             >
               <span>Continue</span>
               <ArrowRight className="w-4 h-4" />
@@ -132,12 +139,12 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
               value={confirmPin}
               onChange={(e) => setConfirmPin(digitsOnly(e.target.value))}
               placeholder="Confirm PIN"
-              className="w-full py-3 px-4 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-lg tracking-normal font-semibold focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full py-3 px-4 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-center text-lg tracking-normal font-semibold focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
             />
             <button
               type="submit"
               disabled={confirmPin.length < 4 || isSaving}
-              className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
             >
               <Check className="w-4 h-4" />
               <span>Confirm</span>
@@ -151,7 +158,7 @@ export const AppLockSetupScreen: React.FC<AppLockSetupScreenProps> = ({ personLa
               type="button"
               onClick={handleEnableBiometric}
               disabled={isRegisteringBiometric || isSaving}
-              className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-40 text-white text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
             >
               <ScanFace className="w-4 h-4" />
               <span>{isRegisteringBiometric ? 'Waiting for Face ID / Touch ID…' : 'Enable Face ID / Touch ID'}</span>

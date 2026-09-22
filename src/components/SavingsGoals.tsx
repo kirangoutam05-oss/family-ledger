@@ -103,7 +103,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
         <button
           onClick={() => setShowNewGoalModal(true)}
-          className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
+          className="px-3 py-1.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Goal</span>
@@ -230,7 +230,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                 }}
                 className="w-full py-2 px-3 rounded-xl bg-black/[0.04] hover:bg-black/[0.07] dark:bg-white/[0.06] dark:hover:bg-white/[0.1] text-xs font-medium text-neutral-800 dark:text-neutral-200 transition-all active:scale-95 flex items-center justify-center gap-1.5"
               >
-                <Plus className="w-3.5 h-3.5 text-[#007AFF]" />
+                <Plus className="w-3.5 h-3.5 text-[#9333EA]" />
                 <span>Contribute</span>
               </button>
             </div>
@@ -255,7 +255,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-            className="bg-white dark:bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xl space-y-4"
+            className="glass-sheet rounded-[24px] max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
@@ -280,7 +280,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                     onClick={() => setSelectedContributor('husband')}
                     className={`py-1.5 px-3 rounded-xl border text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
                       selectedContributor === 'husband'
-                        ? 'border-[#007AFF] bg-blue-50/40 dark:bg-blue-950/20 text-[#007AFF] font-semibold'
+                        ? 'border-[#9333EA] bg-blue-50/40 dark:bg-blue-950/20 text-[#9333EA] font-semibold'
                         : 'border-black/[0.06] dark:border-white/[0.08] text-neutral-600 dark:text-neutral-400'
                     }`}
                   >
@@ -315,7 +315,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                       onClick={() => setContributeAmount(amt)}
                       className={`py-1 rounded-lg text-xs font-medium border ${
                         contributeAmount === amt
-                          ? 'border-[#007AFF] bg-blue-50 text-[#007AFF] font-semibold'
+                          ? 'border-[#9333EA] bg-blue-50 text-[#9333EA] font-semibold'
                           : 'border-black/[0.06] dark:border-white/[0.08] text-neutral-600 dark:text-neutral-400'
                       }`}
                     >
@@ -330,14 +330,14 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                   step="100"
                   value={contributeAmount}
                   onChange={(e) => setContributeAmount(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                 />
               </div>
 
               <button
                 onClick={handleContributeSubmit}
                 disabled={isSubmitting || contributeAmount <= 0}
-                className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Deposit {formatCurrency(contributeAmount, currency)}</span>
@@ -365,7 +365,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-            className="bg-white dark:bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xl space-y-4"
+            className="glass-sheet rounded-[24px] max-w-sm w-full p-6 border border-black/[0.06] dark:border-white/[0.1] space-y-4"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
@@ -391,7 +391,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                   placeholder="e.g., Vacation Fund, Emergency Savings"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                 />
               </div>
 
@@ -407,7 +407,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                   placeholder="e.g. 50000"
                   value={newTargetAmount}
                   onChange={(e) => setNewTargetAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                 />
               </div>
 
@@ -420,7 +420,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                   required
                   value={newTargetDate}
                   onChange={(e) => setNewTargetDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                  className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                 />
               </div>
 
@@ -447,7 +447,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98]"
+                className="w-full py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-medium shadow-xs transition-all active:scale-[0.98]"
               >
                 Create Goal
               </button>

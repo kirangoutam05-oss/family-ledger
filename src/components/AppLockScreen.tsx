@@ -122,18 +122,25 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white">
+    <div
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 bg-[#F2F2F7] dark:bg-[#000000] text-neutral-900 dark:text-white"
+      style={{
+        backgroundImage:
+          'radial-gradient(60% 40% at 50% 100%, rgba(147,51,234,0.16) 0%, rgba(147,51,234,0) 70%)',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-16 h-16 rounded-[22px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-[20px] overflow-hidden shadow-lg border border-black/[0.08] dark:border-white/[0.12] bg-white dark:bg-neutral-900 flex items-center justify-center">
             <img
-              src="/app-logo.jpg?v=4"
-              alt="Family Ledger Logo"
+              src="/knku-icon.png?v=1"
+              alt="KNKU Logo"
               className="w-full h-full object-cover object-center block"
               referrerPolicy="no-referrer"
             />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">Family Ledger is locked</h1>
+          <h1 className="text-xl font-bold tracking-tight">KNKU is locked</h1>
         </div>
 
         <div className="flex items-center justify-center gap-3">
@@ -141,7 +148,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
             <div
               key={i}
               className={`w-3.5 h-3.5 rounded-full border-2 ${
-                i < pin.length ? 'bg-[#007AFF] border-[#007AFF]' : 'border-neutral-300 dark:border-neutral-700'
+                i < pin.length ? 'bg-[#9333EA] border-[#9333EA]' : 'border-neutral-300 dark:border-neutral-700'
               }`}
             />
           ))}
@@ -182,7 +189,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
             type="button"
             onClick={tryBiometric}
             disabled={isCheckingBiometric}
-            className="w-full py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2"
+            className="w-full py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2"
           >
             <ScanFace className="w-4 h-4" />
             <span>{isCheckingBiometric ? 'Waiting…' : 'Try Face ID / Touch ID again'}</span>
@@ -220,7 +227,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
               type="button"
               onClick={handleAskPartner}
               disabled={isRequestingReset}
-              className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] disabled:opacity-50 text-white text-xs font-semibold shadow-xs flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-50 text-white text-xs font-semibold shadow-xs flex items-center justify-center gap-2"
             >
               <Users className="w-3.5 h-3.5" />
               <span>{isRequestingReset ? 'Sending…' : `Ask ${partnerName} to approve`}</span>
@@ -228,7 +235,7 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
             <button
               type="button"
               onClick={() => setForgotStage('invite-code')}
-              className="w-full py-2.5 rounded-xl border border-black/10 dark:border-white/10 text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-lg border border-black/10 dark:border-white/10 text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center justify-center gap-2"
             >
               <KeyRound className="w-3.5 h-3.5" />
               <span>Enter household invite code instead</span>
@@ -255,12 +262,12 @@ export const AppLockScreen: React.FC<AppLockScreenProps> = ({
               }}
               placeholder="Invite code or link"
               autoFocus
-              className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
             />
             {inviteCodeError && <p className="text-xs text-red-500 font-medium">{inviteCodeError}</p>}
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0071E3] text-white text-xs font-semibold shadow-xs"
+              className="w-full py-2.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-semibold shadow-xs"
             >
               Reset lock
             </button>
