@@ -32,6 +32,7 @@ import { GetStartedScreen } from './components/GetStartedScreen';
 import { InvitePartnerScreen } from './components/InvitePartnerScreen';
 import { SecureAccountScreen } from './components/SecureAccountScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
+import { VerifyEmailScreen } from './components/VerifyEmailScreen';
 import { AppLockSetupScreen } from './components/AppLockSetupScreen';
 import { AppLockScreen } from './components/AppLockScreen';
 import { StartupScreen } from './components/StartupScreen';
@@ -184,6 +185,11 @@ export default function App() {
   // and short-circuits every other screen until it's handled.
   const [resetToken, setResetToken] = useState<string | null>(() => {
     if (typeof window === 'undefined' || window.location.pathname !== '/reset-password') return null;
+    return new URLSearchParams(window.location.search).get('token');
+  });
+  // Same idea, for /verify-email?token=... links.
+  const [verifyToken, setVerifyToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined' || window.location.pathname !== '/verify-email') return null;
     return new URLSearchParams(window.location.search).get('token');
   });
   const [authAccount, setAuthAccount] = useState<AuthAccount | null>(null);
@@ -1041,6 +1047,20 @@ export default function App() {
         token={resetToken}
         onDone={() => {
           setResetToken(null);
+          window.history.replaceState({}, '', '/');
+        }}
+      />
+    );
+  }
+
+  // Same short-circuit for an emailed /verify-email link.
+  if (verifyToken) {
+    return (
+      <VerifyEmailScreen
+        token={verifyToken}
+        onDone={() => {
+          setVerifyToken(null);
+          setAuthAccount((prev) => (prev ? { ...prev, emailVerified: true } : prev));
           window.history.replaceState({}, '', '/');
         }}
       />

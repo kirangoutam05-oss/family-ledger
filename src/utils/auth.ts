@@ -8,6 +8,7 @@ export interface AuthAccount {
   email: string;
   role: 'husband' | 'wife';
   householdId: string;
+  emailVerified: boolean;
 }
 
 async function parseJson(res: Response): Promise<any> {
@@ -31,7 +32,12 @@ export async function authSignup(params: {
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not create your login.');
-  return { email: data.account.email, role: data.account.role, householdId: data.account.householdId };
+  return {
+    email: data.account.email,
+    role: data.account.role,
+    householdId: data.account.householdId,
+    emailVerified: !!data.account.emailVerified,
+  };
 }
 
 export async function authLogin(email: string, password: string): Promise<AuthAccount> {
@@ -42,7 +48,7 @@ export async function authLogin(email: string, password: string): Promise<AuthAc
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not log in.');
-  return { email: data.email, role: data.role, householdId: data.householdId };
+  return { email: data.email, role: data.role, householdId: data.householdId, emailVerified: !!data.emailVerified };
 }
 
 export async function authLogout(): Promise<void> {
@@ -54,7 +60,7 @@ export async function authMe(): Promise<AuthAccount | null> {
     const res = await fetch('/api/auth/me');
     const data = await parseJson(res);
     if (!data.authenticated) return null;
-    return { email: data.email, role: data.role, householdId: data.householdId };
+    return { email: data.email, role: data.role, householdId: data.householdId, emailVerified: !!data.emailVerified };
   } catch {
     return null;
   }
@@ -98,4 +104,20 @@ export async function authChangePassword(currentPassword: string, newPassword: s
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not change your password.');
+}
+
+export async function authSendVerification(): Promise<void> {
+  const res = await fetch('/api/auth/send-verification', { method: 'POST' });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not send the verification email.');
+}
+
+export async function authVerifyEmail(token: string): Promise<void> {
+  const res = await fetch('/api/auth/verify-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not verify your email.');
 }

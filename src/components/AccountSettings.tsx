@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { UserCog, Save, CheckCircle2, LogOut, Smartphone, UserPlus, ShieldCheck, KeyRound } from 'lucide-react';
+import { UserCog, Save, CheckCircle2, LogOut, Smartphone, UserPlus, ShieldCheck, KeyRound, MailCheck, MailWarning } from 'lucide-react';
 import { LedgerState, SpenderId } from '../types';
 import { AppLockSettings } from './AppLockSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { CategoryPeriodSettings } from './CategoryPeriodSettings';
-import { AuthAccount, authChangePassword } from '../utils/auth';
+import { AuthAccount, authChangePassword, authSendVerification } from '../utils/auth';
 
 interface AccountSettingsProps {
   ledger: LedgerState;
@@ -65,9 +65,26 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordChanged, setPasswordChanged] = useState(false);
 
+  const [isSendingVerification, setIsSendingVerification] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+
   const handleLogoutClick = async () => {
     setIsLoggingOut(true);
     await onLogout();
+  };
+
+  const handleResendVerification = async () => {
+    setIsSendingVerification(true);
+    setVerificationError(null);
+    try {
+      await authSendVerification();
+      setVerificationSent(true);
+    } catch (err) {
+      setVerificationError(err instanceof Error ? err.message : 'Could not send the verification email.');
+    } finally {
+      setIsSendingVerification(false);
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -186,6 +203,38 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
               {isLoggingOut ? 'Logging out…' : 'Log Out'}
             </button>
           </div>
+
+          {/* Verification status — a signed-up email isn't confirmed to
+              actually belong to whoever typed it until they click the
+              emailed link, which matters since this email is also the
+              password-recovery destination. */}
+          {authAccount.emailVerified ? (
+            <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+              <MailCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>Email verified</span>
+            </div>
+          ) : verificationSent ? (
+            <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
+              <MailCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>Verification email sent — check your inbox</span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30">
+              <div className="flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-medium min-w-0">
+                <MailWarning className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Email not verified yet</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={isSendingVerification}
+                className="text-[11px] font-semibold text-[#9333EA] disabled:opacity-50 shrink-0"
+              >
+                {isSendingVerification ? 'Sending…' : 'Resend'}
+              </button>
+            </div>
+          )}
+          {verificationError && <p className="text-[11px] text-red-600 dark:text-red-400">{verificationError}</p>}
 
           <button
             type="button"

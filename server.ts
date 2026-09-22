@@ -284,6 +284,7 @@ interface Account {
   email: string;
   emailNormalized: string;
   passwordHash: string;
+  emailVerified: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -308,12 +309,26 @@ interface PasswordResetToken {
   usedAt?: string;
 }
 
+// Same shape as PasswordResetToken (a hashed, time-limited, single-use
+// token) — kept as its own type/table rather than reused, since mixing the
+// two would let a password-reset link double as an email-verification link
+// or vice versa.
+interface EmailVerificationToken {
+  tokenHash: string;
+  accountId: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string;
+}
+
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const RESET_TOKENS_FILE = path.join(DATA_DIR, 'password_reset_tokens.json');
+const VERIFY_TOKENS_FILE = path.join(DATA_DIR, 'email_verification_tokens.json');
 const SESSION_COOKIE = 'knku_sid';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, sliding
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours — more forgiving than a password reset
 
 function readJsonArray<T>(filePath: string): T[] {
   try {
@@ -343,8 +358,21 @@ async function ensureAuthTables() {
       UNIQUE (household_id, role)
     )
   `);
+  // `email_verified` shipped after `accounts` did — CREATE TABLE IF NOT
+  // EXISTS above is a no-op against the table that's already live in
+  // production, so the column needs its own migration statement.
+  await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      token_hash   TEXT PRIMARY KEY,
+      account_id   TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at   TIMESTAMPTZ NOT NULL,
+      used_at      TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
       token_hash   TEXT PRIMARY KEY,
       account_id   TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -375,6 +403,7 @@ function rowToAccount(row: any): Account {
     email: row.email,
     emailNormalized: row.email_normalized,
     passwordHash: row.password_hash,
+    emailVerified: row.email_verified === true,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
   };
@@ -407,15 +436,38 @@ async function findAccountById(id: string): Promise<Account | null> {
 async function insertAccount(account: Account): Promise<void> {
   if (pool) {
     await pool.query(
-      `INSERT INTO accounts (id, household_id, role, email, email_normalized, password_hash, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`,
-      [account.id, account.householdId, account.role, account.email, account.emailNormalized, account.passwordHash, account.createdAt]
+      `INSERT INTO accounts (id, household_id, role, email, email_normalized, password_hash, email_verified, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)`,
+      [
+        account.id,
+        account.householdId,
+        account.role,
+        account.email,
+        account.emailNormalized,
+        account.passwordHash,
+        account.emailVerified,
+        account.createdAt,
+      ]
     );
     return;
   }
   const accounts = readJsonArray<Account>(ACCOUNTS_FILE);
   accounts.push(account);
   writeJsonArray(ACCOUNTS_FILE, accounts);
+}
+
+async function markAccountEmailVerified(accountId: string): Promise<void> {
+  if (pool) {
+    await pool.query('UPDATE accounts SET email_verified = true, updated_at = now() WHERE id = $1', [accountId]);
+    return;
+  }
+  const accounts = readJsonArray<Account>(ACCOUNTS_FILE);
+  const acc = accounts.find((a) => a.id === accountId);
+  if (acc) {
+    acc.emailVerified = true;
+    acc.updatedAt = new Date().toISOString();
+    writeJsonArray(ACCOUNTS_FILE, accounts);
+  }
 }
 
 async function updateAccountPassword(accountId: string, passwordHash: string): Promise<void> {
@@ -569,6 +621,48 @@ async function consumePasswordResetToken(raw: string): Promise<PasswordResetToke
   return token;
 }
 
+// Same hash-and-store shape as the password-reset token above, kept as its
+// own table so a verification link can never double as a password-reset
+// link or vice versa.
+async function createEmailVerificationToken(accountId: string): Promise<string> {
+  const raw = crypto.randomBytes(32).toString('base64url');
+  const token: EmailVerificationToken = {
+    tokenHash: hashResetToken(raw),
+    accountId,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + VERIFY_TOKEN_TTL_MS).toISOString(),
+  };
+  if (pool) {
+    await pool.query(
+      'INSERT INTO email_verification_tokens (token_hash, account_id, created_at, expires_at) VALUES ($1,$2,$3,$4)',
+      [token.tokenHash, token.accountId, token.createdAt, token.expiresAt]
+    );
+  } else {
+    const tokens = readJsonArray<EmailVerificationToken>(VERIFY_TOKENS_FILE);
+    tokens.push(token);
+    writeJsonArray(VERIFY_TOKENS_FILE, tokens);
+  }
+  return raw;
+}
+
+async function consumeEmailVerificationToken(raw: string): Promise<EmailVerificationToken | null> {
+  const tokenHash = hashResetToken(raw);
+  const now = new Date();
+  if (pool) {
+    const r = await pool.query('SELECT * FROM email_verification_tokens WHERE token_hash = $1', [tokenHash]);
+    const row = r.rows[0];
+    if (!row || row.used_at || new Date(row.expires_at) < now) return null;
+    await pool.query('UPDATE email_verification_tokens SET used_at = now() WHERE token_hash = $1', [tokenHash]);
+    return { tokenHash: row.token_hash, accountId: row.account_id, createdAt: row.created_at, expiresAt: row.expires_at, usedAt: new Date().toISOString() };
+  }
+  const tokens = readJsonArray<EmailVerificationToken>(VERIFY_TOKENS_FILE);
+  const token = tokens.find((t) => t.tokenHash === tokenHash);
+  if (!token || token.usedAt || new Date(token.expiresAt) < now) return null;
+  token.usedAt = new Date().toISOString();
+  writeJsonArray(VERIFY_TOKENS_FILE, tokens);
+  return token;
+}
+
 function normalizeEmail(email: unknown): string | null {
   if (typeof email !== 'string') return null;
   const trimmed = email.trim().toLowerCase();
@@ -581,13 +675,13 @@ function isValidPassword(pw: unknown): pw is string {
 }
 
 // Sends via Resend's REST API directly (a plain fetch) rather than adding
-// their SDK as a dependency for one call site. A missing key logs and no-ops
-// instead of failing signup/reset — email delivery shouldn't be able to break
-// the rest of auth.
-async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promise<void> {
+// their SDK as a dependency for two call sites. A missing key logs and
+// no-ops instead of failing signup/reset — email delivery shouldn't be able
+// to break the rest of auth.
+async function sendEmail(toEmail: string, subject: string, html: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.warn('RESEND_API_KEY not set — skipping password reset email send.');
+    console.warn(`RESEND_API_KEY not set — skipping email send ("${subject}").`);
     return;
   }
   try {
@@ -597,8 +691,8 @@ async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promis
       body: JSON.stringify({
         from: process.env.RESEND_FROM_EMAIL || 'KNKU <onboarding@resend.dev>',
         to: [toEmail],
-        subject: 'Reset your KNKU password',
-        html: `<p>We received a request to reset your KNKU password.</p><p><a href="${resetUrl}">Click here to set a new password</a>. This link expires in 30 minutes.</p><p>If you didn't request this, you can safely ignore this email.</p>`,
+        subject,
+        html,
       }),
     });
     if (!res.ok) {
@@ -607,6 +701,22 @@ async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promis
   } catch (err) {
     console.error('Resend email send error:', err);
   }
+}
+
+async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promise<void> {
+  await sendEmail(
+    toEmail,
+    'Reset your KNKU password',
+    `<p>We received a request to reset your KNKU password.</p><p><a href="${resetUrl}">Click here to set a new password</a>. This link expires in 30 minutes.</p><p>If you didn't request this, you can safely ignore this email.</p>`
+  );
+}
+
+async function sendVerificationEmail(toEmail: string, verifyUrl: string): Promise<void> {
+  await sendEmail(
+    toEmail,
+    'Verify your KNKU email',
+    `<p>Confirm this is your email address to finish securing your KNKU account.</p><p><a href="${verifyUrl}">Click here to verify your email</a>. This link expires in 24 hours.</p><p>If you didn't request this, you can safely ignore this email.</p>`
+  );
 }
 
 function setSessionCookie(res: express.Response, sessionId: string) {
@@ -1155,6 +1265,7 @@ app.post('/api/auth/signup', rateLimit(10, 60000), resolveHousehold, async (req,
       email: sanitizeString(req.body.email, 254) || emailNormalized,
       emailNormalized,
       passwordHash,
+      emailVerified: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1163,7 +1274,19 @@ app.post('/api/auth/signup', rateLimit(10, 60000), resolveHousehold, async (req,
     const session = await createSession(account, req.header('User-Agent'));
     setSessionCookie(res, session.id);
 
-    res.json({ success: true, account: { id: account.id, email: account.email, role: account.role, householdId } });
+    // Fire-and-forget — verification is a nice-to-have that shouldn't block
+    // or fail the signup response itself if Resend has a hiccup.
+    createEmailVerificationToken(account.id)
+      .then((rawToken) => {
+        const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+        return sendVerificationEmail(account.email, `${appUrl}/verify-email?token=${rawToken}`);
+      })
+      .catch((err) => console.error('Could not send verification email:', err));
+
+    res.json({
+      success: true,
+      account: { id: account.id, email: account.email, role: account.role, householdId, emailVerified: false },
+    });
   } catch (err) {
     console.error('Signup failed:', err);
     res.status(500).json({ error: 'An error occurred while creating your login.' });
@@ -1205,7 +1328,13 @@ app.post('/api/auth/login', rateLimit(10, 60000), async (req, res) => {
 
     const session = await createSession(account, req.header('User-Agent'));
     setSessionCookie(res, session.id);
-    res.json({ success: true, householdId: account.householdId, role: account.role, email: account.email });
+    res.json({
+      success: true,
+      householdId: account.householdId,
+      role: account.role,
+      email: account.email,
+      emailVerified: account.emailVerified,
+    });
   } catch (err) {
     console.error('Login failed:', err);
     res.status(500).json({ error: 'An error occurred while logging in.' });
@@ -1303,10 +1432,59 @@ app.get('/api/auth/me', resolveSession, async (req, res) => {
     if (!account) {
       return res.json({ authenticated: false });
     }
-    res.json({ authenticated: true, email: account.email, role: account.role, householdId: account.householdId });
+    res.json({
+      authenticated: true,
+      email: account.email,
+      role: account.role,
+      householdId: account.householdId,
+      emailVerified: account.emailVerified,
+    });
   } catch (err) {
     console.error('/api/auth/me failed:', err);
     res.json({ authenticated: false });
+  }
+});
+
+// Re-sends the verification link — used by Account Settings' "Resend" when
+// the first email didn't arrive, or an existing unverified account wants
+// another shot at it. Rate-limited per-IP the same as everything else here.
+app.post('/api/auth/send-verification', rateLimit(5, 60000), resolveSession, async (req, res) => {
+  try {
+    if (!req.authSession) {
+      return res.status(401).json({ error: 'You need to be logged in to verify your email.' });
+    }
+    const account = await findAccountById(req.authSession.accountId);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found.' });
+    }
+    if (account.emailVerified) {
+      return res.json({ success: true, alreadyVerified: true });
+    }
+    const rawToken = await createEmailVerificationToken(account.id);
+    const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+    await sendVerificationEmail(account.email, `${appUrl}/verify-email?token=${rawToken}`);
+    res.json({ success: true, alreadyVerified: false });
+  } catch (err) {
+    console.error('send-verification failed:', err);
+    res.status(500).json({ error: 'An error occurred while sending the verification email.' });
+  }
+});
+
+app.post('/api/auth/verify-email', rateLimit(10, 60000), async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (typeof token !== 'string' || !token) {
+      return res.status(400).json({ error: 'Missing verification token.' });
+    }
+    const consumed = await consumeEmailVerificationToken(token);
+    if (!consumed) {
+      return res.status(400).json({ error: 'This verification link is invalid or has expired.' });
+    }
+    await markAccountEmailVerified(consumed.accountId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('verify-email failed:', err);
+    res.status(500).json({ error: 'An error occurred while verifying your email.' });
   }
 });
 
