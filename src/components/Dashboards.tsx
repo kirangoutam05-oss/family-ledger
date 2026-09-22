@@ -376,7 +376,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="-mx-4 sm:-mx-6 -mt-6 px-4 sm:px-6 pt-3 sm:pt-4 pb-6 rounded-b-[2.5rem] text-white"
         style={{ background: 'radial-gradient(70% 85% at 50% 100%, rgba(147,51,234,0.28) 0%, rgba(147,51,234,0) 72%), #050308' }}
       >
@@ -442,7 +442,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-          transition={{ duration: 0.45, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.6, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
           className="space-y-3"
         >
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 px-1">
@@ -496,7 +496,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-        transition={{ duration: 0.45, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
         className="space-y-3"
       >
         <div className="flex items-center justify-between px-1">
@@ -646,7 +646,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-        transition={{ duration: 0.45, delay: 0.36, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.6, delay: 0.45, ease: [0.16, 1, 0.3, 1] }}
         className="space-y-3"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
