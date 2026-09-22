@@ -161,6 +161,13 @@ function markLockResetPopupSeen(id: string) {
 // enough that a phone left down for real stays protected.
 const RELOCK_GRACE_MS = 45_000;
 
+// Same idea as RELOCK_GRACE_MS, for the Overview page's on-load reveal
+// animation — an installed PWA typically stays resident in memory rather
+// than remounting when reopened from the home screen, so without this the
+// stagger-in only ever plays once, on the very first cold load, and never
+// again on a normal "open the app" afterward.
+const REOPEN_ANIMATION_GRACE_MS = 45_000;
+
 export default function App() {
   const [ledger, setLedger] = useState<LedgerState>(EMPTY_LEDGER_STATE);
   const [isLedgerLoaded, setIsLedgerLoaded] = useState(false);
@@ -203,6 +210,13 @@ export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [hasSkippedLock, setHasSkippedLock] = useState(() => isLockSkipped());
   const lastHiddenAt = useRef<number | null>(null);
+
+  // Bumped whenever the app is reopened after sitting backgrounded for a
+  // while — folded into the tab content's key below so Overview's section
+  // reveal actually replays on a real "open the app," not just a hard
+  // browser reload (see REOPEN_ANIMATION_GRACE_MS).
+  const [reopenKey, setReopenKey] = useState(0);
+  const lastHiddenAtForReopen = useRef<number | null>(null);
 
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -250,6 +264,25 @@ export default function App() {
         lastHiddenAt.current = Date.now();
       } else if (lastHiddenAt.current !== null && Date.now() - lastHiddenAt.current > RELOCK_GRACE_MS) {
         setIsUnlocked(false);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  // Same "backgrounded past a grace period" signal as the re-lock effect
+  // above, separately tracked here so it's not tangled with lock state —
+  // bumping reopenKey forces the active tab's content to remount, replaying
+  // Overview's section-reveal animation on a real app reopen.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        lastHiddenAtForReopen.current = Date.now();
+      } else if (
+        lastHiddenAtForReopen.current !== null &&
+        Date.now() - lastHiddenAtForReopen.current > REOPEN_ANIMATION_GRACE_MS
+      ) {
+        setReopenKey((k) => k + 1);
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -1175,7 +1208,7 @@ export default function App() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28 overflow-x-hidden">
           <AnimatePresence mode="wait" custom={{ mode: transitionMode, direction: slideDirection }} initial={false}>
             <motion.div
-              key={`${activeTab}-${activeSpender}`}
+              key={`${activeTab}-${activeSpender}-${reopenKey}`}
               custom={{ mode: transitionMode, direction: slideDirection }}
               variants={contentVariants}
               initial="enter"
