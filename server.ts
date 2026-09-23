@@ -127,6 +127,13 @@ async function ensureLedgerTable() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // This Postgres instance is on Supabase, which auto-exposes every public
+  // table over its PostgREST API to anon/authenticated callers unless RLS is
+  // on — this app only ever talks to Postgres through this server's own
+  // privileged connection (which bypasses RLS as the table owner), so
+  // enabling it with zero policies is exactly "block Supabase's public API
+  // from touching this table at all," not a behavior change for us.
+  await pool.query(`ALTER TABLE ledger_state ENABLE ROW LEVEL SECURITY`);
 }
 
 // A household id doubles as its invite "password" and, in file-storage mode, as
@@ -393,6 +400,16 @@ async function ensureAuthTables() {
       revoked_at    TIMESTAMPTZ
     )
   `);
+
+  // Same reasoning as ledger_state above — these four hold password hashes
+  // and live session/reset/verification tokens, so they're exactly the
+  // tables that must never be reachable through Supabase's public
+  // PostgREST API. Zero policies is intentional: this server's own
+  // connection (the table owner) bypasses RLS entirely, while every other
+  // Postgres role is fully denied by default once it's on.
+  for (const table of ['accounts', 'password_reset_tokens', 'email_verification_tokens', 'sessions']) {
+    await pool.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+  }
 }
 
 function rowToAccount(row: any): Account {
