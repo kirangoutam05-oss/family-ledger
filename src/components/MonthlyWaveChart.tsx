@@ -81,7 +81,14 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
   const axisLabelFill = isDark ? 'fill-white/55' : 'fill-neutral-500 dark:fill-neutral-400';
   const guideStroke = isDark ? 'stroke-white/25' : 'stroke-black/15 dark:stroke-white/20';
   const emptyText = isDark ? 'text-white/40' : 'text-neutral-400';
-  const tooltipBg = isDark ? 'bg-white/10 border-white/15' : 'bg-neutral-900 border-black/10 dark:bg-neutral-800';
+  // The dark variant's tooltip used to be bg-white/10 — mostly transparent,
+  // so the chart's own lines/gradient showed straight through and muddied
+  // the white text behind it. backdrop-blur hides whatever's underneath
+  // instead of just tinting it, so the text stays legible regardless of
+  // what part of the chart the tooltip happens to sit over.
+  const tooltipBg = isDark
+    ? 'bg-neutral-800/90 backdrop-blur-md border-white/15'
+    : 'bg-neutral-900 border-black/10 dark:bg-neutral-800';
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
