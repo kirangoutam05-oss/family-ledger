@@ -201,7 +201,7 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onHouseholdR
               <div className="space-y-4 text-center">
                 <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm flex items-center justify-center gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>If that email has a KNKU login, a reset link is on its way.</span>
+                  <span>If that email has a KNKU login, a reset link is on its way — check your spam folder if it doesn't show up soon.</span>
                 </div>
                 <button
                   type="button"

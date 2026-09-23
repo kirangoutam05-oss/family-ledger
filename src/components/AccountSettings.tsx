@@ -324,7 +324,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           ) : verificationSent ? (
             <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
               <MailCheck className="w-3.5 h-3.5 shrink-0" />
-              <span>Verification email sent — check your inbox</span>
+              <span>Verification email sent — check your inbox (and spam folder)</span>
             </div>
           ) : (
             <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30">
