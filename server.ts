@@ -1487,6 +1487,42 @@ app.get('/api/auth/debug-email-config', resolveSession, async (req, res) => {
   });
 });
 
+// TEMPORARY — diagnosing why send-verification silently fails to deliver.
+// Makes the same Resend call sendEmail() makes but returns Resend's raw
+// status/body instead of swallowing it, so the actual rejection reason is
+// visible without shelling into Render's log stream. Session-gated (sends
+// only to the caller's own account email); remove once diagnosed.
+app.get('/api/auth/debug-send-probe', resolveSession, async (req, res) => {
+  if (!req.authSession) {
+    return res.status(401).json({ error: 'Not logged in.' });
+  }
+  const account = await findAccountById(req.authSession.accountId);
+  if (!account) {
+    return res.status(404).json({ error: 'Account not found.' });
+  }
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    return res.json({ sent: false, reason: 'RESEND_API_KEY not set' });
+  }
+  try {
+    const from = process.env.RESEND_FROM_EMAIL || 'KNKU <onboarding@resend.dev>';
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from,
+        to: [account.email],
+        subject: 'KNKU delivery probe',
+        html: '<p>Diagnostic probe — safe to ignore.</p>',
+      }),
+    });
+    const body = await resendRes.text();
+    res.json({ sent: resendRes.ok, status: resendRes.status, from, to: account.email, body });
+  } catch (err) {
+    res.json({ sent: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // Re-sends the verification link — used by Account Settings' "Resend" when
 // the first email didn't arrive, or an existing unverified account wants
 // another shot at it. Rate-limited per-IP the same as everything else here.
