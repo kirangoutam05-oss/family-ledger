@@ -45,11 +45,17 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(maxPerWindow = 60, windowMs = 60 * 1000) {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'client';
+    // Keyed by route + IP, not IP alone — every rate-limited route used to
+    // share one counter per IP, so a household's normal activity on
+    // higher-limit routes (adding/editing transactions, etc.) could exhaust
+    // a tight-limit route's budget (e.g. send-verification's 5/min) before
+    // it was ever called, making that route look permanently broken.
+    const key = `${req.path}:${ip}`;
     const now = Date.now();
-    const record = rateLimitMap.get(ip);
+    const record = rateLimitMap.get(key);
 
     if (!record || now > record.resetAt) {
-      rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+      rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
       return next();
     }
 
@@ -1475,19 +1481,6 @@ app.get('/api/auth/debug-email-config', resolveSession, async (req, res) => {
     appUrlSet: !!process.env.APP_URL,
     appUrlValue: process.env.APP_URL || null,
   });
-});
-
-// TEMPORARY diagnostic — mints a fresh verification token for the CALLING
-// account only (never emails it, never exposes anyone else's) so the
-// verify-email round trip can be tested end-to-end in production without
-// needing inbox access. Remove once the email-verification issue is
-// resolved.
-app.post('/api/auth/debug-mint-verification-token', resolveSession, async (req, res) => {
-  if (!req.authSession) {
-    return res.status(401).json({ error: 'Not logged in.' });
-  }
-  const rawToken = await createEmailVerificationToken(req.authSession.accountId);
-  res.json({ rawToken });
 });
 
 // Re-sends the verification link — used by Account Settings' "Resend" when
