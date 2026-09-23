@@ -1295,6 +1295,7 @@ export default function App() {
                   onLogout={handleLogout}
                   onSecureAccount={() => setSecureAccountDismissed(false)}
                   onReauthenticate={(account) => setAuthAccount(account)}
+                  roleHasAccount={roleHasAccount}
                 />
               )}
             </motion.div>

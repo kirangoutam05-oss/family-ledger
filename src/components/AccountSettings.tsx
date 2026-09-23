@@ -30,6 +30,12 @@ interface AccountSettingsProps {
   // prompt below, so App.tsx can refresh authAccount without re-touching
   // household/identity (those are already correct on this device).
   onReauthenticate: (account: AuthAccount) => void;
+  // Whether THIS role already has a login somewhere (signed up on another
+  // device, or this device just isn't authenticated right now) — distinct
+  // from authAccount, which only reflects whether *this* session is
+  // currently logged in. Determines whether the CTA below offers signup
+  // (no account yet) or login (account exists, just not here).
+  roleHasAccount: boolean;
 }
 
 const CURRENCIES = [
@@ -53,6 +59,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   onLogout,
   onSecureAccount,
   onReauthenticate,
+  roleHasAccount,
 }) => {
   const [familyName, setFamilyName] = useState(ledger.familyName);
   const [husbandName, setHusbandName] = useState(ledger.husbandName);
@@ -83,6 +90,32 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [reauthPassword, setReauthPassword] = useState('');
   const [isReauthing, setIsReauthing] = useState(false);
   const [reauthError, setReauthError] = useState<string | null>(null);
+
+  // For the "an account exists for this role, just not logged in on this
+  // device" case — a real login form (we don't already know the email
+  // here, unlike the session-expired prompt above).
+  const [showInlineLogin, setShowInlineLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleInlineLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError(null);
+    try {
+      const account = await authLogin(loginEmail, loginPassword);
+      onReauthenticate(account);
+      setShowInlineLogin(false);
+      setLoginEmail('');
+      setLoginPassword('');
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Could not log in.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   const handleLogoutClick = async () => {
     setIsLoggingOut(true);
@@ -356,6 +389,60 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
                 ) : (
                   <span>{isChangingPassword ? 'Saving…' : 'Save new password'}</span>
                 )}
+              </button>
+            </form>
+          )}
+        </div>
+      ) : roleHasAccount ? (
+        // An account already exists for this role (signed up elsewhere, or
+        // this device just isn't authenticated right now) — offer login,
+        // not signup, since signing up again would just 409 as "already
+        // registered."
+        <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-[#9333EA]/30 shadow-xs space-y-3">
+          {!showInlineLogin ? (
+            <button
+              type="button"
+              onClick={() => setShowInlineLogin(true)}
+              className="w-full flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center text-[#9333EA] shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white">Log in</div>
+                  <div className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                    This device isn't logged in yet — your account already exists
+                  </div>
+                </div>
+              </div>
+            </button>
+          ) : (
+            <form onSubmit={handleInlineLogin} className="space-y-2.5">
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="Email"
+                autoFocus
+                required
+                className="w-full px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
+              />
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="Password"
+                required
+                className="w-full px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
+              />
+              {loginError && <p className="text-[11px] text-red-600 dark:text-red-400">{loginError}</p>}
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full py-2 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-all"
+              >
+                {isLoggingIn ? 'Logging in…' : 'Log in'}
               </button>
             </form>
           )}
