@@ -1081,6 +1081,13 @@ function parseSmsHeuristic(
 
   const lower = cleanSms.toLowerCase();
 
+  // Card-spend SMS name the merchant as "...At MERCHANT..." (e.g. "Spent
+  // Rs.1220 On HDFC Bank Card 5928 At SWIGGY PVT LTD FOOD2 On ..."), while
+  // UPI SMS name it as "...to MERCHANT...". Trying only one of the two left
+  // a card purchase with no merchant text at all — just a generic category
+  // label — which then had nothing for the icon matcher to recognize.
+  const extractMerchant = () => cleanSms.match(/(?:to|at)\s+([A-Z0-9\s]+?)(?:\s*ref|\s*via|\s*on|\.|$)/i);
+
   if (paymentMode === 'Cash' || /atm/i.test(lower)) {
     title = 'ATM Cash Withdrawal';
     category = 'grey_area';
@@ -1088,23 +1095,23 @@ function parseSmsHeuristic(
     greyAreaReason = 'Cash withdrawal intent (groceries, maid salary, or personal cash)';
     contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, was this cash withdrawal for household expenses (cook/maid salary) or personal pocket cash?`;
   } else if (/swiggy|zomato|starbucks|mcdonald|restaurant|cafe|bistro|dining|eatclub|pizza/i.test(lower)) {
-    const m = cleanSms.match(/to\s+([A-Z0-9\s]+?)(?:ref|via|on|\.|$)/i);
+    const m = extractMerchant();
     title = m ? m[1].trim() : 'Food & Dining Order';
     category = 'dining';
   } else if (/blinkit|zepto|instamart|bigbasket|grofers|dmart|supermarket|kirana|nature'?s basket/i.test(lower)) {
-    const m = cleanSms.match(/to\s+([A-Z0-9\s]+?)(?:ref|via|on|\.|$)/i);
+    const m = extractMerchant();
     title = m ? m[1].trim() : 'Groceries & Household';
     category = 'groceries';
   } else if (/bescom|electricity|bill|rent|wifi|fibernet|act|airtel|jio|maintenance|water/i.test(lower)) {
-    const m = cleanSms.match(/to\s+([A-Z0-9\s]+?)(?:ref|via|on|\.|$)/i);
+    const m = extractMerchant();
     title = m ? m[1].trim() : 'Utility & Bill Payment';
     category = 'bills';
   } else if (/zara|myntra|amazon|flipkart|h&m|ajio|shopping|apparel/i.test(lower)) {
-    const m = cleanSms.match(/at\s+([A-Z0-9\s]+?)(?:on|ref|\.|$)/i);
+    const m = extractMerchant();
     title = m ? m[1].trim() : 'Retail & Shopping';
     category = 'shopping';
   } else if (/uber|ola|rapido|shell|fuel|petrol|hpcl|iocl|toll|fastag/i.test(lower)) {
-    const m = cleanSms.match(/to\s+([A-Z0-9\s]+?)(?:ref|via|on|\.|$)/i);
+    const m = extractMerchant();
     title = m ? m[1].trim() : 'Travel & Fuel';
     category = 'transport';
   } else if (/cult|pharmacy|apollo|1mg|doctor|clinic|hospital|wellness/i.test(lower)) {
