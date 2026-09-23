@@ -19,6 +19,21 @@ async function parseJson(res: Response): Promise<any> {
   }
 }
 
+// Carries the HTTP status alongside the message so callers can special-case
+// a 401 (session expired/invalid) — e.g. to prompt logging back in — rather
+// than just showing the server's error text and leaving the user stuck.
+export class AuthApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function throwIfNotOk(res: Response, data: any, fallback: string): Promise<void> {
+  if (!res.ok) throw new AuthApiError(data.error || fallback, res.status);
+}
+
 export async function authSignup(params: {
   email: string;
   password: string;
@@ -103,13 +118,13 @@ export async function authChangePassword(currentPassword: string, newPassword: s
     body: JSON.stringify({ currentPassword, newPassword }),
   });
   const data = await parseJson(res);
-  if (!res.ok) throw new Error(data.error || 'Could not change your password.');
+  await throwIfNotOk(res, data, 'Could not change your password.');
 }
 
 export async function authSendVerification(): Promise<void> {
   const res = await fetch('/api/auth/send-verification', { method: 'POST' });
   const data = await parseJson(res);
-  if (!res.ok) throw new Error(data.error || 'Could not send the verification email.');
+  await throwIfNotOk(res, data, 'Could not send the verification email.');
 }
 
 export async function authVerifyEmail(token: string): Promise<void> {

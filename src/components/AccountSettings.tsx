@@ -4,7 +4,7 @@ import { LedgerState, SpenderId } from '../types';
 import { AppLockSettings } from './AppLockSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { CategoryPeriodSettings } from './CategoryPeriodSettings';
-import { AuthAccount, authChangePassword, authSendVerification } from '../utils/auth';
+import { AuthAccount, AuthApiError, authChangePassword, authLogin, authSendVerification } from '../utils/auth';
 
 interface AccountSettingsProps {
   ledger: LedgerState;
@@ -26,6 +26,10 @@ interface AccountSettingsProps {
   authAccount: AuthAccount | null;
   onLogout: () => Promise<void>;
   onSecureAccount: () => void;
+  // Called after successfully logging back in from the "session expired"
+  // prompt below, so App.tsx can refresh authAccount without re-touching
+  // household/identity (those are already correct on this device).
+  onReauthenticate: (account: AuthAccount) => void;
 }
 
 const CURRENCIES = [
@@ -48,6 +52,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   authAccount,
   onLogout,
   onSecureAccount,
+  onReauthenticate,
 }) => {
   const [familyName, setFamilyName] = useState(ledger.familyName);
   const [husbandName, setHusbandName] = useState(ledger.husbandName);
@@ -69,6 +74,16 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [verificationSent, setVerificationSent] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
 
+  // Set when a session-gated action comes back 401 — the device still shows
+  // "Logged in" (from a stale authAccount fetched earlier), but the login
+  // session itself has actually expired/gone invalid, so every such action
+  // would otherwise silently keep failing with no way to recover short of
+  // clearing the device's local identity entirely.
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [isReauthing, setIsReauthing] = useState(false);
+  const [reauthError, setReauthError] = useState<string | null>(null);
+
   const handleLogoutClick = async () => {
     setIsLoggingOut(true);
     await onLogout();
@@ -81,7 +96,11 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
       await authSendVerification();
       setVerificationSent(true);
     } catch (err) {
-      setVerificationError(err instanceof Error ? err.message : 'Could not send the verification email.');
+      if (err instanceof AuthApiError && err.status === 401) {
+        setSessionExpired(true);
+      } else {
+        setVerificationError(err instanceof Error ? err.message : 'Could not send the verification email.');
+      }
     } finally {
       setIsSendingVerification(false);
     }
@@ -105,9 +124,30 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
         setShowChangePassword(false);
       }, 1500);
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'Could not change your password.');
+      if (err instanceof AuthApiError && err.status === 401) {
+        setSessionExpired(true);
+      } else {
+        setPasswordError(err instanceof Error ? err.message : 'Could not change your password.');
+      }
     } finally {
       setIsChangingPassword(false);
+    }
+  };
+
+  const handleReauthenticate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authAccount) return;
+    setIsReauthing(true);
+    setReauthError(null);
+    try {
+      const account = await authLogin(authAccount.email, reauthPassword);
+      onReauthenticate(account);
+      setSessionExpired(false);
+      setReauthPassword('');
+    } catch (err) {
+      setReauthError(err instanceof Error ? err.message : 'Could not log in.');
+    } finally {
+      setIsReauthing(false);
     }
   };
 
@@ -182,7 +222,42 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
       {/* Login & Security — the real email/password account, separate from
           "Switch" above (which only swaps which device-identity this phone
           remembers, and never touches the login session). */}
-      {authAccount ? (
+      {authAccount && sessionExpired ? (
+        <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-amber-400/40 shadow-xs space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-neutral-900 dark:text-white truncate">
+                Your session expired
+              </div>
+              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                Log back in as {authAccount.email} to continue
+              </div>
+            </div>
+          </div>
+          <form onSubmit={handleReauthenticate} className="space-y-2.5">
+            <input
+              type="password"
+              value={reauthPassword}
+              onChange={(e) => setReauthPassword(e.target.value)}
+              placeholder="Password"
+              autoFocus
+              required
+              className="w-full px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333EA]"
+            />
+            {reauthError && <p className="text-[11px] text-red-600 dark:text-red-400">{reauthError}</p>}
+            <button
+              type="submit"
+              disabled={isReauthing}
+              className="w-full py-2 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-all"
+            >
+              {isReauthing ? 'Logging in…' : 'Log in'}
+            </button>
+          </form>
+        </div>
+      ) : authAccount ? (
         <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
