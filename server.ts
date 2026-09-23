@@ -1054,13 +1054,18 @@ function parseSmsHeuristic(
     paymentMode = 'NetBanking';
   }
 
-  // Detect bank
+  // Detect bank — strip the payee's UPI VPA first (e.g. "zepto@hdfcbank",
+  // "swiggy.bundl@hdfcbank"). That "@hdfcbank"/"@icici"/"@okaxis" suffix
+  // names the MERCHANT's payment gateway, not the sender's own bank, so
+  // testing the raw SMS text would tag an SBI account's Zepto/Swiggy
+  // purchase as HDFC just because that's who the merchant settles through.
+  const smsForBankDetection = cleanSms.replace(/[\w.-]+@[\w.-]+/g, '');
   let bankName = 'UPI Bank';
-  if (/HDFC/i.test(cleanSms)) bankName = 'HDFC Bank';
-  else if (/ICICI/i.test(cleanSms)) bankName = 'ICICI Bank';
-  else if (/SBI|State Bank/i.test(cleanSms)) bankName = 'SBI';
-  else if (/Axis/i.test(cleanSms)) bankName = 'Axis Bank';
-  else if (/Kotak/i.test(cleanSms)) bankName = 'Kotak Bank';
+  if (/HDFC/i.test(smsForBankDetection)) bankName = 'HDFC Bank';
+  else if (/ICICI/i.test(smsForBankDetection)) bankName = 'ICICI Bank';
+  else if (/SBI|State Bank/i.test(smsForBankDetection)) bankName = 'SBI';
+  else if (/Axis/i.test(smsForBankDetection)) bankName = 'Axis Bank';
+  else if (/Kotak/i.test(smsForBankDetection)) bankName = 'Kotak Bank';
 
   // UPI Ref
   let upiRef = '';
@@ -2586,7 +2591,16 @@ Determine:
    word "credited".
 4. category: one of the above
 5. paymentMode: "UPI" | "Card" | "NetBanking" | "Cash" | "AmazonPayLater" | "Pluxee"
-6. bankName: detected bank (e.g. HDFC Bank, ICICI Bank, SBI, etc.)
+6. bankName: the SENDER's own issuing bank (the account/card the money left
+   from), but ONLY if the SMS text itself explicitly names one (e.g.
+   "HDFC Bank", "ICICI Bank", "SBI", "Axis Bank", "Kotak Bank"). Many UPI
+   notifications (Google Pay, PhonePe, Paytm, or a generic "Rs.X paid to Y
+   via UPI" text) never mention any bank at all — do NOT guess or default to
+   a bank name in that case. Do NOT read the bank off the payee's UPI VPA
+   suffix (e.g. "zepto@hdfcbank", "swiggy.bundl@okaxis") — that names the
+   MERCHANT's payment gateway, not the sender's own bank, and is a common
+   cause of mistagging a purchase with the wrong bank. If no bank is named
+   for the sender's own account, return the literal string "UPI Bank" instead.
 7. upiRef: UPI reference or transaction ID if present
 8. isGreyArea: boolean (true if payee is an individual or ATM or ambiguous transfer)
 9. greyAreaReason: why context is needed
