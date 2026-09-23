@@ -1477,6 +1477,19 @@ app.get('/api/auth/debug-email-config', resolveSession, async (req, res) => {
   });
 });
 
+// TEMPORARY diagnostic — mints a fresh verification token for the CALLING
+// account only (never emails it, never exposes anyone else's) so the
+// verify-email round trip can be tested end-to-end in production without
+// needing inbox access. Remove once the email-verification issue is
+// resolved.
+app.post('/api/auth/debug-mint-verification-token', resolveSession, async (req, res) => {
+  if (!req.authSession) {
+    return res.status(401).json({ error: 'Not logged in.' });
+  }
+  const rawToken = await createEmailVerificationToken(req.authSession.accountId);
+  res.json({ rawToken });
+});
+
 // Re-sends the verification link — used by Account Settings' "Resend" when
 // the first email didn't arrive, or an existing unverified account wants
 // another shot at it. Rate-limited per-IP the same as everything else here.
