@@ -50,6 +50,8 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   const [parseSource, setParseSource] = useState<'gemini' | 'heuristic' | null>(null);
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [paidForOther, setPaidForOther] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // When the parse comes back ambiguous, its context is resolved right here
   // in the same card instead of forcing a save-then-jump-to-Grey-Areas round
@@ -108,7 +110,11 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   // resolved with the inline category/note right now, so it saves already
   // categorized instead of needing a second trip through Grey Areas.
   const handleConfirmAndAdd = async () => {
-    if (!parsedPreview) return;
+    // Guards against a double-tap (or a slow first click landing twice on
+    // some touch devices) firing this twice before the confirm dialog closes
+    // and re-adding the same transaction under a second, later `Date.now()` id.
+    if (!parsedPreview || isSubmitting) return;
+    setIsSubmitting(true);
 
     const title = isGreyArea
       ? inlineTitle.trim() || parsedPreview.title || 'UPI Transaction'
@@ -116,54 +122,60 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
     const category = isGreyArea ? inlineCategory : parsedPreview.category || 'bills';
     const notes = isGreyArea ? inlineNote.trim() : parsedPreview.notes || '';
 
-    if (paidForOther) {
-      const otherSpender: SpenderId = selectedSpender === 'husband' ? 'wife' : 'husband';
-      await onFlagPendingAck({
+    try {
+      if (paidForOther) {
+        const otherSpender: SpenderId = selectedSpender === 'husband' ? 'wife' : 'husband';
+        await onFlagPendingAck({
+          title,
+          amount: parsedPreview.amount || 0,
+          category,
+          paymentMode: parsedPreview.paymentMode || 'UPI',
+          notes: notes || undefined,
+          bankName: parsedPreview.bankName,
+          upiRef: parsedPreview.upiRef,
+          rawSms: smsInput,
+          date: parsedPreview.date || new Date().toISOString(),
+          paidBy: selectedSpender,
+          paidFor: otherSpender,
+        });
+        setAddedSuccess(true);
+        setParsedPreview(null);
+        setSmsInput('');
+        return;
+      }
+
+      const newTx: Transaction = {
+        id: `tx-${Date.now()}`,
         title,
         amount: parsedPreview.amount || 0,
+        type: parsedPreview.type || 'debit',
+        date: parsedPreview.date || new Date().toISOString(),
+        spender: selectedSpender,
         category,
         paymentMode: parsedPreview.paymentMode || 'UPI',
-        notes: notes || undefined,
-        bankName: parsedPreview.bankName,
         upiRef: parsedPreview.upiRef,
+        bankName: parsedPreview.bankName,
         rawSms: smsInput,
-        date: parsedPreview.date || new Date().toISOString(),
-        paidBy: selectedSpender,
-        paidFor: otherSpender,
-      });
+        status: isGreyArea ? 'verified' : parsedPreview.status || 'verified',
+        notes,
+      };
+
+      await onAddTransaction(newTx);
       setAddedSuccess(true);
       setParsedPreview(null);
       setSmsInput('');
-      return;
+    } finally {
+      setIsSubmitting(false);
+      setShowConfirm(false);
     }
-
-    const newTx: Transaction = {
-      id: `tx-${Date.now()}`,
-      title,
-      amount: parsedPreview.amount || 0,
-      type: parsedPreview.type || 'debit',
-      date: parsedPreview.date || new Date().toISOString(),
-      spender: selectedSpender,
-      category,
-      paymentMode: parsedPreview.paymentMode || 'UPI',
-      upiRef: parsedPreview.upiRef,
-      bankName: parsedPreview.bankName,
-      rawSms: smsInput,
-      status: isGreyArea ? 'verified' : parsedPreview.status || 'verified',
-      notes,
-    };
-
-    await onAddTransaction(newTx);
-    setAddedSuccess(true);
-    setParsedPreview(null);
-    setSmsInput('');
   };
 
   // Escape hatch for genuine ambiguity (e.g. needs the partner's input) —
   // saves it into the Grey Areas queue to resolve later instead of forcing
   // a category choice right now.
   const handleSaveForLater = async () => {
-    if (!parsedPreview) return;
+    if (!parsedPreview || isSubmitting) return;
+    setIsSubmitting(true);
 
     const newTx: Transaction = {
       id: `tx-${Date.now()}`,
@@ -183,10 +195,14 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
       notes: '',
     };
 
-    await onAddTransaction(newTx);
-    setAddedSuccess(true);
-    setParsedPreview(null);
-    setSmsInput('');
+    try {
+      await onAddTransaction(newTx);
+      setAddedSuccess(true);
+      setParsedPreview(null);
+      setSmsInput('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const previewCat =
@@ -535,23 +551,26 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
               onClick={() => setParsedPreview(null)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+              disabled={isSubmitting}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 disabled:opacity-50"
             >
               Cancel
             </button>
             {isGreyArea && (
               <button
                 onClick={handleSaveForLater}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-1.5 transition-colors"
+                disabled={isSubmitting}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-1.5 transition-colors disabled:opacity-50"
                 title="Not sure yet? Save it to Grey Areas and resolve it later."
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>Not Sure — Save for Later</span>
+                <span>{isSubmitting ? 'Saving…' : 'Not Sure — Save for Later'}</span>
               </button>
             )}
             <button
-              onClick={handleConfirmAndAdd}
-              className={`px-4 py-1.5 rounded-xl text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs ${
+              onClick={() => setShowConfirm(true)}
+              disabled={isSubmitting}
+              className={`px-4 py-1.5 rounded-xl text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 ${
                 paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#9333EA] hover:bg-[#7E22CE]'
               }`}
             >
@@ -560,6 +579,70 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Confirm-before-save — a real pop-up rather than saving straight off
+          the tap, so a double-tap or an accidental click can't silently add
+          the same expense twice. */}
+      {showConfirm && parsedPreview && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => e.target === e.currentTarget && !isSubmitting && setShowConfirm(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 6 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            className="glass-sheet rounded-[24px] max-w-xs w-full p-5 border border-black/[0.06] dark:border-white/[0.1] space-y-4 text-center"
+          >
+            <div
+              className={`w-11 h-11 rounded-full flex items-center justify-center mx-auto ${
+                paidForOther
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  : 'bg-[#9333EA]/10 text-[#9333EA]'
+              }`}
+            >
+              {paidForOther ? <HandCoins className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-neutral-900 dark:text-white">
+                {paidForOther ? 'Send for acknowledgement?' : 'Add this expense?'}
+              </h4>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                "
+                {isGreyArea
+                  ? inlineTitle.trim() || parsedPreview.title || 'UPI Transaction'
+                  : parsedPreview.title || 'UPI Transaction'}
+                " — {formatCurrency(parsedPreview.amount || 0, currency)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 rounded-lg border border-black/10 dark:border-white/10 text-neutral-700 dark:text-neutral-300 text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAndAdd}
+                disabled={isSubmitting}
+                className={`flex-1 py-2.5 rounded-xl text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition-colors ${
+                  paidForOther ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#9333EA] hover:bg-[#7E22CE]'
+                }`}
+              >
+                {isSubmitting ? 'Saving…' : paidForOther ? 'Send' : 'Confirm'}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Recently Added — every transaction added anywhere in the app (not

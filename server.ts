@@ -698,14 +698,15 @@ function isValidPassword(pw: unknown): pw is string {
 }
 
 // Sends via Resend's REST API directly (a plain fetch) rather than adding
-// their SDK as a dependency for two call sites. A missing key logs and
-// no-ops instead of failing signup/reset — email delivery shouldn't be able
-// to break the rest of auth.
-async function sendEmail(toEmail: string, subject: string, html: string): Promise<void> {
+// their SDK as a dependency for two call sites. Returns whether Resend
+// actually accepted the send — callers that can safely tell the user
+// delivery failed (rather than silently claiming success) should check this
+// rather than assuming a fire-and-forget call always worked.
+async function sendEmail(toEmail: string, subject: string, html: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.warn(`RESEND_API_KEY not set — skipping email send ("${subject}").`);
-    return;
+    return false;
   }
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -720,22 +721,25 @@ async function sendEmail(toEmail: string, subject: string, html: string): Promis
     });
     if (!res.ok) {
       console.error('Resend email send failed:', res.status, await res.text());
+      return false;
     }
+    return true;
   } catch (err) {
     console.error('Resend email send error:', err);
+    return false;
   }
 }
 
-async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promise<void> {
-  await sendEmail(
+async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promise<boolean> {
+  return sendEmail(
     toEmail,
     'Reset your KNKU password',
     `<p>We received a request to reset your KNKU password.</p><p><a href="${resetUrl}">Click here to set a new password</a>. This link expires in 30 minutes.</p><p>If you didn't request this, you can safely ignore this email.</p>`
   );
 }
 
-async function sendVerificationEmail(toEmail: string, verifyUrl: string): Promise<void> {
-  await sendEmail(
+async function sendVerificationEmail(toEmail: string, verifyUrl: string): Promise<boolean> {
+  return sendEmail(
     toEmail,
     'Verify your KNKU email',
     `<p>Confirm this is your email address to finish securing your KNKU account.</p><p><a href="${verifyUrl}">Click here to verify your email</a>. This link expires in 24 hours.</p><p>If you didn't request this, you can safely ignore this email.</p>`
@@ -1500,7 +1504,12 @@ app.post('/api/auth/send-verification', rateLimit(5, 60000), resolveSession, asy
     }
     const rawToken = await createEmailVerificationToken(account.id);
     const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
-    await sendVerificationEmail(account.email, `${appUrl}/verify-email?token=${rawToken}`);
+    const delivered = await sendVerificationEmail(account.email, `${appUrl}/verify-email?token=${rawToken}`);
+    if (!delivered) {
+      return res.status(502).json({
+        error: 'Could not send the verification email right now — please try again in a moment.',
+      });
+    }
     res.json({ success: true, alreadyVerified: false });
   } catch (err) {
     console.error('send-verification failed:', err);
