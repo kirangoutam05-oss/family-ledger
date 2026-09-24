@@ -114,9 +114,15 @@ const HOUSEHOLDS_DIR = path.join(DATA_DIR, 'households');
 const LEGACY_DATA_FILE = path.join(DATA_DIR, 'ledger.json');
 const DEFAULT_HOUSEHOLD_ID = 'default';
 
-// `pool` is mutable: if Postgres is unreachable or misconfigured at startup, we
-// fall back to file storage rather than crashing the whole server — a bad
-// DATABASE_URL should degrade the app, not take it down entirely.
+// When DATABASE_URL is set in production, Postgres is the only acceptable
+// store: quietly falling back to files would write to Render's ephemeral disk
+// while Postgres remains the real source of truth, so those writes vanish at
+// the next restart with nothing ever reporting a failure. Locally we still
+// degrade to files, which is a convenience and loses nothing.
+const POSTGRES_REQUIRED = !!process.env.DATABASE_URL && process.env.NODE_ENV === 'production';
+
+// `pool` is mutable so local development can degrade to file storage when
+// Postgres is unreachable. In production POSTGRES_REQUIRED keeps it pinned.
 let pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -124,8 +130,21 @@ let pool = process.env.DATABASE_URL
     })
   : null;
 
+// pg emits 'error' on the pool when an *idle* client dies — which happens
+// routinely against hosts that close idle connections. Without a listener,
+// EventEmitter turns that into a thrown exception and takes the process down.
+// The pool retires the client itself; we only have to not crash.
+pool?.on('error', (err) => {
+  console.error('Idle Postgres client error (pool will replace it):', err.message);
+});
+
+// Schema setup is idempotent but not free: ENABLE ROW LEVEL SECURITY takes an
+// ACCESS EXCLUSIVE lock even when it changes nothing, so running it per request
+// serialises traffic behind a lock for no benefit. Run it once.
+let ledgerTableReady = false;
+
 async function ensureLedgerTable() {
-  if (!pool) return;
+  if (!pool || ledgerTableReady) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ledger_state (
       id TEXT PRIMARY KEY,
@@ -140,6 +159,7 @@ async function ensureLedgerTable() {
   // enabling it with zero policies is exactly "block Supabase's public API
   // from touching this table at all," not a behavior change for us.
   await pool.query(`ALTER TABLE ledger_state ENABLE ROW LEVEL SECURITY`);
+  ledgerTableReady = true;
 }
 
 // A household id doubles as its invite "password" and, in file-storage mode, as
@@ -199,6 +219,15 @@ async function loadHouseholdState(id: string): Promise<LedgerState | null> {
       }
       if (id !== DEFAULT_HOUSEHOLD_ID) return null;
     } catch (err) {
+      if (POSTGRES_REQUIRED) {
+        // Do NOT drop to file storage here. A dropped connection is usually
+        // transient (the database waking, a network blip); demoting the whole
+        // process for the rest of its life would send every later write to a
+        // disk nobody reads back, losing them silently. Fail this request so
+        // the caller sees it and the next one can use a healthy connection.
+        console.error('Postgres read failed for household %s:', id, err);
+        throw err;
+      }
       console.error(
         'Could not connect to Postgres (check DATABASE_URL). Falling back to local file storage for this run:',
         err
@@ -250,8 +279,12 @@ async function listHouseholdIds(): Promise<string[]> {
   return ids;
 }
 
+// Throws when the write does not land. It used to swallow the error, which
+// meant the cache had already been updated, the route replied 200, and the
+// user was told their change was saved when nothing had been written — the
+// loss only surfaced on the next restart, when the cache went away. Callers
+// are responsible for turning this into a 5xx.
 async function persistHouseholdState(id: string, state: LedgerState) {
-  householdCache.set(id, state);
   try {
     if (pool) {
       await pool.query(
@@ -264,7 +297,15 @@ async function persistHouseholdState(id: string, state: LedgerState) {
     }
   } catch (err) {
     console.error(`Failed to persist household ${id}:`, err);
+    // Routes mutate req.householdState in place, and that object is the one
+    // already sitting in the cache — so by the time we get here the cache is
+    // holding changes that no store accepted. Drop the entry rather than keep
+    // serving them; the next read reloads whatever was actually persisted.
+    householdCache.delete(id);
+    throw err;
   }
+  // Only cache what actually persisted.
+  householdCache.set(id, state);
 }
 
 declare global {
@@ -851,7 +892,12 @@ async function sendPushToRole(
   } catch (err: any) {
     if (err?.statusCode === 404 || err?.statusCode === 410) {
       device.pushSubscription = undefined;
-      await persistHouseholdState(householdId, state);
+      // Best-effort cleanup of a subscription the push service has already
+      // rejected. If the store is unhappy we'll simply try again next push,
+      // so don't let it escalate out of a notification path.
+      await persistHouseholdState(householdId, state).catch((e) =>
+        console.error('Could not drop a dead push subscription:', e)
+      );
     } else {
       console.error(`Push to ${role} failed:`, err?.message || err);
     }
@@ -901,7 +947,17 @@ async function resolveHousehold(req: express.Request, res: express.Response, nex
     return res.status(400).json({ error: 'Invalid household id' });
   }
 
-  const state = await loadHouseholdState(id);
+  // loadHouseholdState throws rather than silently degrading when Postgres is
+  // required (see POSTGRES_REQUIRED). Express 4 does not catch rejections from
+  // async middleware, so without this the process would exit on a read error.
+  let state: LedgerState | null;
+  try {
+    state = await loadHouseholdState(id);
+  } catch (err) {
+    console.error('Could not load household %s:', id, err);
+    return res.status(503).json({ error: 'The database is unavailable right now. Please try again.' });
+  }
+
   if (!state) {
     return res.status(404).json({ error: 'Household not found. Check your invite link.' });
   }
@@ -2275,13 +2331,18 @@ app.post('/api/ledger/goal-contribution', rateLimit(60, 60000), async (req, res)
 // Wipe all household data (transactions/goals/alerts) but keep the household's
 // identity (names, currency, setup, paired devices) intact.
 app.post('/api/ledger/reset', async (req, res) => {
-  const state = req.householdState!;
-  state.transactions = [];
-  state.goals = [];
-  state.alerts = [];
-  state.lastSyncTime = new Date().toISOString();
-  await persistHouseholdState(req.householdId!, state);
-  res.json({ success: true, ledger: state });
+  try {
+    const state = req.householdState!;
+    state.transactions = [];
+    state.goals = [];
+    state.alerts = [];
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
+  } catch (err) {
+    console.error('Ledger reset failed:', err);
+    res.status(500).json({ error: 'Could not reset the ledger. Nothing was changed.' });
+  }
 });
 
 // One-time household setup: real family/partner names, currency
@@ -2719,11 +2780,49 @@ Determine:
 });
 
 // Start server with Vite middleware in dev or static files in production
+// Creates every table up front. A paused free-tier database often accepts the
+// second or third connection after it wakes, so a single failed attempt is not
+// evidence that the configuration is wrong — retry briefly before deciding.
+async function initSchema() {
+  const attempts = 5;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await ensureAuthTables();
+      await ensureLedgerTable();
+      if (attempt > 1) console.log(`Postgres schema ready (attempt ${attempt}).`);
+      return;
+    } catch (err) {
+      const last = attempt === attempts;
+      const waitMs = 2000 * attempt;
+      console.error(
+        `Postgres schema setup failed (attempt ${attempt}/${attempts})${last ? '' : `, retrying in ${waitMs}ms`}:`,
+        err instanceof Error ? err.message : err
+      );
+      if (!last) await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+
+  if (POSTGRES_REQUIRED) {
+    // Refuse to serve. Continuing would write to a disk that is wiped on the
+    // next deploy while Postgres stays the real source of truth, so every
+    // change made in the meantime would disappear without any error.
+    console.error(
+      'DATABASE_URL is set and NODE_ENV=production, but Postgres is unreachable. ' +
+        'Refusing to start rather than writing to storage that will be discarded. ' +
+        'Check DATABASE_URL and that the database is awake and accepting connections.'
+    );
+    process.exit(1);
+  }
+
+  console.warn('Postgres unreachable — falling back to local file storage under data/.');
+  pool = null;
+}
+
 async function startServer() {
   // Households are loaded lazily, per request, by loadHouseholdState — there's no
   // single state to load eagerly anymore.
   console.log(`Ledger storage: ${pool ? 'Postgres (persistent across deploys)' : 'local files under data/'}`);
-  await ensureAuthTables();
+  await initSchema();
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -2751,4 +2850,9 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  // Without this an unhandled rejection kills the process with only a stack
+  // trace, which reads as a crash rather than a startup failure.
+  console.error('Server failed to start:', err);
+  process.exit(1);
+});
