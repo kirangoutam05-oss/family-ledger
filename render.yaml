@@ -1,3 +1,9 @@
+# Render Blueprint. `name` must match the existing service exactly, or Render
+# creates a second one alongside it instead of adopting it.
+#
+# Render preserves environment variables that already exist on a service, so
+# `sync: false` here means "ask me once in the dashboard, then leave it alone"
+# rather than "clear it on every sync".
 services:
   - type: web
     name: family-ledger
@@ -12,27 +18,31 @@ services:
       - key: NODE_VERSION
         value: "24"
 
-      # Postgres connection string. Without this the ledger falls back to
-      # JSON files under data/, which Render's free tier wipes on every
-      # redeploy — so this is effectively required in production.
+      # Signs the login session cookie. Without it cookie-parser runs with an
+      # undefined secret, signed cookies never verify, and nobody can stay
+      # logged in. generateValue creates a stable random value on first sync
+      # and leaves any existing value untouched, so sessions survive deploys.
+      - key: COOKIE_SECRET
+        generateValue: true
+
+      # Supabase Postgres connection string. Without it the ledger falls back
+      # to JSON files on a filesystem that is wiped whenever the service
+      # redeploys, restarts, or spins down after 15 idle minutes.
       - key: DATABASE_URL
         sync: false
 
-      # Signs the login session cookie. Changing it logs everyone out.
-      - key: COOKIE_SECRET
-        sync: false
-
-      # Public URL of this service, used to build links in outgoing email
-      # (verification, password reset). Must match the real host or the
-      # links in those emails point nowhere.
-      - key: APP_URL
-        sync: false
-
-      # Resend — password-reset and verification email.
+      # Resend, for verification and password-reset email.
       - key: RESEND_API_KEY
         sync: false
+      # Optional. Defaults to Resend's shared onboarding@resend.dev sender,
+      # which has poor deliverability. Use a verified domain in production.
       - key: RESEND_FROM_EMAIL
         sync: false
+
+      # APP_URL is deliberately not declared. Render sets RENDER_EXTERNAL_URL
+      # to the service's real public URL, and resolveAppUrl() prefers it, so
+      # email links are correct without configuration. Set APP_URL by hand
+      # only when a custom domain should own those links instead.
 
       # Web Push (daily reminders, partner-added-an-expense nudges).
       - key: VAPID_PUBLIC_KEY
@@ -42,7 +52,9 @@ services:
       - key: VAPID_SUBJECT
         sync: false
 
-      # Shared secret for POST /api/cron/daily-reminder.
+      # Shared secret for POST /api/cron/daily-reminder. Must match whatever
+      # the external scheduler sends as X-Cron-Secret, so it is prompted for
+      # rather than generated.
       - key: CRON_SECRET
         sync: false
 

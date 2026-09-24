@@ -748,6 +748,12 @@ function isValidPassword(pw: unknown): pw is string {
 function resolveAppUrl(req: express.Request): string {
   const configured = (process.env.APP_URL || '').trim().replace(/\/$/, '');
   if (configured) return configured;
+  // Render sets this to the service's full public URL (https://x.onrender.com).
+  // Preferring it over the request origin means a deploy produces working email
+  // links with no configuration, and keeps them pointed at the canonical host
+  // even for a request that arrived with some other Host header.
+  const renderUrl = (process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
+  if (renderUrl) return renderUrl;
   const host = req.get('host');
   if (host) return `${req.protocol}://${host}`;
   // Nothing to go on. Returning '' reproduces the old broken-link behaviour,
@@ -1577,7 +1583,11 @@ app.get('/api/auth/debug-email-config', resolveSession, async (req, res) => {
     // origin when APP_URL is unset. If this looks wrong, the links in
     // verification/reset mail are wrong too.
     appUrlEffective: resolveAppUrl(req) || null,
-    appUrlSource: process.env.APP_URL ? 'APP_URL' : 'request-origin-fallback',
+    appUrlSource: process.env.APP_URL
+      ? 'APP_URL'
+      : process.env.RENDER_EXTERNAL_URL
+        ? 'RENDER_EXTERNAL_URL'
+        : 'request-origin-fallback',
   });
 });
 
@@ -2840,11 +2850,16 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Family Ledger Server running on http://0.0.0.0:${PORT}`);
-    if (!process.env.APP_URL) {
+    if (process.env.APP_URL) {
+      console.log(`Email links use APP_URL: ${process.env.APP_URL}`);
+    } else if (process.env.RENDER_EXTERNAL_URL) {
+      console.log(`Email links use RENDER_EXTERNAL_URL: ${process.env.RENDER_EXTERNAL_URL}`);
+    } else {
       console.warn(
-        'APP_URL is not set — links in verification and password-reset email ' +
-          "will be built from each request's own origin. Set APP_URL to this " +
-          'service\'s public URL to be sure they point at the right host.',
+        'Neither APP_URL nor RENDER_EXTERNAL_URL is set — links in verification ' +
+          "and password-reset email will be built from each request's own origin. " +
+          "Set APP_URL to this service's public URL to be sure they point at the " +
+          'right host.',
       );
     }
   });
