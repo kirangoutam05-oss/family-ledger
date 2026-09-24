@@ -6,8 +6,11 @@
 # rather than "clear it on every sync".
 services:
   - type: web
-    name: family-ledger
+    name: knku-ledger
     runtime: node
+    # Free instances spin down after 15 idle minutes and take about a minute to
+    # wake. They also have no persistent disk, which is why DATABASE_URL below
+    # is not optional in practice.
     plan: free
     buildCommand: npm ci && npm run build
     startCommand: npm run start
