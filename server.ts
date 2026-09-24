@@ -697,6 +697,27 @@ function isValidPassword(pw: unknown): pw is string {
   return typeof pw === 'string' && pw.length >= 8 && pw.length <= 200;
 }
 
+// Base URL for links we put inside outgoing email. APP_URL wins when it's
+// set, but an unset APP_URL used to collapse to '' and yield a relative href
+// like "/verify-email?token=..." — which no mail client can resolve, so the
+// link arrived dead while Resend still reported a successful send. Falling
+// back to the request's own origin keeps those links working whether we're
+// on localhost or Render. 'trust proxy' is set above, so protocol/host here
+// reflect X-Forwarded-* rather than the internal hop.
+function resolveAppUrl(req: express.Request): string {
+  const configured = (process.env.APP_URL || '').trim().replace(/\/$/, '');
+  if (configured) return configured;
+  const host = req.get('host');
+  if (host) return `${req.protocol}://${host}`;
+  // Nothing to go on. Returning '' reproduces the old broken-link behaviour,
+  // so warn rather than let it pass unnoticed.
+  console.error(
+    'APP_URL is not set and the request carried no Host header — ' +
+      'links in this email will be relative and will not work.',
+  );
+  return '';
+}
+
 // Sends via Resend's REST API directly (a plain fetch) rather than adding
 // their SDK as a dependency for two call sites. Returns whether Resend
 // actually accepted the send — callers that can safely tell the user
@@ -1315,9 +1336,9 @@ app.post('/api/auth/signup', rateLimit(10, 60000), resolveHousehold, async (req,
 
     // Fire-and-forget — verification is a nice-to-have that shouldn't block
     // or fail the signup response itself if Resend has a hiccup.
+    const appUrl = resolveAppUrl(req);
     createEmailVerificationToken(account.id)
       .then((rawToken) => {
-        const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
         return sendVerificationEmail(account.email, `${appUrl}/verify-email?token=${rawToken}`);
       })
       .catch((err) => console.error('Could not send verification email:', err));
@@ -1402,7 +1423,7 @@ app.post('/api/auth/forgot-password', rateLimit(5, 60000), async (req, res) => {
       const account = await findAccountByEmail(emailNormalized);
       if (account) {
         const rawToken = await createPasswordResetToken(account.id);
-        const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+        const appUrl = resolveAppUrl(req);
         await sendPasswordResetEmail(account.email, `${appUrl}/reset-password?token=${rawToken}`);
       }
     }
@@ -1496,6 +1517,11 @@ app.get('/api/auth/debug-email-config', resolveSession, async (req, res) => {
     resendFromEmailSet: !!process.env.RESEND_FROM_EMAIL,
     appUrlSet: !!process.env.APP_URL,
     appUrlValue: process.env.APP_URL || null,
+    // What email links will actually be built from, which is the request
+    // origin when APP_URL is unset. If this looks wrong, the links in
+    // verification/reset mail are wrong too.
+    appUrlEffective: resolveAppUrl(req) || null,
+    appUrlSource: process.env.APP_URL ? 'APP_URL' : 'request-origin-fallback',
   });
 });
 
@@ -1515,7 +1541,7 @@ app.post('/api/auth/send-verification', rateLimit(5, 60000), resolveSession, asy
       return res.json({ success: true, alreadyVerified: true });
     }
     const rawToken = await createEmailVerificationToken(account.id);
-    const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+    const appUrl = resolveAppUrl(req);
     const delivered = await sendVerificationEmail(account.email, `${appUrl}/verify-email?token=${rawToken}`);
     if (!delivered) {
       return res.status(502).json({
@@ -2715,6 +2741,13 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Family Ledger Server running on http://0.0.0.0:${PORT}`);
+    if (!process.env.APP_URL) {
+      console.warn(
+        'APP_URL is not set — links in verification and password-reset email ' +
+          "will be built from each request's own origin. Set APP_URL to this " +
+          'service\'s public URL to be sure they point at the right host.',
+      );
+    }
   });
 }
 
