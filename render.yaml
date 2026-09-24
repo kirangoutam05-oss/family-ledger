@@ -1,12 +1,19 @@
-# Render Blueprint. `name` must match the existing service exactly, or Render
-# creates a second one alongside it instead of adopting it.
+# Render Blueprint.
+#
+# VERIFY `name` AGAINST THE DASHBOARD BEFORE SYNCING. Render matches services
+# by name; a name that matches nothing creates a new service rather than
+# adopting the existing one. The live service answers on
+# family-ledger-jin3.onrender.com, and Render appends a random suffix to the
+# subdomain when the plain one is taken, so the service itself is most likely
+# named `family-ledger` - but that is an inference from the URL, not something
+# this file can check.
 #
 # Render preserves environment variables that already exist on a service, so
 # `sync: false` here means "ask me once in the dashboard, then leave it alone"
 # rather than "clear it on every sync".
 services:
   - type: web
-    name: knku-ledger
+    name: family-ledger
     runtime: node
     # Free instances spin down after 15 idle minutes and take about a minute to
     # wake. They also have no persistent disk, which is why DATABASE_URL below
@@ -63,3 +70,8 @@ services:
 
       - key: GEMINI_API_KEY
         sync: false
+
+      # Not declared, because it should normally be absent: setting
+      # CSP_REPORT_ONLY=true in the dashboard switches Content-Security-Policy
+      # to report-only for a deploy, so a suspected policy problem shows up in
+      # the browser console instead of breaking the page. Remove it afterwards.
