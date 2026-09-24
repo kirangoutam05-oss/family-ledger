@@ -24,12 +24,55 @@ const PORT = Number(process.env.PORT) || 3000;
 // `Secure` flag (and req.secure generally) would behave incorrectly in production.
 app.set('trust proxy', 1);
 
+// Advertising the framework and version tells an attacker which exploits are
+// worth trying. Nothing needs this header.
+app.disable('x-powered-by');
+
+// index.html pulls its stylesheet from fonts.googleapis.com and the font files
+// from fonts.gstatic.com; everything else is same-origin. 'unsafe-inline' for
+// styles is unavoidable here - Tailwind injects a <style> block and motion sets
+// inline style attributes - but scripts stay restricted to 'self', which is
+// what actually matters for XSS. blob: covers the service worker and the
+// canvas/PDF export path.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  'upgrade-insecure-requests',
+].join('; ');
+
+// Set CSP_REPORT_ONLY=true to have the browser report violations without
+// blocking anything. Useful for one deploy if a policy change is suspected of
+// breaking the UI, since the console then names the exact directive.
+const cspReportOnly = process.env.CSP_REPORT_ONLY === 'true';
+
 // Security Headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader(
+    cspReportOnly ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy',
+    CSP
+  );
+  // Deny the powerful features this app never asks for, so a compromised
+  // dependency cannot prompt for them.
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=()');
+  // Only meaningful over HTTPS; sending it on plain HTTP is ignored by
+  // browsers, and in production Render terminates TLS in front of us anyway.
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   next();
 });
 
@@ -40,11 +83,39 @@ app.use(express.json({ limit: '500kb' }));
 // but signed cookies won't verify, so resolveSession just finds nothing.
 app.use(cookieParser(process.env.COOKIE_SECRET));
 
+// The client address to rate-limit against.
+//
+// This used to read the raw X-Forwarded-For header. Behind Cloudflare *and*
+// Render that header is a chain, and something in it changes between requests,
+// so every request produced a different key and the limiter never fired in
+// production — verified against the deployed build, which rate-limited
+// correctly on localhost and not at all on Render. It was also trivially
+// defeated by sending the header yourself, since it was taken at face value.
+//
+// Cloudflare sets CF-Connecting-IP to the real client address and overwrites
+// any value the client supplies, so it is both stable and not forgeable from
+// outside. Falling back to req.ip (resolved via the `trust proxy` setting
+// above) covers any path that does not come through Cloudflare.
+function clientIp(req: express.Request): string {
+  const cf = req.headers['cf-connecting-ip'];
+  if (typeof cf === 'string' && cf.trim()) return cf.trim();
+  return req.ip || req.socket.remoteAddress || 'client';
+}
+
+// Keeps enough of an address to compare two requests without recording a
+// whole one: 203.0.113.44 -> 203.0.113.x, and IPv6 down to its first blocks.
+function shortenIp(ip: string | undefined): string | null {
+  if (!ip) return null;
+  if (ip.includes(':')) return ip.split(':').slice(0, 3).join(':') + ':…';
+  const parts = ip.split('.');
+  return parts.length === 4 ? `${parts[0]}.${parts[1]}.${parts[2]}.x` : ip;
+}
+
 // In-memory sliding-window rate limiter for sensitive operations
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(maxPerWindow = 60, windowMs = 60 * 1000) {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'client';
+    const ip = clientIp(req);
     // Keyed by route + IP, not IP alone — every rate-limited route used to
     // share one counter per IP, so a household's normal activity on
     // higher-limit routes (adding/editing transactions, etc.) could exhaust
@@ -1588,6 +1659,21 @@ app.get('/api/auth/debug-email-config', resolveSession, async (req, res) => {
       : process.env.RENDER_EXTERNAL_URL
         ? 'RENDER_EXTERNAL_URL'
         : 'request-origin-fallback',
+
+    // Rate limiting keys on the client address, and reading that wrong is
+    // silent: the limiter simply never fires. Report what each candidate
+    // resolves to so it can be confirmed from a real request instead of
+    // inferred. Values are truncated - enough to tell whether the key is
+    // stable between two calls, not enough to log anyone's full address.
+    clientIp: {
+      using: req.headers['cf-connecting-ip'] ? 'cf-connecting-ip' : 'req.ip',
+      resolved: shortenIp(clientIp(req)),
+      cfConnectingIp: shortenIp(req.headers['cf-connecting-ip'] as string | undefined),
+      reqIp: shortenIp(req.ip),
+      xForwardedForEntries: ((req.headers['x-forwarded-for'] as string) || '')
+        .split(',').filter((s) => s.trim()).length,
+      trustProxy: app.get('trust proxy fn') ? 'configured' : 'not set',
+    },
   });
 });
 
@@ -2842,7 +2928,21 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+
+    // The server bundle builds to build/, not dist/, so it is not reachable
+    // here. This stays as a backstop: when it did land in dist/, express.static
+    // served it, and the sourcemap beside it made the whole of server.ts
+    // readable by anyone. A stale dist/ or a reverted build script must not
+    // quietly re-expose it.
+    // vite build emits no sourcemaps, so nothing legitimate here ends in .map.
+    app.use((req, res, next) => {
+      if (/\.(map|cjs|ts)$/i.test(req.path)) {
+        return res.status(404).type('text/plain').send('Not found');
+      }
+      next();
+    });
+
+    app.use(express.static(distPath, { dotfiles: 'deny' }));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
