@@ -34,20 +34,28 @@ app.disable('x-powered-by');
 // inline style attributes - but scripts stay restricted to 'self', which is
 // what actually matters for XSS. blob: covers the service worker and the
 // canvas/PDF export path.
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// Vite's dev server injects an inline script (the React Fast Refresh preamble)
+// and opens an HMR websocket on its own port. A production-grade
+// script-src/connect-src blocks both, and the app then never mounts at all -
+// so the policy has to be relaxed for development specifically. Production
+// ships no inline scripts and no websocket, so it keeps the strict form.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  IS_PROD ? "script-src 'self'" : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
-  "connect-src 'self'",
+  IS_PROD ? "connect-src 'self'" : "connect-src 'self' ws: wss:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'self'",
-  'upgrade-insecure-requests',
+  // Would rewrite http://localhost to https in development and break it.
+  ...(IS_PROD ? ['upgrade-insecure-requests'] : []),
 ].join('; ');
 
 // Set CSP_REPORT_ONLY=true to have the browser report violations without
