@@ -765,7 +765,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                   }`}
                   style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                 >
-                  <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
                     {/* Category icon avatar — swaps to a checkbox in select
                         mode for the user's own transactions only. */}
                     {isSelectable ? (
@@ -821,14 +821,10 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5 text-xs text-neutral-400 truncate">
-                        <span>{formatDate(tx.date)}</span>
-                        <span>•</span>
-                        <span>{getPaymentModeLabel(tx.paymentMode)}</span>
-                        <span>•</span>
-                        <span className={isMine ? 'text-[#9333EA] font-medium' : 'text-neutral-600 dark:text-neutral-300'}>
-                          {ownerName}
-                        </span>
+                      <div className="flex items-center gap-1.5 text-xs text-neutral-400 min-w-0 overflow-hidden">
+                        <span className="shrink-0">{formatDate(tx.date)}</span>
+                        <span className="shrink-0">•</span>
+                        <span className="truncate">{getPaymentModeLabel(tx.paymentMode)}</span>
                         {tx.notes && (
                           <>
                             <span>•</span>
@@ -869,7 +865,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         {tx.type === 'credit' ? '+' : '-'}
                         {formatCurrency(tx.amount, currency)}
                       </div>
-                      <div className="text-[11px] text-neutral-400">
+                      <div className="text-[11px] text-neutral-400 truncate max-w-[88px] sm:max-w-[180px] ml-auto" title={cat.name}>
                         {cat.name}
                       </div>
                     </div>

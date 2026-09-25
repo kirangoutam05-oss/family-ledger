@@ -52,7 +52,10 @@ export function formatDate(dateString: string): string {
     return d.toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
-      hour: '2-digit',
+      // 'numeric' drops the leading zero (4:31 pm, not 04:31 pm). The row
+      // meta line is the tightest place this lands and every pixel there was
+      // pushing the payment mode off the end.
+      hour: 'numeric',
       minute: '2-digit',
     });
   } catch {
