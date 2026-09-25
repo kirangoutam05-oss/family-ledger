@@ -1,0 +1,131 @@
+# Calls the app's daily-reminder endpoint once a day.
+#
+# The endpoint is deliberately not self-scheduling: Render's free plan sleeps
+# the service after 15 idle minutes, so an in-process timer would simply not
+# fire. Something outside has to knock.
+#
+# Set these up once, under Settings -> Secrets and variables -> Actions:
+#   Secret   CRON_SECRET  - must equal the CRON_SECRET the service runs with.
+#   Variable APP_URL      - optional; defaults to the current service URL.
+#
+# GitHub disables scheduled workflows in a repository with no commits for 60
+# days, warning first. Any push re-enables it.
+
+name: Daily reminder
+
+on:
+  schedule:
+    # 15:30 UTC = 21:00 IST. GitHub runs scheduled jobs late under load,
+    # sometimes by a good many minutes, so do not rely on the exact minute.
+    - cron: '30 15 * * *'
+  workflow_dispatch:
+
+# Never let a slow run overlap the next day's.
+concurrency:
+  group: daily-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wake the service
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://family-ledger-jin3.onrender.com' }}
+        run: |
+          set -uo pipefail
+          # A sleeping free instance takes roughly a minute to come back, and
+          # the first request can time out rather than wait. Knock until it
+          # answers, so the reminder call itself is not the one paying for the
+          # cold start.
+          for attempt in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$APP_URL/api/health" || echo 000)
+            echo "attempt $attempt: /api/health -> $code"
+            if [ "$code" = "200" ]; then
+              echo "service is awake"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::service did not become healthy after 10 attempts"
+          exit 1
+
+      - name: Trigger daily reminder
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://family-ledger-jin3.onrender.com' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::CRON_SECRET is not set in repository secrets"
+            exit 1
+          fi
+
+          body=$(mktemp)
+          code=$(curl -s -o "$body" -w '%{http_code}' \
+                   --max-time 120 \
+                   -X POST "$APP_URL/api/cron/daily-reminder" \
+                   -H "X-Cron-Secret: $CRON_SECRET" \
+                   -H 'Content-Length: 0' || echo 000)
+
+          echo "HTTP $code"
+
+          case "$code" in
+            200) ;;
+            401)
+              echo "::error::401 - the CRON_SECRET here does not match the one the service runs with"
+              cat "$body"; exit 1 ;;
+            000)
+              echo "::error::no response - the request timed out or the host was unreachable"
+              exit 1 ;;
+            *)
+              echo "::error::unexpected HTTP $code"
+              cat "$body"; exit 1 ;;
+          esac
+
+          # A 200 alone is not success: the handler reports per-household
+          # outcomes, and a household whose push send threw still returns 200.
+          if ! counts=$(node -e '
+          let raw="";
+          process.stdin.on("data", c => raw += c);
+          process.stdin.on("end", () => {
+            let d;
+            try { d = JSON.parse(raw); }
+            catch (e) { console.error("response was not JSON:"); console.error(raw.slice(0,500)); process.exit(1); }
+            if (d.success !== true) {
+              console.error("response did not report success:");
+              console.error(JSON.stringify(d).slice(0,500));
+              process.exit(1);
+            }
+            const v = Object.values(d.results || {});
+            const n = x => v.filter(y => y === x).length;
+            console.log(n("sent") + " " + n("skipped") + " " + n("error"));
+          });
+          ' < "$body"); then
+            echo "::error::the service returned 200 but the body was not a success response"
+            exit 1
+          fi
+
+          read -r sent skipped errored <<EOF
+          $counts
+          EOF
+
+          {
+            echo "### Daily reminder"
+            echo ""
+            echo "| outcome | households |"
+            echo "|---|---|"
+            echo "| sent | $sent |"
+            echo "| skipped (already run today, or nothing to say) | $skipped |"
+            echo "| error | $errored |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "sent=$sent skipped=$skipped error=$errored"
+
+          # Surface per-household failures instead of letting a green tick hide
+          # them, but do not fail the run: the other households were fine.
+          if [ "$errored" -gt 0 ]; then
+            echo "::warning::$errored household(s) failed while sending reminders - check the service logs"
+          fi
