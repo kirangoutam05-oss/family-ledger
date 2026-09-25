@@ -1867,6 +1867,122 @@ app.post('/api/ledger/sync', async (req, res) => {
   }
 });
 
+// ------------------- UNATTENDED SMS INGEST -------------------
+//
+// One call that parses a bank alert and files it, for a phone automation
+// forwarding messages with nobody watching. /api/parse-sms only parses and
+// /api/ledger/transaction only saves, which meant an automation had to make
+// two calls and marshal the result between them.
+//
+// Nothing here trusts the caller's judgement: an automation forwards whatever
+// arrives, including OTPs, promotions and balance alerts, and the same message
+// can be delivered twice. Anything that cannot be read confidently is filed
+// for review rather than guessed at.
+app.use('/api/ingest-sms', resolveHousehold);
+app.post('/api/ingest-sms', rateLimit(60, 60000), async (req, res) => {
+  try {
+    // Fail closed. Without a configured secret this is an unauthenticated
+    // write endpoint reachable by anyone who knows a household id.
+    const secret = process.env.INGEST_SECRET;
+    if (!secret) {
+      return res.status(503).json({ error: 'Ingest is not configured on this server.' });
+    }
+    if (req.header('X-Ingest-Secret') !== secret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const state = req.householdState!;
+    const smsText = typeof req.body?.smsText === 'string' ? req.body.smsText : '';
+    if (!smsText.trim() || smsText.length > 2000) {
+      return res.status(400).json({ error: 'smsText must be 1-2000 characters' });
+    }
+
+    const spender: SpenderId = req.body?.spender === 'wife' ? 'wife' : 'husband';
+
+    // An OTP names an amount and a merchant and looks exactly like a
+    // purchase to a parser. Rejected before anything else, because filing
+    // one creates a transaction that never happened.
+    if (/\bOTP\b|one[\s-]?time[\s-]?password|verification code|do not share/i.test(smsText)) {
+      return res.json({ saved: false, reason: 'otp' });
+    }
+
+    // A transaction says money moved. A balance alert, a due-date reminder
+    // and a marketing message do not.
+    const movedMoney = /debited|credited|spent|withdrawn|charged|\bpaid\b|purchase|txn of|availing/i.test(smsText);
+    const hasAmount =
+      /(?:Rs\.?|INR)\s*[\d,]+/i.test(smsText) ||
+      /[\d,]+(?:\.\d{1,2})?\s*(?:debited|credited|spent|withdrawn|charged)/i.test(smsText);
+    if (!movedMoney || !hasAmount) {
+      return res.json({ saved: false, reason: 'not-a-transaction' });
+    }
+
+    const masked = maskSensitiveFinancialData(sanitizeString(smsText, 2000));
+    const parsed = parseSmsHeuristic(masked, spender, state.husbandName, state.wifeName);
+
+    // parseSmsHeuristic substitutes 500 when it finds no amount at all. That
+    // is a reasonable placeholder for someone reviewing a form; it is a
+    // fabricated number when nothing is watching.
+    const amountFound = /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i.exec(masked);
+    if (!amountFound && !parsed.amount) {
+      return res.json({ saved: false, reason: 'no-amount' });
+    }
+
+    // Deduplicate. Automations retry, and a bank occasionally sends the same
+    // alert twice. A real bank reference is the reliable key; the parser
+    // invents "UPI-<timestamp>" when the message carries none, so those are
+    // matched on shape instead.
+    const ref = parsed.upiRef && !/^UPI-\d+$/.test(parsed.upiRef) ? parsed.upiRef : '';
+    const when = new Date(parsed.date || Date.now()).getTime();
+    const duplicate = state.transactions.find((t) => {
+      if (ref && t.upiRef === ref) return true;
+      return (
+        t.amount === parsed.amount &&
+        t.title === parsed.title &&
+        Math.abs(new Date(t.date).getTime() - when) < 5 * 60 * 1000
+      );
+    });
+    if (duplicate) {
+      return res.json({ saved: false, reason: 'duplicate', transactionId: duplicate.id });
+    }
+
+    const category: CategoryId = getValidCategoryIds(state).includes(parsed.category as string)
+      ? (parsed.category as CategoryId)
+      : 'grey_area';
+
+    const tx: Transaction = {
+      id: `tx-sms-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+      title: sanitizeString(parsed.title, 90) || 'Unidentified Payment',
+      amount: parsed.amount!,
+      type: parsed.type === 'credit' ? 'credit' : 'debit',
+      date: parsed.date || new Date().toISOString(),
+      spender,
+      category,
+      paymentMode: parsed.paymentMode!,
+      bankName: parsed.bankName,
+      upiRef: parsed.upiRef,
+      rawSms: masked,
+      status: parsed.status === 'grey_area' ? 'grey_area' : 'verified',
+      greyAreaReason: parsed.greyAreaReason || undefined,
+      contextQuestion: parsed.contextQuestion || undefined,
+      isRecurring: undefined,
+    };
+
+    state.transactions.unshift(tx);
+    state.lastSyncTime = new Date().toISOString();
+    await persistHouseholdState(req.householdId!, state);
+
+    res.status(201).json({
+      saved: true,
+      needsReview: tx.status === 'grey_area',
+      transaction: { id: tx.id, title: tx.title, amount: tx.amount, type: tx.type, date: tx.date, category: tx.category },
+    });
+  } catch (err) {
+    console.error('SMS ingest failed:', err);
+    res.status(500).json({ error: 'Could not file this message.' });
+  }
+});
+
+
 // Add new transaction
 app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
   try {

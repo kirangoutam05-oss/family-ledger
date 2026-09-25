@@ -62,6 +62,13 @@ services:
       - key: VAPID_SUBJECT
         sync: false
 
+      # Guards POST /api/ingest-sms, which the phone automation calls to file
+      # a bank SMS without anyone pasting it. Unset means that endpoint
+      # refuses everything, which is the safe default for a write path with
+      # no session behind it.
+      - key: INGEST_SECRET
+        sync: false
+
       # Shared secret for POST /api/cron/daily-reminder. Must match whatever
       # the external scheduler sends as X-Cron-Secret, so it is prompted for
       # rather than generated.
