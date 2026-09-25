@@ -5,8 +5,9 @@ import { getBrandIcon } from '../utils/brandIcons';
 
 interface TransactionIconProps {
   title: string;
-  // Searched the same as title — catches a UPI app that only shows up in
-  // the bank field (e.g. bankName "GPay UPI") or a merchant named in notes.
+  // Searched after the title and notes, not alongside them — it names the
+  // funding bank, not the merchant, so it only decides the icon when nothing
+  // more specific matched (e.g. bankName "GPay UPI" with a blank title).
   bankName?: string;
   notes?: string;
   category: Category;
@@ -31,7 +32,7 @@ export const TransactionIcon: React.FC<TransactionIconProps> = ({
   className = 'w-10 h-10 rounded-xl',
   iconClassName = 'w-5 h-5',
 }) => {
-  const brand = getBrandIcon(title, bankName, notes);
+  const brand = getBrandIcon(title, notes, bankName);
   const bg = colorOverride || (brand ? `#${brand.hex}` : category.color);
 
   return (

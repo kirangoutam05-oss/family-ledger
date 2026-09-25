@@ -118,7 +118,7 @@ const arcBhim: BrandIcon = {
 // (title, and usually bank/notes too), first match wins, so more specific
 // brands (Uber Eats, Google Pay) are checked before their more general
 // parent (Uber, Google Play).
-const BRAND_RULES: { pattern: RegExp; icon: BrandIcon }[] = [
+const BRAND_RULES: { pattern: RegExp; icon: BrandIcon; isBank?: boolean }[] = [
   { pattern: /swiggy/i, icon: siSwiggy },
   { pattern: /zomato/i, icon: siZomato },
   { pattern: /netflix/i, icon: siNetflix },
@@ -130,14 +130,14 @@ const BRAND_RULES: { pattern: RegExp; icon: BrandIcon }[] = [
   { pattern: /google\s*play/i, icon: siGoogleplay },
   { pattern: /phonepe/i, icon: siPhonepe },
   { pattern: /paytm/i, icon: siPaytm },
-  { pattern: /hdfc/i, icon: siHdfcbank },
-  { pattern: /icici/i, icon: siIcicibank },
-  { pattern: /axis\s*bank/i, icon: siAxisbank },
+  { pattern: /hdfc/i, icon: siHdfcbank, isBank: true },
+  { pattern: /icici/i, icon: siIcicibank, isBank: true },
+  { pattern: /axis\s*bank/i, icon: siAxisbank, isBank: true },
   { pattern: /airtel/i, icon: siAirtel },
   { pattern: /\bjio\b/i, icon: siJio },
   { pattern: /bookmyshow/i, icon: siBookmyshow },
   { pattern: /mcdonald/i, icon: siMcdonalds },
-  { pattern: /apple\s*(media|music|app\s*store|itunes|icloud|tv)?/i, icon: siApple },
+  { pattern: /\bapple\b\s*(media|music|app\s*store|itunes|icloud|tv)?/i, icon: siApple },
   { pattern: /zerodha/i, icon: siZerodha },
   { pattern: /amazon/i, icon: faAmazon },
   { pattern: /linkedin/i, icon: faLinkedin },
@@ -152,9 +152,32 @@ const BRAND_RULES: { pattern: RegExp; icon: BrandIcon }[] = [
 // Accepts any number of text fields (title, bank name, notes, ...) and
 // matches against all of them combined, so a UPI app named only in
 // `bankName` (e.g. "GPay UPI") still resolves to its own icon.
-export function getBrandIcon(...sources: (string | undefined | null)[]): BrandIcon | null {
-  const text = sources.filter(Boolean).join(' ');
-  if (!text) return null;
-  const match = BRAND_RULES.find((r) => r.pattern.test(text));
-  return match ? match.icon : null;
+export function getBrandIcon(
+  title: string | undefined | null,
+  notes?: string | undefined | null,
+  bankName?: string | undefined | null,
+): BrandIcon | null {
+  // Each field is matched on its own rather than concatenated. Joining them
+  // decided the winner by position in BRAND_RULES instead of by which field
+  // matched, so a rule hitting the *bank* beat the merchant actually paid:
+  // "Amazon" on an HDFC card rendered the HDFC logo, because /hdfc/ sits
+  // earlier in the list than /amazon/.
+  for (const source of [title, notes]) {
+    if (!source) continue;
+    const match = BRAND_RULES.find((r) => r.pattern.test(source));
+    if (match) return match.icon;
+  }
+
+  // The bank field is the last resort, and a bank rule may not win from it.
+  // Practically every bank alert names the bank, so allowing it meant every
+  // merchant we don't recognise - Blinkit, Practo, a landlord - wore the
+  // bank's logo, and the list read as a wall of identical HDFC marks. The
+  // category glyph says more. A UPI app named in that field (bankName
+  // "GPay UPI") is still worth showing, so only bank rules are excluded.
+  if (bankName) {
+    const match = BRAND_RULES.find((r) => !r.isBank && r.pattern.test(bankName));
+    if (match) return match.icon;
+  }
+
+  return null;
 }
