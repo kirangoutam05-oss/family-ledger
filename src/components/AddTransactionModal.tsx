@@ -40,6 +40,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<CategoryId>('groceries');
   const [paymentMode, setPaymentMode] = useState<Transaction['paymentMode']>('UPI');
+  const [txType, setTxType] = useState<'debit' | 'credit'>('debit');
   const [isRecurring, setIsRecurring] = useState(false);
   const [notes, setNotes] = useState('');
   const [dateStr, setDateStr] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
@@ -57,7 +58,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     const isoDate = isNaN(enteredDate.getTime()) ? new Date().toISOString() : enteredDate.toISOString();
 
     try {
-      if (paidForOther) {
+      if (paidForOther && txType === 'debit') {
         await onFlagPendingAck({
           title: title.trim(),
           amount: Number(amount),
@@ -74,12 +75,12 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           id: `tx-manual-${Date.now()}`,
           title: title.trim(),
           amount: Number(amount),
-          type: 'debit',
+          type: txType,
           date: isoDate,
           spender: authenticatedUser,
           category,
           paymentMode,
-          bankName: paymentMode === 'UPI' ? 'GPay UPI' : 'Card',
+          bankName: txType === 'credit' ? undefined : paymentMode === 'UPI' ? 'GPay UPI' : 'Card',
           status: 'verified',
           notes: notes.trim(),
           isRecurring: isRecurring || undefined,
@@ -112,7 +113,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
-            Log New Household Expense
+            {txType === 'credit' ? 'Log Household Income' : 'Log New Household Expense'}
           </h3>
           <button
             onClick={onClose}
@@ -123,6 +124,35 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Money out vs money in. Until now this modal could only create a
+              debit, so income could be recorded solely through the SMS parser
+              - salary, refunds and transfers had no manual route in at all. */}
+          <div className="p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex">
+            {(['debit', 'credit'] as const).map((t) => {
+              const active = txType === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    setTxType(t);
+                    if (t === 'credit') setPaidForOther(false);
+                  }}
+                  aria-pressed={active}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                    active
+                      ? t === 'credit'
+                        ? 'bg-white dark:bg-neutral-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                        : 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs'
+                      : 'text-neutral-500 dark:text-neutral-400'
+                  }`}
+                >
+                  {t === 'debit' ? 'Money Out' : 'Money In'}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Amount & Title */}
           <div>
             <label className="text-xs font-semibold text-neutral-500 block mb-1">
@@ -142,12 +172,12 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
           <div>
             <label className="text-xs font-semibold text-neutral-500 block mb-1">
-              Payee or Expense Title
+              {txType === 'credit' ? 'Source of Income' : 'Payee or Expense Title'}
             </label>
             <input
               type="text"
               required
-              placeholder="e.g. Blue Tokai Coffee, DMart Weekly, Wifi Bill"
+              placeholder={txType === 'credit' ? 'e.g. Salary, Refund, Transfer from savings' : 'e.g. Blue Tokai Coffee, DMart Weekly, Wifi Bill'}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full h-11 text-xs font-medium px-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -187,7 +217,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           {/* Paid By - Authenticated Spender */}
           <div>
             <label className="text-xs font-semibold text-neutral-500 block mb-1">
-              Paid By (Your Authenticated Account)
+              {txType === 'credit' ? 'Received By (Your Authenticated Account)' : 'Paid By (Your Authenticated Account)'}
             </label>
             <div className="p-3 rounded-xl border border-black/[0.08] dark:border-white/[0.1] bg-neutral-50 dark:bg-neutral-800/80 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -212,7 +242,9 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           </div>
 
           {/* Paid for the other spouse — held aside until they acknowledge
-              it, instead of landing straight in the ledger under your name. */}
+              it, instead of landing straight in the ledger under your name.
+              Hidden for money in: you cannot pay someone else's salary. */}
+          {txType === 'debit' && (
           <button
             type="button"
             onClick={() => setPaidForOther((v) => !v)}
@@ -249,6 +281,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               />
             </div>
           </button>
+          )}
 
           {/* Category Selector Grid */}
           <div>
