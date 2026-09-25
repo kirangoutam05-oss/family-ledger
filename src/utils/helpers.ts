@@ -144,6 +144,7 @@ export function getPaymentModeIcon(mode: string, className = 'w-4 h-4') {
       return React.createElement(Banknote, { className });
     case 'NetBanking':
     case 'AmazonPayLater':
+    case 'PayLater':
     case 'Pluxee':
     default:
       return React.createElement(Wallet, { className });
@@ -156,6 +157,9 @@ export function getPaymentModeIcon(mode: string, className = 'w-4 h-4') {
 const PAYMENT_MODE_LABELS: Record<string, string> = {
   Card: 'Credit Card',
   AmazonPayLater: 'Amazon Pay Later',
+  // Everything else that lends at the point of sale - axio, Simpl, LazyPay,
+  // Slice. Labelling those "Amazon Pay Later" would simply be wrong.
+  PayLater: 'Pay Later',
   Pluxee: 'Pluxee Card',
 };
 

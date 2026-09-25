@@ -1120,6 +1120,12 @@ function extractDateTimeFromSms(sms: string): string | null {
   const monthFirstMatch = sms.match(
     /\b([A-Za-z]{3,9})[-\/.,\s]+(\d{1,2})(?:st|nd|rd|th)?[-\/.,\s]+(\d{2,4})\b/
   );
+  // Some banks drop separators entirely: "29Jul26". Gated on the three
+  // letters really being a month so a reference string cannot claim the
+  // date slot and make the whole extraction fail.
+  const compactMatch = sms.match(/\b(\d{1,2})([A-Za-z]{3})(\d{2,4})\b/);
+  const compactValid =
+    compactMatch && MONTH_ABBR[compactMatch[2].toLowerCase()] !== undefined ? compactMatch : null;
 
   let day: number;
   let month: number | undefined;
@@ -1146,6 +1152,12 @@ function extractDateTimeFromSms(sms: string): string | null {
     year = parseInt(monthFirstMatch[3], 10);
     if (year < 100) year += 2000;
     matchedDateText = monthFirstMatch[0];
+  } else if (compactValid) {
+    day = parseInt(compactValid[1], 10);
+    month = MONTH_ABBR[compactValid[2].toLowerCase()];
+    year = parseInt(compactValid[3], 10);
+    if (year < 100) year += 2000;
+    matchedDateText = compactValid[0];
   } else {
     return null;
   }
@@ -1203,16 +1215,20 @@ function parseSmsHeuristic(
   const type: 'debit' | 'credit' = hasDebitKeyword ? 'debit' : hasCreditKeyword ? 'credit' : 'debit';
 
   // Detect payment mode
-  let paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'Pluxee' = 'UPI';
+  let paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'PayLater' | 'Pluxee' = 'UPI';
   if (/ATM|withdrawn|cash/i.test(cleanSms)) {
     paymentMode = 'Cash';
   } else if (/amazon\s*pay\s*later/i.test(cleanSms)) {
     paymentMode = 'AmazonPayLater';
   } else if (/pluxee|sodexo/i.test(cleanSms)) {
     paymentMode = 'Pluxee';
+  } else if (/pay\s*later|\baxio\b|capital\s*float|\bsimpl\b|lazypay|\bslice\b/i.test(cleanSms)) {
+    // Buy-now-pay-later drawdowns are not UPI, and calling them so made a
+    // credit-line message look like a peer transfer.
+    paymentMode = 'PayLater';
   } else if (/Card|ending|POS|spent at/i.test(cleanSms)) {
     paymentMode = 'Card';
-  } else if (/NetBanking|NEFT|RTGS|NACH|mandate/i.test(cleanSms)) {
+  } else if (/netbanking|\bINB\b|internet\s*banking|\bNEFT\b|\bRTGS\b|\bIMPS\b|\bNACH\b|mandate/i.test(cleanSms)) {
     paymentMode = 'NetBanking';
   }
 
@@ -1228,6 +1244,23 @@ function parseSmsHeuristic(
   else if (/SBI|State Bank/i.test(smsForBankDetection)) bankName = 'SBI';
   else if (/Axis/i.test(smsForBankDetection)) bankName = 'Axis Bank';
   else if (/Kotak/i.test(smsForBankDetection)) bankName = 'Kotak Bank';
+  // An unlisted issuer used to leave bankName as the literal "UPI Bank" and,
+  // worse, pushed the message down to the peer-transfer branch below.
+  else if (/HSBC/i.test(smsForBankDetection)) bankName = 'HSBC';
+  else if (/IndusInd/i.test(smsForBankDetection)) bankName = 'IndusInd Bank';
+  else if (/IDFC/i.test(smsForBankDetection)) bankName = 'IDFC FIRST Bank';
+  else if (/Yess*Bank/i.test(smsForBankDetection)) bankName = 'Yes Bank';
+  else if (/RBL/i.test(smsForBankDetection)) bankName = 'RBL Bank';
+  else if (/Federals*Bank/i.test(smsForBankDetection)) bankName = 'Federal Bank';
+  else if (/Canara/i.test(smsForBankDetection)) bankName = 'Canara Bank';
+  else if (/PNB|Punjab National/i.test(smsForBankDetection)) bankName = 'PNB';
+  else if (/Bank of Baroda|BOB/i.test(smsForBankDetection)) bankName = 'Bank of Baroda';
+  else if (/Amex|American Express/i.test(smsForBankDetection)) bankName = 'American Express';
+  else if (/Pluxee|Sodexo/i.test(smsForBankDetection)) bankName = 'Pluxee';
+  else if (/\baxio\b|capital\s*float/i.test(smsForBankDetection)) bankName = 'axio';
+  else if (/Simpl/i.test(smsForBankDetection)) bankName = 'Simpl';
+  else if (/LazyPay/i.test(smsForBankDetection)) bankName = 'LazyPay';
+  else if (/Slice/i.test(smsForBankDetection)) bankName = 'Slice';
 
   // UPI Ref
   let upiRef = '';
@@ -1248,7 +1281,38 @@ function parseSmsHeuristic(
   // UPI SMS name it as "...to MERCHANT...". Trying only one of the two left
   // a card purchase with no merchant text at all — just a generic category
   // label — which then had nothing for the icon matcher to recognize.
-  const extractMerchant = () => cleanSms.match(/(?:to|at)\s+([A-Z0-9\s]+?)(?:\s*ref|\s*via|\s*on|\.|$)/i);
+  // Payment aggregators prefix the real merchant: RAZ*SWIGGY (Razorpay),
+  // PAYU*BIGBASKET, PAYTM*UBER. The prefix is noise; the merchant follows it.
+  // "To report misuse call ...", "To Block+Reissue Call ...", "at any
+  // branch" - bank SMS end with instructions that read like a payee to a
+  // naive "to X"/"at X" match. None of these are merchants.
+  const NON_MERCHANT = /^(?:report|block|know|view|check|call|dispute|download|log|login|avail|claim|activate|upgrade|redeem|unsubscribe|stop|reply|sms|visit|click|your\b|a\/c\b|acct\b|account\b|any\b)/i;
+
+  const stripAggregator = (name: string) =>
+    name.replace(/^(?:RAZ|RZP|PAYU|PYTM|PAYTM|BILLDESK|CCAVENUE|CASHFREE|INSTAMOJO|PHONEPE|GPAY)\s*[*\/-]\s*/i, '');
+
+  // The old character class was [A-Z0-9s], which excluded the *, &, -, .
+  // and ' that real merchant strings routinely contain. "At RAZ*SWIGGY"
+  // matched only "RAZ", then failed to reach a terminator, so the match was
+  // dropped entirely and the row fell back to a generic category label -
+  // discarding a merchant the parser had already identified.
+  // Incoming money names its counterparty with "from", not "to"/"at".
+  const extractSource = (): string => {
+    const m = cleanSms.match(/\bfrom\s+([A-Za-z0-9][A-Za-z0-9\s.&'@\/-]*?)(?:\s*\bon\b|\s*\bref\b|\s{2,}|[.,;]|$)/i);
+    if (!m) return "";
+    let name = m[1].trim();
+    if (name.includes("@")) name = name.split("@")[0].replace(/[._-]+$/, "").trim();
+    return NON_MERCHANT.test(name) || name.length < 2 ? "" : name;
+  };
+
+  const extractMerchant = (): RegExpMatchArray | null => {
+    const m = cleanSms.match(/(?:\bto|\bat)\s+([A-Za-z0-9][A-Za-z0-9\s.&'*@\/-]*?)(?:\s*\bref\b|\s*\bvia\b|\s*\bon\b|\s{2,}|[.,;]|$)/i);
+    if (!m) return null;
+    let name = stripAggregator(m[1].trim()).trim();
+    if (name.includes('@')) name = name.split('@')[0].replace(/[._-]+$/, '').trim();
+    if (NON_MERCHANT.test(name)) return null;
+    return name.length > 1 ? ([m[0], name] as unknown as RegExpMatchArray) : null;
+  };
 
   if (paymentMode === 'Cash' || /atm/i.test(lower)) {
     title = 'ATM Cash Withdrawal';
@@ -1289,20 +1353,52 @@ function parseSmsHeuristic(
     title = 'Investment SIP';
     category = 'investments';
   } else {
-    // Ambiguous UPI to person / number — the payee is named either as
-    // "...to NAME" or, in ICICI-style two-sided messages, as "NAME credited".
-    const personMatch =
-      cleanSms.match(/to\s+([A-Za-z\s]+?)(?:\s*\([^\)]*\)|\s*ref|\s*on|\s*via|\.|$)/i) ||
+    // Nothing matched a known merchant or category. The old code asserted
+    // this was a "direct peer transfer to an individual" - which it had no
+    // way of knowing. An HSBC payment to a shop called IMART, or an axio
+    // Pay Later drawdown, both landed here and were described to the user as
+    // money sent to a person. Say what is actually true instead: we could
+    // not tell, and here is the payee if there was one.
+    const payeeMatch =
+      extractMerchant() ||
       cleanSms.match(/;\s*([A-Za-z][A-Za-z\s]{2,40}?)\s+credited/i);
-    if (personMatch && personMatch[1].trim().length > 2) {
-      title = `UPI to ${personMatch[1].trim()}`;
+    const payee = payeeMatch ? payeeMatch[1].trim() : '';
+
+    if (paymentMode === 'PayLater') {
+      // These messages name a credit line, never a merchant - there is
+      // genuinely nothing to extract, so do not invent a payee.
+      title = bankName !== 'UPI Bank' ? `${bankName} Pay Later` : 'Pay Later Credit';
+      contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, what was this ${amount ? '₹' + amount.toLocaleString('en-IN') : ''} Pay Later spend for?`;
+      greyAreaReason = 'Pay Later drawdown - the message names the credit line, not the merchant';
+    } else if (type === 'credit') {
+      // Incoming money has no "payee" to name, and the outgoing wording
+      // ("what was this payment to X for?") reads as nonsense against it.
+      const source = extractSource();
+      title = source
+        ? source
+        : /salary|payroll/i.test(cleanSms)
+          ? 'Salary Credit'
+          : /refund|reversal|cashback/i.test(cleanSms)
+            ? 'Refund'
+            : 'Money In';
+      contextQuestion = source
+        ? `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, what was this ${amount ? '₹' + amount.toLocaleString('en-IN') : ''} from ${source} for?`
+        : `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, where did this ${amount ? '₹' + amount.toLocaleString('en-IN') : ''} come from?`;
+      greyAreaReason = source
+        ? `Incoming money from ${source} - not categorised yet`
+        : 'Incoming money - source not named in the message';
+    } else if (payee) {
+      title = payee;
+      contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, what was this ${amount ? '₹' + amount.toLocaleString('en-IN') : ''} payment to ${payee} for?`;
+      greyAreaReason = 'Payee not recognised - could be a shop or a person';
     } else {
-      title = 'UPI Peer Transfer';
+      title = 'Unidentified Payment';
+      contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, what was this ${amount ? '₹' + amount.toLocaleString('en-IN') : ''} payment for?`;
+      greyAreaReason = 'No payee named in the message';
     }
+
     category = 'grey_area';
     isGreyArea = true;
-    greyAreaReason = 'Direct peer transfer to an individual without merchant invoice';
-    contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, was this ${amount ? '₹' + amount.toLocaleString('en-IN') : 'UPI'} transfer to ${title} for a household expense or personal loan/split?`;
   }
 
   return {
@@ -1800,8 +1896,8 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
 
     const spender: SpenderId = rawTx.spender === 'wife' ? 'wife' : 'husband';
     const type: 'debit' | 'credit' = rawTx.type === 'credit' ? 'credit' : 'debit';
-    const paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'Pluxee' =
-      ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(rawTx.paymentMode as any)
+    const paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'PayLater' | 'Pluxee' =
+      ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'PayLater', 'Pluxee'].includes(rawTx.paymentMode as any)
         ? (rawTx.paymentMode as any)
         : 'UPI';
 

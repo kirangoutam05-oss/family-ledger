@@ -325,7 +325,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               Payment Mode
             </label>
             <div className="grid grid-cols-2 gap-1.5">
-              {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'] as const).map((mode) => (
+              {(['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'PayLater', 'Pluxee'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"

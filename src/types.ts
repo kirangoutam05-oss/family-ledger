@@ -49,7 +49,7 @@ export interface Category {
   budgetMonthly: number;
 }
 
-export type PaymentMode = 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'Pluxee';
+export type PaymentMode = 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'PayLater' | 'Pluxee';
 
 export interface Transaction {
   id: string;
