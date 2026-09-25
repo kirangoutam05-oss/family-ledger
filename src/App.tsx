@@ -382,6 +382,20 @@ export default function App() {
     if (data.ledger) setLedger(data.ledger);
   };
 
+  const handleUpdateTrackIncome = async (enabled: boolean) => {
+    const res = await apiFetch('/api/ledger/settings/track-income', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to update this setting');
+    }
+    const data = await res.json();
+    if (data.ledger) setLedger(data.ledger);
+  };
+
   const handleUpdateCategoryPeriod = async (period: 'month' | 'year' | 'all') => {
     const res = await apiFetch('/api/ledger/settings/category-period', {
       method: 'POST',
@@ -1286,6 +1300,7 @@ export default function App() {
                   authenticatedUser={authenticatedUser}
                   onUpdateHousehold={handleUpdateHousehold}
                   onUpdateCategoryPeriod={handleUpdateCategoryPeriod}
+                  onUpdateTrackIncome={handleUpdateTrackIncome}
                   onSwitchUser={handleSwitchUser}
                   onOpenSyncModal={() => setShowSyncModal(true)}
                   onOpenLiveMobile={() => setShowLiveMobileModal(true)}

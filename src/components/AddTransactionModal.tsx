@@ -40,6 +40,9 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [amount, setAmount] = useState<number | ''>('');
   const [category, setCategory] = useState<CategoryId>('groceries');
   const [paymentMode, setPaymentMode] = useState<Transaction['paymentMode']>('UPI');
+  // Households that only want a spend tracker turn money in off; unset means
+  // on, matching what existing households already see.
+  const trackIncome = ledger.trackIncome ?? true;
   const [txType, setTxType] = useState<'debit' | 'credit'>('debit');
   const [isRecurring, setIsRecurring] = useState(false);
   const [notes, setNotes] = useState('');
@@ -127,6 +130,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           {/* Money out vs money in. Until now this modal could only create a
               debit, so income could be recorded solely through the SMS parser
               - salary, refunds and transfers had no manual route in at all. */}
+          {trackIncome && (
           <div className="p-1 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex">
             {(['debit', 'credit'] as const).map((t) => {
               const active = txType === t;
@@ -152,6 +156,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               );
             })}
           </div>
+          )}
 
           {/* Amount & Title */}
           <div>

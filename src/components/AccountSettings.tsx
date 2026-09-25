@@ -4,6 +4,7 @@ import { LedgerState, SpenderId } from '../types';
 import { AppLockSettings } from './AppLockSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { CategoryPeriodSettings } from './CategoryPeriodSettings';
+import { TrackIncomeSettings } from './TrackIncomeSettings';
 import { AuthAccount, AuthApiError, authChangePassword, authLogin, authSendVerification } from '../utils/auth';
 
 interface AccountSettingsProps {
@@ -16,6 +17,7 @@ interface AccountSettingsProps {
     currency: string;
   }) => Promise<void>;
   onUpdateCategoryPeriod: (period: 'month' | 'year' | 'all') => Promise<void>;
+  onUpdateTrackIncome: (enabled: boolean) => Promise<void>;
   onSwitchUser: () => void;
   onOpenSyncModal: () => void;
   onOpenLiveMobile: () => void;
@@ -50,6 +52,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   authenticatedUser,
   onUpdateHousehold,
   onUpdateCategoryPeriod,
+  onUpdateTrackIncome,
   onSwitchUser,
   onOpenSyncModal,
   onOpenLiveMobile,
@@ -564,6 +567,12 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
 
       {/* Per-device push notification opt-in */}
       <NotificationSettings authenticatedUser={authenticatedUser} />
+
+      {/* Whether this household tracks income at all */}
+      <TrackIncomeSettings
+        enabled={ledger.trackIncome ?? true}
+        onChange={onUpdateTrackIncome}
+      />
 
       {/* Shared "Amount vs Category" time window */}
       <CategoryPeriodSettings

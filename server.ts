@@ -2742,6 +2742,24 @@ app.post('/api/ledger/settings/category-period', async (req, res) => {
   }
 });
 
+// Whether this household tracks money in as well as money out. Its own
+// endpoint for the same reason as the one above: /api/household/update wants
+// the whole identity form, and this is a single unrelated preference.
+app.post('/api/ledger/settings/track-income', async (req, res) => {
+  try {
+    const state = req.householdState!;
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be true or false' });
+    }
+    state.trackIncome = enabled;
+    await persistHouseholdState(req.householdId!, state);
+    res.json({ success: true, ledger: state });
+  } catch {
+    res.status(500).json({ error: 'An error occurred while updating this setting.' });
+  }
+});
+
 // Register a device's real per-device identity (which role picked this phone)
 app.post('/api/ledger/register-device', async (req, res) => {
   try {

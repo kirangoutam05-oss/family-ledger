@@ -126,6 +126,10 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   // What the household actually kept this cycle.
   const currentCycleNet = currentCycleCredits - currentCycleDebits;
 
+  // Households that only want a spend tracker turn money in off entirely.
+  // Unset means on, which is what existing households already see.
+  const trackIncome = ledger.trackIncome ?? true;
+
   // "Today" — the other half of the Outflow card, alongside the cycle total.
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -428,7 +432,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             the month - so income sits alongside it with the resulting net,
             which is the part you actually act on. Hidden entirely when there
             is no income in the cycle, rather than showing a row of zeroes. */}
-        {currentCycleCredits > 0 && (
+        {trackIncome && currentCycleCredits > 0 && (
           <div className="mt-4 pt-4 border-t border-white/10">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-xs text-white/60">Money in</span>

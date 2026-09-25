@@ -192,6 +192,12 @@ export interface LedgerState {
   // Which window the "Amount vs Category" card sums over. Unset (older
   // households) is treated as 'month' client-side.
   categoryBreakdownPeriod?: 'month' | 'year' | 'all';
+  // Whether this household records money coming in at all, or only what it
+  // spends. Off hides the money-in figure on the Overview card and drops the
+  // Money In option when logging, so the app reads purely as a spend tracker.
+  // Unset (older households) is treated as on client-side, since that is what
+  // they already see.
+  trackIncome?: boolean;
 }
 
 export interface DeviceIdentity {
