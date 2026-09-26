@@ -106,10 +106,23 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const currentCycleDebits = currentCycleDebitTxs.reduce((sum, t) => sum + t.amount, 0);
   const currentCycleLabel = billingCycleLabel(currentCycleStart);
 
-
   // Households that only want a spend tracker turn money in off entirely.
   // Unset means on, which is what existing households already see.
   const trackIncome = ledger.trackIncome ?? true;
+
+  // Money in for the same cycle — used only for the small in/out summary
+  // beside the headline figure, not netted into it. See the commit removing
+  // the old "overspent by" line for why: folding income into the big number
+  // makes one figure mean two different things depending on the month.
+  const currentCycleCredits = trackIncome
+    ? relevantTransactions
+        .filter((t) => {
+          if (t.type !== 'credit') return false;
+          const d = new Date(t.date);
+          return d >= currentCycleStart && d < currentCycleEnd;
+        })
+        .reduce((sum, t) => sum + t.amount, 0)
+    : 0;
 
   // "Today" — the other half of the Outflow card, alongside the cycle total.
   const todayStart = new Date();
@@ -391,7 +404,20 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             <TrendingDown className="w-4 h-4" />
           </span>
         </div>
-        <p className="text-[11px] text-white/50 mt-1">{currentCycleLabel}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-[11px] text-white/50">{currentCycleLabel}</p>
+          {/* Small in/out readout beside the period label — in green, out red,
+              at a glance rather than netted into the headline figure below
+              (which stays pure spending; see the commit removing "overspent
+              by" for why). Income only shows when the household tracks it. */}
+          {trackIncome && (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold">
+              <span className="text-emerald-400">in {formatCurrency(currentCycleCredits, currency)}</span>
+              <span className="text-white/20">·</span>
+              <span className="text-rose-400">out {formatCurrency(currentCycleDebits, currency)}</span>
+            </span>
+          )}
+        </div>
 
         {/* Currency symbol set apart from the digits — at this size a plain
             ₹ inline with a heavy weight renders with mismatched glyph
