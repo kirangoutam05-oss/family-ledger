@@ -1,0 +1,65 @@
+# Keeps the Render free instance awake during waking hours.
+#
+# Render sleeps a free service after 15 idle minutes and takes roughly 23
+# seconds to wake. That matters because the phone automation that forwards
+# bank SMS gets one attempt: if its request lands on a sleeping service it
+# times out, and the message is gone. Opening the app cold costs the same
+# wait.
+#
+# The window is UTC 01:00-18:59, which is 06:30-00:29 IST - waking hours in
+# India, where the spending happens. Overnight the service is allowed to
+# sleep, so a bank SMS arriving at 3am may still be lost.
+#
+# Roughly 18 hours a day, about 550 of the 750 free instance-hours a month,
+# leaving real headroom. Keeping it awake around the clock would use ~730 of
+# 750, and exceeding the quota suspends every free service until the month
+# rolls over - a worse failure than the one this prevents.
+#
+# GitHub's scheduler is not punctual; runs are regularly late and are
+# occasionally dropped entirely under load. Ten minutes rather than fourteen
+# gives that slippage somewhere to go before the service can fall asleep. If
+# the service still sleeps during the day, a dedicated pinger such as
+# cron-job.org keeps time far better than this does.
+
+name: Keep warm
+
+on:
+  schedule:
+    - cron: '*/10 1-18 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping health
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://family-ledger-jin3.onrender.com' }}
+        run: |
+          set -uo pipefail
+          # Two attempts: if the instance had already fallen asleep, the first
+          # pays the cold start and the second confirms it is actually up
+          # rather than still booting.
+          for attempt in 1 2; do
+            start=$(date +%s)
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 "$APP_URL/api/health" || echo 000)
+            elapsed=$(( $(date +%s) - start ))
+            echo "attempt $attempt: $code in ${elapsed}s"
+            if [ "$code" = "200" ] && [ "$elapsed" -lt 5 ]; then
+              echo "awake and warm"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          if [ "$code" = "200" ]; then
+            echo "::notice::awake, but the response was slow - it had probably just cold started"
+            exit 0
+          fi
+          echo "::error::service did not respond (last status $code)"
+          exit 1
