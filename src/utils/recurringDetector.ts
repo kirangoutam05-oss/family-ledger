@@ -9,26 +9,22 @@ export interface RecurringGroup {
   nextExpectedDate: string;
 }
 
-const MIN_GAP_DAYS = 20;
-const MAX_GAP_DAYS = 40;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-function daysBetween(a: string, b: string): number {
-  return Math.abs(new Date(a).getTime() - new Date(b).getTime()) / MS_PER_DAY;
-}
-
-function monthKey(date: string): string {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${d.getMonth()}`;
-}
-
-// Groups debit transactions by normalized title and flags a group as recurring
-// either because someone explicitly marked an occurrence as recurring (the
-// stronger, immediate signal — even a single just-logged bill counts), or
-// because it spans at least two different calendar months and *some* pair of
-// its occurrences is spaced roughly a month apart (20-40 days) — deliberately
-// not requiring every consecutive pair to line up, since one skipped/
-// adjusted/double-billed month shouldn't erase an otherwise-monthly bill's flag.
+// Groups debit transactions by normalized title, and treats a group as
+// recurring only because someone said so — at least one of its occurrences
+// carries isRecurring.
+//
+// This used to also guess, from two occurrences in different months spaced
+// 20-40 days apart. Guessing was wrong often enough to be worse than not
+// guessing: a fortnightly grocery run, two unrelated payments that happen to
+// share a payee name, or a one-off repeated by coincidence all looked
+// identical to a real monthly bill, and the badge then asserted something the
+// app did not know. Marking is one tap in the add and edit forms, and a
+// person knows in a way the shape of the data does not.
+//
+// Marking any one occurrence flags the whole title group, so you tag Netflix
+// once rather than every month.
 export function detectRecurringGroups(transactions: Transaction[]): RecurringGroup[] {
   const byTitle = new Map<string, Transaction[]>();
   for (const tx of transactions) {
@@ -46,21 +42,7 @@ export function detectRecurringGroups(transactions: Transaction[]): RecurringGro
     );
 
     const userConfirmed = sorted.some((t) => t.isRecurring);
-
-    if (!userConfirmed) {
-      if (sorted.length < 2) continue;
-
-      const distinctMonths = new Set(sorted.map((t) => monthKey(t.date)));
-      if (distinctMonths.size < 2) continue;
-
-      const hasMonthlyPair = sorted.some((a, i) =>
-        sorted.slice(i + 1).some((b) => {
-          const gap = daysBetween(a.date, b.date);
-          return gap >= MIN_GAP_DAYS && gap <= MAX_GAP_DAYS;
-        })
-      );
-      if (!hasMonthlyPair) continue;
-    }
+    if (!userConfirmed) continue;
 
     const last = sorted[sorted.length - 1];
     const avgAmount =

@@ -106,25 +106,6 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   const currentCycleDebits = currentCycleDebitTxs.reduce((sum, t) => sum + t.amount, 0);
   const currentCycleLabel = billingCycleLabel(currentCycleStart);
 
-  // Money in for the same window. Credits were previously rendered in the
-  // transaction list and nowhere else - not totalled, not compared against
-  // spending - so a month's salary could sit in the ledger without moving a
-  // single number on screen. Split by person for the same reason the wave
-  // chart is: who earned it matters in a shared ledger.
-  const currentCycleCreditTxs = relevantTransactions.filter((t) => {
-    if (t.type !== 'credit') return false;
-    const d = new Date(t.date);
-    return d >= currentCycleStart && d < currentCycleEnd;
-  });
-  const currentCycleCredits = currentCycleCreditTxs.reduce((sum, t) => sum + t.amount, 0);
-  const creditsByHusband = currentCycleCreditTxs
-    .filter((t) => t.spender === 'husband')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const creditsByWife = currentCycleCreditTxs
-    .filter((t) => t.spender === 'wife')
-    .reduce((sum, t) => sum + t.amount, 0);
-  // What the household actually kept this cycle.
-  const currentCycleNet = currentCycleCredits - currentCycleDebits;
 
   // Households that only want a spend tracker turn money in off entirely.
   // Unset means on, which is what existing households already see.
@@ -426,46 +407,6 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           Today: {formatCurrency(todayDebits, currency)} · {todayDebitTxs.length} txn{todayDebitTxs.length === 1 ? '' : 's'}
         </div>
 
-        {/* Money in, and what it leaves behind. The big figure above stays
-            pure spending - the card is called Outflow and netting it there
-            would make a large number mean two different things depending on
-            the month - so income sits alongside it with the resulting net,
-            which is the part you actually act on. Hidden entirely when there
-            is no income in the cycle, rather than showing a row of zeroes. */}
-        {trackIncome && currentCycleCredits > 0 && (
-          <div className="mt-4 pt-4 border-t border-white/10">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-xs text-white/60">Money in</span>
-              <span className="text-sm font-semibold text-emerald-400">
-                +{formatCurrency(currentCycleCredits, currency)}
-              </span>
-            </div>
-
-            {activeSpender === 'shared' && (creditsByHusband > 0 || creditsByWife > 0) && (
-              <div className="mt-1.5 flex items-center gap-3 text-[11px] text-white/50">
-                <span className="flex items-center gap-1.5 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-                  <span className="truncate">{husbandName}</span>
-                  <span className="text-white/70 shrink-0">{formatCurrency(creditsByHusband, currency)}</span>
-                </span>
-                <span className="flex items-center gap-1.5 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
-                  <span className="truncate">{wifeName}</span>
-                  <span className="text-white/70 shrink-0">{formatCurrency(creditsByWife, currency)}</span>
-                </span>
-              </div>
-            )}
-
-            <div className="mt-3 flex items-baseline justify-between gap-3">
-              <span className="text-xs text-white/60">
-                {currentCycleNet >= 0 ? 'Left over' : 'Overspent by'}
-              </span>
-              <span className={`text-sm font-semibold ${currentCycleNet >= 0 ? 'text-white' : 'text-rose-400'}`}>
-                {formatCurrency(Math.abs(currentCycleNet), currency)}
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Household Spending, as a wave — Kiran vs Mageswari over the last
             4 months, right above the buttons that add to it. */}
