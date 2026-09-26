@@ -255,6 +255,57 @@ export default function App() {
     };
   }, [householdId, identity]);
 
+  // Render's free instance sleeps after 15 idle minutes and takes roughly
+  // half a minute to wake, which is the pause on opening the app cold and,
+  // worse, the reason a forwarded bank SMS can time out and vanish. While
+  // someone is actually looking at the app, hold the backend open so the next
+  // action does not pay that cost.
+  //
+  // Gated on the tab being visible on purpose. A phone in a pocket with this
+  // installed would otherwise keep the service awake around the clock and
+  // burn through the 750 free instance-hours a month, and exceeding that
+  // suspends the service outright - which is worse than a slow cold start.
+  // It also cannot help before the app is open: the first load after a sleep
+  // still waits. Only an external pinger covers that.
+  useEffect(() => {
+    const PING_INTERVAL_MS = 10 * 60 * 1000;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return;
+      // Deliberately unauthenticated and result-ignoring: this exists to make
+      // the instance do something, not to fetch anything.
+      fetch('/api/health', { cache: 'no-store' }).catch(() => {});
+    };
+
+    const stop = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const start = () => {
+      stop();
+      timer = setInterval(ping, PING_INTERVAL_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    onVisibilityChange();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
+
   // Re-lock after the app has been backgrounded past the grace period —
   // switching away briefly (e.g. to reply to a text) doesn't re-prompt, but a
   // phone left down for real does.
