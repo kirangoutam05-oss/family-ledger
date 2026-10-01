@@ -1469,18 +1469,24 @@ app.post('/api/cron/daily-reminder', async (req, res) => {
       );
 
       for (const role of rolesMissingToday) {
+        // Addressed by name rather than a generic "you haven't logged
+        // anything" — this already lands as a push notification the person
+        // sees out of context, so it should read like it is actually for
+        // them rather than for whoever happens to open it.
+        const recipientName = role === 'husband' ? state.husbandName : state.wifeName;
+        const greeting = recipientName ? `${recipientName}, don’t` : "Don’t";
         state.alerts.unshift({
           id: `alert-reminder-${role}-${Date.now()}`,
           type: 'daily_reminder',
           title: "Don't forget today's expenses",
-          message: "You haven't logged any expenses today — add them before you forget.",
+          message: `${greeting} forget to log today's expenses.`,
           timestamp: 'Just now',
           read: false,
           forSpender: role,
         });
         await sendPushToRole(state, id, role, {
           title: 'Family Ledger',
-          body: "Don't forget to log today's expenses.",
+          body: `${greeting} forget to log today's expenses.`,
           tag: 'daily-reminder',
         });
       }
