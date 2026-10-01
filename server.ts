@@ -1012,7 +1012,10 @@ function notifyExpenseAdded(state: LedgerState, householdId: string, addedBy: Sp
   sendPushToRole(state, householdId, other, {
     title: 'New expense logged',
     body: `${spenderName} added ₹${tx.amount.toLocaleString('en-IN')} for ${tx.title}.`,
-    tag: 'expense-added',
+    // Per-transaction, not shared. A shared tag meant a second expense added
+    // before the first notification was seen silently replaced it instead
+    // of alerting again - the first expense's notification simply vanished.
+    tag: `expense-added-${tx.id}`,
   }).catch(() => {});
 }
 
@@ -1487,7 +1490,12 @@ app.post('/api/cron/daily-reminder', async (req, res) => {
         await sendPushToRole(state, id, role, {
           title: 'Family Ledger',
           body: `${greeting} forget to log today's expenses.`,
-          tag: 'daily-reminder',
+          // Dated rather than static. Web Notifications replaces - does not
+          // re-alert - a notification sharing an existing tag, so a static
+          // tag meant today's reminder could silently overwrite yesterday's
+          // still-unread one with no new banner or sound: delivered, never
+          // noticed. Each day is now a genuinely distinct notification.
+          tag: `daily-reminder-${today}`,
         });
       }
 
