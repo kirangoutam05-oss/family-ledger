@@ -14,6 +14,9 @@ export interface TransactionFilters {
   dateFrom: string;
   dateTo: string;
   sortBy: SortOption;
+  // Show what was added in the last few days, newest-added first, whatever date
+  // each entry is for.
+  recentlyAdded: boolean;
 }
 
 export const EMPTY_FILTERS: TransactionFilters = {
@@ -24,6 +27,7 @@ export const EMPTY_FILTERS: TransactionFilters = {
   dateFrom: '',
   dateTo: '',
   sortBy: 'date_desc',
+  recentlyAdded: false,
 };
 
 export function countActiveFilters(f: TransactionFilters): number {
@@ -33,6 +37,7 @@ export function countActiveFilters(f: TransactionFilters): number {
   if (f.type !== 'all') n++;
   if (f.spender !== 'all') n++;
   if (f.dateFrom || f.dateTo) n++;
+  if (f.recentlyAdded) n++;
   return n;
 }
 
@@ -118,6 +123,37 @@ export const TransactionFilterSheet: React.FC<TransactionFilterSheetProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Recently added */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={filters.recentlyAdded}
+          onClick={() => onChange({ ...filters, recentlyAdded: !filters.recentlyAdded })}
+          className={`w-full p-3 rounded-xl border flex items-center justify-between gap-3 text-left transition-colors ${
+            filters.recentlyAdded
+              ? 'border-[#9333EA] bg-[#9333EA]/10'
+              : 'border-black/10 dark:border-white/10'
+          }`}
+        >
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-neutral-900 dark:text-white">Recently added</div>
+            <div className="text-[11px] text-neutral-500 mt-0.5">
+              Everything added in the last 3 days, newest first, whatever date it is for
+            </div>
+          </div>
+          <span
+            className={`relative w-10 h-6 rounded-full shrink-0 transition-colors ${
+              filters.recentlyAdded ? 'bg-[#9333EA]' : 'bg-black/10 dark:bg-white/20'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${
+                filters.recentlyAdded ? 'left-[18px]' : 'left-0.5'
+              }`}
+            />
+          </span>
+        </button>
 
         {/* Sort */}
         <div className="space-y-2">

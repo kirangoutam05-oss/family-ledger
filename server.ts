@@ -2146,6 +2146,7 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
 
   const tx: Transaction = {
     id: `tx-sms-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+    addedAt: new Date().toISOString(),
     title: sanitizeString(parsed.title, 90) || 'Unidentified Payment',
     amount: parsed.amount!,
     type: parsed.type === 'credit' ? 'credit' : 'debit',
@@ -2344,6 +2345,7 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
 
     const tx: Transaction = {
       id: rawTx.id && typeof rawTx.id === 'string' ? sanitizeString(rawTx.id, 50) : `tx-${Date.now()}`,
+      addedAt: new Date().toISOString(),
       title: cleanTitle,
       amount: amountNum,
       type,
@@ -2600,6 +2602,7 @@ app.post('/api/ledger/pending-ack/accept', rateLimit(60, 60000), async (req, res
 
     const tx: Transaction = {
       id: `tx-ack-${Date.now()}`,
+      addedAt: new Date().toISOString(),
       title,
       amount,
       type: 'debit',

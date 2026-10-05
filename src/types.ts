@@ -75,6 +75,10 @@ export interface Transaction {
   // stronger, immediate signal than waiting for the same title to reappear
   // for two months before the recurring detector notices on its own.
   isRecurring?: boolean;
+  // When this entry was added to the ledger, which is not the same as the date
+  // it is for: a message from last week imported tonight is dated last week.
+  // Older entries have none, and fall back to the time embedded in their id.
+  addedAt?: string;
 }
 
 // Created when one spouse pays for something that's really the other's

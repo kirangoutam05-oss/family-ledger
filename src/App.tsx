@@ -1290,6 +1290,7 @@ export default function App() {
                   onResolveGreyArea={handleOpenGreyAreaDirect}
                   onEditTransaction={(tx) => setEditingTransaction(tx)}
                   onBulkUpdateTransactions={handleBulkUpdateTransactions}
+                  onDeleteTransaction={handleDeleteTransaction}
                   onOpenAddModal={() => setShowAddModal(true)}
                 />
               )}
@@ -1310,6 +1311,7 @@ export default function App() {
                   ledger={ledger}
                   authenticatedUser={authenticatedUser}
                   onResolve={handleResolveGreyArea}
+                  onDelete={handleDeleteTransaction}
                   focusedTransactionId={focusedGreyTxId}
                 />
               )}

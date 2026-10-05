@@ -6,8 +6,9 @@ import {
   LedgerState,
   CategoryId,
 } from '../types';
-import { formatCurrency, formatDate, getPaymentModeLabel, localDateKey } from '../utils/helpers';
+import { formatCurrency, getAddedAtMs, formatAddedAgo, formatDate, getPaymentModeLabel, localDateKey } from '../utils/helpers';
 import { detectRecurringGroups } from '../utils/recurringDetector';
+import { SwipeToDelete } from './SwipeToDelete';
 import { billingCycleStart, billingCycleEnd, billingCycleLabel } from '../utils/billingCycle';
 import { ExportSection } from './ExportSection';
 import { BulkEditSheet } from './BulkEditSheet';
@@ -39,6 +40,7 @@ interface DashboardsProps {
   onSelectSpender: (spender: SpenderId | 'shared') => void;
   onResolveGreyArea: (transactionId: string) => void;
   onEditTransaction: (transaction: Transaction) => void;
+  onDeleteTransaction: (transactionId: string) => Promise<void>;
   onBulkUpdateTransactions: (
     transactionIds: string[],
     updates: { category?: CategoryId; paymentMode?: Transaction['paymentMode'] }
@@ -52,6 +54,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   authenticatedUser,
   onResolveGreyArea,
   onEditTransaction,
+  onDeleteTransaction,
   onBulkUpdateTransactions,
   onOpenAddModal,
 }) => {
@@ -186,6 +189,9 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   );
 
   // Filtered + sorted transactions for the list
+  // "Recently added" looks back this far from now.
+  const recentlyAddedCutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+
   const displayTransactions = relevantTransactions
     .filter((tx) => {
       const q = searchQuery.toLowerCase();
@@ -202,7 +208,10 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     .filter((tx) => filters.spender === 'all' || tx.spender === filters.spender)
     .filter((tx) => !filters.dateFrom || localDateKey(new Date(tx.date)) >= filters.dateFrom)
     .filter((tx) => !filters.dateTo || localDateKey(new Date(tx.date)) <= filters.dateTo)
+    .filter((tx) => !filters.recentlyAdded || getAddedAtMs(tx) >= recentlyAddedCutoff)
     .sort((a, b) => {
+      // By when it was added, not the date it is for.
+      if (filters.recentlyAdded) return getAddedAtMs(b) - getAddedAtMs(a);
       switch (filters.sortBy) {
         case 'date_asc':
           return new Date(a.date).getTime() - new Date(b.date).getTime();
@@ -783,8 +792,12 @@ export const Dashboards: React.FC<DashboardsProps> = ({
               };
 
               return (
-                <div
+                <SwipeToDelete
                   key={tx.id}
+                  disabled={!isMine || isSelectMode}
+                  onDelete={() => onDeleteTransaction(tx.id)}
+                >
+                <div
                   onClick={handleRowClick}
                   className={`animate-fade-slide-up p-4 flex items-center justify-between gap-3 transition-colors group ${
                     isSelectMode && !isMine ? 'cursor-default opacity-50' : 'cursor-pointer'
@@ -898,7 +911,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                         {formatCurrency(tx.amount, currency)}
                       </div>
                       <div className="text-[11px] text-neutral-400 truncate max-w-[88px] sm:max-w-[180px] ml-auto" title={cat.name}>
-                        {cat.name}
+                        {filters.recentlyAdded ? 'added ' + formatAddedAgo(getAddedAtMs(tx)) : cat.name}
                       </div>
                     </div>
 
@@ -926,6 +939,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                     </div>
                   </div>
                 </div>
+                </SwipeToDelete>
               );
             })
           )}

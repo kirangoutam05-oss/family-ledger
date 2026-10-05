@@ -166,3 +166,27 @@ const PAYMENT_MODE_LABELS: Record<string, string> = {
 export function getPaymentModeLabel(mode: string): string {
   return PAYMENT_MODE_LABELS[mode] || mode;
 }
+
+
+// When an entry was added, in milliseconds. Entries created before addedAt
+// existed carry the time in their id ("tx-sms-<ms>-...", "tx-manual-<ms>"),
+// and anything else falls back to the date it is for.
+export function getAddedAtMs(tx: { addedAt?: string; id: string; date: string }): number {
+  if (tx.addedAt) {
+    const t = Date.parse(tx.addedAt);
+    if (!isNaN(t)) return t;
+  }
+  const m = tx.id.match(/^tx-(?:sms-|manual-|ack-)?(\d{12,14})/);
+  if (m) return Number(m[1]);
+  const d = Date.parse(tx.date);
+  return isNaN(d) ? 0 : d;
+}
+
+export function formatAddedAgo(ms: number): string {
+  const mins = Math.floor((Date.now() - ms) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  return Math.floor(hrs / 24) + 'd ago';
+}

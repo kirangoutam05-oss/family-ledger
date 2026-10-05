@@ -6,11 +6,13 @@ import {
 } from 'lucide-react';
 import { Transaction, CategoryId, LedgerState, SpenderId } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
+import { SwipeToDelete } from './SwipeToDelete';
 
 interface GreyAreaQueueProps {
   ledger: LedgerState;
   authenticatedUser: SpenderId;
   onResolve: (transactionId: string, category: CategoryId, note?: string, title?: string) => Promise<void>;
+  onDelete: (transactionId: string) => Promise<void>;
   focusedTransactionId?: string | null;
 }
 
@@ -18,6 +20,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
   ledger,
   authenticatedUser,
   onResolve,
+  onDelete,
   focusedTransactionId,
 }) => {
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
@@ -108,8 +111,13 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
               {greyAreaTransactions.map((tx, index) => {
                 const isSelected = tx.id === activeTxId;
                 return (
-                  <button
+                  <SwipeToDelete
                     key={tx.id}
+                    disabled={tx.spender !== authenticatedUser}
+                    onDelete={() => onDelete(tx.id)}
+                    className="rounded-2xl p-[3px] -m-[3px]"
+                  >
+                  <button
                     onClick={() => handleOpenResolve(tx)}
                     className={`animate-fade-slide-up w-full p-4 rounded-2xl border text-left transition-all active:scale-[0.98] ${
                       isSelected
@@ -141,6 +149,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                       </div>
                     )}
                   </button>
+                  </SwipeToDelete>
                 );
               })}
             </div>
