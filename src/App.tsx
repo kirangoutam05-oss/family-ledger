@@ -1300,6 +1300,7 @@ export default function App() {
                   activeSpender={activeSpender}
                   onAddTransaction={handleAddTransaction}
                   onEditTransaction={(tx) => setEditingTransaction(tx)}
+                  onReviewImported={() => handleTabChange('grey_areas')}
                   onFlagPendingAck={handleFlagPendingAck}
                 />
               )}

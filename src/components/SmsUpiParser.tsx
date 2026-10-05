@@ -13,12 +13,15 @@ import {
 import { Transaction, SpenderId, LedgerState, CategoryId } from '../types';
 import { formatCurrency, formatDate, getCategoryIcon, getPaymentModeLabel } from '../utils/helpers';
 import { TransactionIcon } from './TransactionIcon';
+import { MessageSweepCard } from './MessageSweepCard';
 
 interface SmsUpiParserProps {
   ledger: LedgerState;
   activeSpender: SpenderId | 'shared';
   onAddTransaction: (transaction: Transaction) => Promise<void>;
   onEditTransaction: (transaction: Transaction) => void;
+  // Jumps to the Needs Context queue, where a scan's results wait to be confirmed.
+  onReviewImported: () => void;
   onFlagPendingAck: (pending: {
     title: string;
     amount: number;
@@ -39,6 +42,7 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
   activeSpender,
   onAddTransaction,
   onEditTransaction,
+  onReviewImported,
   onFlagPendingAck,
 }) => {
   const [smsInput, setSmsInput] = useState('');
@@ -235,6 +239,10 @@ export const SmsUpiParser: React.FC<SmsUpiParserProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Scanning runs in a Shortcut on the phone; this is the way into it, and
+          where its results are surfaced for confirming. */}
+      <MessageSweepCard ledger={ledger} onReview={onReviewImported} />
+
       {/* Clean Header & Input Card */}
       <div className="bg-white dark:bg-neutral-900 p-6 rounded-2xl border border-black/[0.04] dark:border-white/[0.06] shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
