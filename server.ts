@@ -1892,8 +1892,61 @@ app.post('/api/ledger/sync', async (req, res) => {
 // arrives, including OTPs, promotions and balance alerts, and the same message
 // can be delivered twice. Anything that cannot be read confidently is filed
 // for review rather than guessed at.
+// Pulls the message text out of whatever a phone automation actually sent.
+// The contract is { smsText: string }, but Shortcuts has several ways to build
+// a body and the variable it hands over is not always plain text - on iOS 27
+// the trigger moved into the shortcut itself, and a message can arrive as an
+// object or a list rather than a string. Anything that is not a string used to
+// collapse to '' and fail with a message that said nothing about what was
+// wrong, so accept the common shapes and report the rest.
+function extractSmsText(body: unknown): string {
+  if (typeof body === 'string') return body;
+  if (!body || typeof body !== 'object') return '';
+  const b = body as Record<string, unknown>;
+  const textOf = (v: unknown): string => {
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) return v.map(textOf).filter(Boolean).join('\n');
+    if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      for (const inner of ['text', 'body', 'content', 'message']) {
+        const t = typeof o[inner] === 'string' ? (o[inner] as string) : '';
+        if (t.trim()) return t;
+      }
+    }
+    return '';
+  };
+  for (const key of ['smsText', 'text', 'message', 'body', 'content']) {
+    const t = textOf(b[key]);
+    if (t.trim()) return t;
+  }
+  return '';
+}
+
+// What the request looked like, with values reduced to type and length. Sent
+// back only to a caller that already presented the secret, so it can say what
+// went wrong without echoing anything back.
+function describeIngestBody(req: express.Request): Record<string, unknown> {
+  const body: unknown = req.body;
+  const fields: Record<string, string> = {};
+  if (typeof body === 'string') {
+    fields['(raw body)'] = 'string(' + body.length + ')';
+  } else if (body && typeof body === 'object') {
+    for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
+      if (typeof v === 'string') fields[k] = 'string(' + v.length + ')';
+      else if (Array.isArray(v)) fields[k] = 'list(' + v.length + ')';
+      else if (v && typeof v === 'object') fields[k] = 'object{' + Object.keys(v as object).join(',') + '}';
+      else fields[k] = typeof v;
+    }
+  }
+  return { contentType: req.header('content-type') || null, fields };
+}
 app.use('/api/ingest-sms', resolveHousehold);
-app.post('/api/ingest-sms', rateLimit(60, 60000), async (req, res) => {
+app.post(
+  '/api/ingest-sms',
+  express.text({ type: 'text/plain', limit: '10kb' }),
+  express.urlencoded({ extended: false, limit: '10kb' }),
+  rateLimit(60, 60000),
+  async (req, res) => {
   try {
     // Fail closed. Without a configured secret this is an unauthenticated
     // write endpoint reachable by anyone who knows a household id.
@@ -1906,9 +1959,11 @@ app.post('/api/ingest-sms', rateLimit(60, 60000), async (req, res) => {
     }
 
     const state = req.householdState!;
-    const smsText = typeof req.body?.smsText === 'string' ? req.body.smsText : '';
+    const smsText = extractSmsText(req.body);
     if (!smsText.trim() || smsText.length > 2000) {
-      return res.status(400).json({ error: 'smsText must be 1-2000 characters' });
+      const received = describeIngestBody(req);
+      console.warn('Ingest rejected, empty or oversized text:', JSON.stringify(received));
+      return res.status(400).json({ error: 'smsText must be 1-2000 characters', received });
     }
 
     const spender: SpenderId = req.body?.spender === 'wife' ? 'wife' : 'husband';
