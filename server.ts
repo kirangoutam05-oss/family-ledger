@@ -1941,115 +1941,207 @@ function describeIngestBody(req: express.Request): Record<string, unknown> {
   return { contentType: req.header('content-type') || null, fields };
 }
 app.use('/api/ingest-sms', resolveHousehold);
+type IngestResult =
+  | { kind: 'saved'; tx: Transaction }
+  | { kind: 'duplicate'; transactionId: string }
+  | { kind: 'ignored'; reason: 'otp' | 'not-a-transaction' | 'no-amount' | 'empty' };
+
+// Files one bank message into a household's state. Mutates state but does not
+// persist, so a batch can file many messages and write once.
+//
+// Nothing here trusts the caller's judgement: an automation forwards whatever
+// arrives, including OTPs, promotions and balance alerts, and the same message
+// can be delivered more than once - a sweep resends the whole day on purpose.
+// With review on, everything filed waits in the Needs Context queue for a
+// person to confirm, keeping the parser's guessed category as the default.
+function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderId, review: boolean): IngestResult {
+  if (!smsText.trim()) return { kind: 'ignored', reason: 'empty' };
+
+  // An OTP names an amount and a merchant and looks exactly like a purchase
+  // to a parser. Rejected before anything else, because filing one creates a
+  // transaction that never happened.
+  if (/\bOTP\b|one[\s-]?time[\s-]?password|verification code|do not share/i.test(smsText)) {
+    return { kind: 'ignored', reason: 'otp' };
+  }
+
+  // A transaction says money moved. A balance alert, a due-date reminder and
+  // a marketing message do not.
+  const movedMoney = /debited|credited|spent|withdrawn|charged|\bpaid\b|purchase|txn of|availing/i.test(smsText);
+  const hasAmount =
+    /(?:Rs\.?|INR)\s*[\d,]+/i.test(smsText) ||
+    /[\d,]+(?:\.\d{1,2})?\s*(?:debited|credited|spent|withdrawn|charged)/i.test(smsText);
+  if (!movedMoney || !hasAmount) return { kind: 'ignored', reason: 'not-a-transaction' };
+
+  const masked = maskSensitiveFinancialData(sanitizeString(smsText, 2000));
+  const parsed = parseSmsHeuristic(masked, spender, state.husbandName, state.wifeName);
+
+  // parseSmsHeuristic substitutes 500 when it finds no amount at all. That is
+  // a reasonable placeholder for someone reviewing a form; it is a fabricated
+  // number when nothing is watching.
+  const amountFound = /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i.exec(masked);
+  if (!amountFound && !parsed.amount) return { kind: 'ignored', reason: 'no-amount' };
+
+  // Deduplicate. A real bank reference is the reliable key; the parser
+  // invents "UPI-<timestamp>" when the message carries none, so those fall
+  // back to amount, title and a five minute window. Exact message text is
+  // checked too: some alerts carry neither a reference nor a date, so the
+  // parser stamps them with the time they were filed, and a second sweep
+  // would otherwise file the same message again hours later.
+  const ref = parsed.upiRef && !/^UPI-\d+$/.test(parsed.upiRef) ? parsed.upiRef : '';
+  const when = new Date(parsed.date || Date.now()).getTime();
+  const duplicate = state.transactions.find((t) => {
+    if (ref && t.upiRef === ref) return true;
+    if (t.rawSms && t.rawSms === masked) return true;
+    return (
+      t.amount === parsed.amount &&
+      t.title === parsed.title &&
+      Math.abs(new Date(t.date).getTime() - when) < 5 * 60 * 1000
+    );
+  });
+  if (duplicate) return { kind: 'duplicate', transactionId: duplicate.id };
+
+  const category: CategoryId = getValidCategoryIds(state).includes(parsed.category as string)
+    ? (parsed.category as CategoryId)
+    : 'grey_area';
+
+  const tx: Transaction = {
+    id: `tx-sms-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+    title: sanitizeString(parsed.title, 90) || 'Unidentified Payment',
+    amount: parsed.amount!,
+    type: parsed.type === 'credit' ? 'credit' : 'debit',
+    date: parsed.date || new Date().toISOString(),
+    spender,
+    category,
+    paymentMode: parsed.paymentMode!,
+    bankName: parsed.bankName,
+    upiRef: parsed.upiRef,
+    rawSms: masked,
+    status: parsed.status === 'grey_area' ? 'grey_area' : 'verified',
+    greyAreaReason: parsed.greyAreaReason || undefined,
+    contextQuestion: parsed.contextQuestion || undefined,
+    isRecurring: undefined,
+  };
+
+  if (review && tx.status === 'verified') {
+    // Confidently parsed, but a sweep files in bulk and nobody saw it arrive.
+    // Park it for a tap rather than letting a whole day go in unchecked. The
+    // category stays as the parser's guess, which the queue pre-selects.
+    const categoryName = state.categories.find((c) => c.id === tx.category)?.name || tx.category;
+    tx.status = 'grey_area';
+    tx.greyAreaReason = 'Imported from your Messages - confirm to file';
+    tx.contextQuestion = 'Is this right? ' + tx.title + ' under ' + categoryName + '.';
+  }
+
+  state.transactions.unshift(tx);
+  return { kind: 'saved', tx };
+}
+
+// A sweep sends many messages in one request. Shortcuts is awkward at
+// building JSON lists, so the simple form is one text field with the
+// messages joined by a separator line; a real list is accepted as well.
+const SMS_BATCH_SEPARATOR = '~~~';
+const MAX_BATCH_MESSAGES = 100;
+function extractSmsBatch(body: unknown): string[] | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.smsBatch === 'string') {
+    return b.smsBatch.split(SMS_BATCH_SEPARATOR).map((m) => m.trim()).filter(Boolean);
+  }
+  if (Array.isArray(b.messages)) {
+    return b.messages.map((m) => extractSmsText({ smsText: m }).trim()).filter(Boolean);
+  }
+  return null;
+}
+
 app.post(
   '/api/ingest-sms',
-  express.text({ type: 'text/plain', limit: '10kb' }),
-  express.urlencoded({ extended: false, limit: '10kb' }),
+  express.text({ type: 'text/plain', limit: '100kb' }),
+  express.urlencoded({ extended: false, limit: '100kb' }),
   rateLimit(60, 60000),
   async (req, res) => {
-  try {
-    // Fail closed. Without a configured secret this is an unauthenticated
-    // write endpoint reachable by anyone who knows a household id.
-    const secret = process.env.INGEST_SECRET;
-    if (!secret) {
-      return res.status(503).json({ error: 'Ingest is not configured on this server.' });
+    try {
+      // Fail closed. Without a configured secret this is an unauthenticated
+      // write endpoint reachable by anyone who knows a household id.
+      const secret = process.env.INGEST_SECRET;
+      if (!secret) {
+        return res.status(503).json({ error: 'Ingest is not configured on this server.' });
+      }
+      if (req.header('X-Ingest-Secret') !== secret) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const state = req.householdState!;
+      const spender: SpenderId = req.body?.spender === 'wife' ? 'wife' : 'husband';
+
+      // Batch: a sweep of the day's messages. Reviewed by default, since
+      // nobody watched these arrive. An empty batch is a normal outcome -
+      // a quiet day - not an error.
+      const batch = extractSmsBatch(req.body);
+      if (batch) {
+        const review = req.body?.review !== false;
+        const counts = { saved: 0, duplicates: 0, ignored: 0 };
+        const items: { status: string; title?: string; amount?: number; reason?: string }[] = [];
+        for (const text of batch.slice(0, MAX_BATCH_MESSAGES)) {
+          if (text.length > 2000) {
+            counts.ignored++;
+            items.push({ status: 'ignored', reason: 'too-long' });
+            continue;
+          }
+          const r = ingestOneMessage(state, text, spender, review);
+          if (r.kind === 'saved') {
+            counts.saved++;
+            items.push({ status: 'saved', title: r.tx.title, amount: r.tx.amount });
+          } else if (r.kind === 'duplicate') {
+            counts.duplicates++;
+            items.push({ status: 'duplicate' });
+          } else {
+            counts.ignored++;
+            items.push({ status: 'ignored', reason: r.reason });
+          }
+        }
+        if (counts.saved > 0) {
+          state.lastSyncTime = new Date().toISOString();
+          await persistHouseholdState(req.householdId!, state);
+        }
+        return res.status(counts.saved > 0 ? 201 : 200).json({
+          total: batch.length,
+          saved: counts.saved,
+          duplicates: counts.duplicates,
+          ignored: counts.ignored,
+          needsReview: review ? counts.saved : 0,
+          truncated: batch.length > MAX_BATCH_MESSAGES,
+          items,
+        });
+      }
+
+      const smsText = extractSmsText(req.body);
+      if (!smsText.trim() || smsText.length > 2000) {
+        const received = describeIngestBody(req);
+        console.warn('Ingest rejected, empty or oversized text:', JSON.stringify(received));
+        return res.status(400).json({ error: 'smsText must be 1-2000 characters', received });
+      }
+
+      const r = ingestOneMessage(state, smsText, spender, req.body?.review === true);
+      if (r.kind === 'duplicate') {
+        return res.json({ saved: false, reason: 'duplicate', transactionId: r.transactionId });
+      }
+      if (r.kind === 'ignored') {
+        return res.json({ saved: false, reason: r.reason });
+      }
+
+      state.lastSyncTime = new Date().toISOString();
+      await persistHouseholdState(req.householdId!, state);
+      res.status(201).json({
+        saved: true,
+        needsReview: r.tx.status === 'grey_area',
+        transaction: { id: r.tx.id, title: r.tx.title, amount: r.tx.amount, type: r.tx.type, date: r.tx.date, category: r.tx.category },
+      });
+    } catch (err) {
+      console.error('SMS ingest failed:', err);
+      res.status(500).json({ error: 'Could not file this message.' });
     }
-    if (req.header('X-Ingest-Secret') !== secret) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const state = req.householdState!;
-    const smsText = extractSmsText(req.body);
-    if (!smsText.trim() || smsText.length > 2000) {
-      const received = describeIngestBody(req);
-      console.warn('Ingest rejected, empty or oversized text:', JSON.stringify(received));
-      return res.status(400).json({ error: 'smsText must be 1-2000 characters', received });
-    }
-
-    const spender: SpenderId = req.body?.spender === 'wife' ? 'wife' : 'husband';
-
-    // An OTP names an amount and a merchant and looks exactly like a
-    // purchase to a parser. Rejected before anything else, because filing
-    // one creates a transaction that never happened.
-    if (/\bOTP\b|one[\s-]?time[\s-]?password|verification code|do not share/i.test(smsText)) {
-      return res.json({ saved: false, reason: 'otp' });
-    }
-
-    // A transaction says money moved. A balance alert, a due-date reminder
-    // and a marketing message do not.
-    const movedMoney = /debited|credited|spent|withdrawn|charged|\bpaid\b|purchase|txn of|availing/i.test(smsText);
-    const hasAmount =
-      /(?:Rs\.?|INR)\s*[\d,]+/i.test(smsText) ||
-      /[\d,]+(?:\.\d{1,2})?\s*(?:debited|credited|spent|withdrawn|charged)/i.test(smsText);
-    if (!movedMoney || !hasAmount) {
-      return res.json({ saved: false, reason: 'not-a-transaction' });
-    }
-
-    const masked = maskSensitiveFinancialData(sanitizeString(smsText, 2000));
-    const parsed = parseSmsHeuristic(masked, spender, state.husbandName, state.wifeName);
-
-    // parseSmsHeuristic substitutes 500 when it finds no amount at all. That
-    // is a reasonable placeholder for someone reviewing a form; it is a
-    // fabricated number when nothing is watching.
-    const amountFound = /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i.exec(masked);
-    if (!amountFound && !parsed.amount) {
-      return res.json({ saved: false, reason: 'no-amount' });
-    }
-
-    // Deduplicate. Automations retry, and a bank occasionally sends the same
-    // alert twice. A real bank reference is the reliable key; the parser
-    // invents "UPI-<timestamp>" when the message carries none, so those are
-    // matched on shape instead.
-    const ref = parsed.upiRef && !/^UPI-\d+$/.test(parsed.upiRef) ? parsed.upiRef : '';
-    const when = new Date(parsed.date || Date.now()).getTime();
-    const duplicate = state.transactions.find((t) => {
-      if (ref && t.upiRef === ref) return true;
-      return (
-        t.amount === parsed.amount &&
-        t.title === parsed.title &&
-        Math.abs(new Date(t.date).getTime() - when) < 5 * 60 * 1000
-      );
-    });
-    if (duplicate) {
-      return res.json({ saved: false, reason: 'duplicate', transactionId: duplicate.id });
-    }
-
-    const category: CategoryId = getValidCategoryIds(state).includes(parsed.category as string)
-      ? (parsed.category as CategoryId)
-      : 'grey_area';
-
-    const tx: Transaction = {
-      id: `tx-sms-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
-      title: sanitizeString(parsed.title, 90) || 'Unidentified Payment',
-      amount: parsed.amount!,
-      type: parsed.type === 'credit' ? 'credit' : 'debit',
-      date: parsed.date || new Date().toISOString(),
-      spender,
-      category,
-      paymentMode: parsed.paymentMode!,
-      bankName: parsed.bankName,
-      upiRef: parsed.upiRef,
-      rawSms: masked,
-      status: parsed.status === 'grey_area' ? 'grey_area' : 'verified',
-      greyAreaReason: parsed.greyAreaReason || undefined,
-      contextQuestion: parsed.contextQuestion || undefined,
-      isRecurring: undefined,
-    };
-
-    state.transactions.unshift(tx);
-    state.lastSyncTime = new Date().toISOString();
-    await persistHouseholdState(req.householdId!, state);
-
-    res.status(201).json({
-      saved: true,
-      needsReview: tx.status === 'grey_area',
-      transaction: { id: tx.id, title: tx.title, amount: tx.amount, type: tx.type, date: tx.date, category: tx.category },
-    });
-  } catch (err) {
-    console.error('SMS ingest failed:', err);
-    res.status(500).json({ error: 'Could not file this message.' });
   }
-});
+);
 
 
 // Add new transaction
