@@ -1108,6 +1108,8 @@ function geminiDate(dateTime: unknown): string | null {
   return parsed.toISOString();
 }
 
+const SMS_UTC_OFFSET_MINUTES = 330; // India, UTC+05:30
+
 function extractDateTimeFromSms(sms: string): string | null {
   // Indian bank/UPI SMS use a surprising variety of date shapes: ISO
   // year-first (some card alerts glue it straight onto the time), the usual
@@ -1129,6 +1131,21 @@ function extractDateTimeFromSms(sms: string): string | null {
   const compactMatch = sms.match(/\b(\d{1,2})([A-Za-z]{3})(\d{2,4})\b/);
   const compactValid =
     compactMatch && MONTH_ABBR[compactMatch[2].toLowerCase()] !== undefined ? compactMatch : null;
+  // HSBC writes "on 01OCT" with no year at all. Month gated as above; the year
+  // is filled in below, since a bank alert is always about the recent past.
+  const compactNoYear = sms.match(/\b(\d{1,2})\s?([A-Za-z]{3})\b(?!\s?\d)/);
+  const compactNoYearValid =
+    compactNoYear && MONTH_ABBR[compactNoYear[2].toLowerCase()] !== undefined ? compactNoYear : null;
+  let yearWasAssumed = false;
+
+  // A pattern can match something that is not a date at all - "INR 40,000" fits
+  // the month-first shape - and because the branches below are an else-if
+  // chain, one junk match used to block every later, correct one. Only accept
+  // a candidate whose month is real.
+  const isMonthWord = (w: string) => MONTH_ABBR[w.slice(0, 3).toLowerCase()] !== undefined;
+  const dayFirstValid =
+    dayFirstMatch && (/^\d+$/.test(dayFirstMatch[2]) || isMonthWord(dayFirstMatch[2])) ? dayFirstMatch : null;
+  const monthFirstValid = monthFirstMatch && isMonthWord(monthFirstMatch[1]) ? monthFirstMatch : null;
 
   let day: number;
   let month: number | undefined;
@@ -1140,7 +1157,7 @@ function extractDateTimeFromSms(sms: string): string | null {
     month = parseInt(isoDateMatch[2], 10) - 1;
     day = parseInt(isoDateMatch[3], 10);
     matchedDateText = isoDateMatch[0];
-  } else if (dayFirstMatch) {
+  } else if (dayFirstValid) {
     day = parseInt(dayFirstMatch[1], 10);
     const monthPart = dayFirstMatch[2];
     month = /^\d+$/.test(monthPart)
@@ -1149,7 +1166,7 @@ function extractDateTimeFromSms(sms: string): string | null {
     year = parseInt(dayFirstMatch[3], 10);
     if (year < 100) year += 2000;
     matchedDateText = dayFirstMatch[0];
-  } else if (monthFirstMatch) {
+  } else if (monthFirstValid) {
     month = MONTH_ABBR[monthFirstMatch[1].slice(0, 3).toLowerCase()];
     day = parseInt(monthFirstMatch[2], 10);
     year = parseInt(monthFirstMatch[3], 10);
@@ -1161,6 +1178,12 @@ function extractDateTimeFromSms(sms: string): string | null {
     year = parseInt(compactValid[3], 10);
     if (year < 100) year += 2000;
     matchedDateText = compactValid[0];
+  } else if (compactNoYearValid) {
+    day = parseInt(compactNoYearValid[1], 10);
+    month = MONTH_ABBR[compactNoYearValid[2].toLowerCase()];
+    year = new Date().getFullYear();
+    yearWasAssumed = true;
+    matchedDateText = compactNoYearValid[0];
   } else {
     return null;
   }
@@ -1184,13 +1207,48 @@ function extractDateTimeFromSms(sms: string): string | null {
     if (meridiem === 'am' && hours === 12) hours = 0;
   }
 
-  const parsed = new Date(year, month, day, hours, minutes, seconds);
+  // Bank messages state India time. This used to build the date with the
+  // server's own clock, which on a UTC host stored a 23:30 message as 23:30 UTC -
+  // five and a half hours late, and on the wrong day for anything after 18:30.
+  // It matters most for a sweep that runs just before midnight. The parser is
+  // built around Indian banks and UPI, so India time is stated outright rather
+  // than inferred from wherever the server happens to run.
+  const toDate = (y: number) =>
+    new Date(Date.UTC(y, month!, day, hours, minutes, seconds) - SMS_UTC_OFFSET_MINUTES * 60 * 1000);
+  let parsed = toDate(year);
+  // With no year given, "on 28DEC" read in January means last year, not next.
+  if (yearWasAssumed && parsed.getTime() > Date.now() + 2 * 24 * 60 * 60 * 1000) parsed = toDate(year - 1);
   if (isNaN(parsed.getTime()) || !isPlausibleTransactionDate(parsed)) return null;
 
   return parsed.toISOString();
 }
 
 // Heuristic fallback SMS parser
+// A bank reference has to look like one: eight or more letters and digits with
+// at least one digit among them. The parser used to take whatever word
+// followed "ref", "txn" or "id" - without a word boundary, so the "id" inside
+// "paid" matched and "paid from HSBC" produced the reference "from", and "txn
+// of Rs.231720" produced "of". Both are then shared by every other message
+// phrased the same way, which makes unrelated payments look like the same one.
+const BANK_REF_PATTERN =
+  /\b(?:UPI(?:\s*Ref(?:erence)?)?|RRN|UTR|Ref(?:erence)?|Txn|Transaction)\s*(?:No\.?|Number|ID|#)?\s*[:\-#.]?\s*([A-Za-z0-9]{8,24})\b/gi;
+
+function extractBankRef(sms: string): string {
+  for (const m of sms.matchAll(BANK_REF_PATTERN)) {
+    if (/\d/.test(m[1])) return m[1];
+  }
+  return '';
+}
+
+// Whether a stored reference is genuine. The parser stamps "UPI-<timestamp>"
+// when a message carries none, and references saved before the fix above can
+// be plain words; neither says anything about whether two messages are the
+// same payment, so neither may be used to decide that.
+function isRealRef(ref: string | undefined | null): ref is string {
+  return !!ref && /^(?=.*\d)[A-Za-z0-9]{8,24}$/.test(ref) && !/^UPI-\d+$/.test(ref);
+}
+
+
 function parseSmsHeuristic(
   sms: string,
   defaultSpender: 'husband' | 'wife' = 'husband',
@@ -1266,9 +1324,7 @@ function parseSmsHeuristic(
   else if (/Slice/i.test(smsForBankDetection)) bankName = 'Slice';
 
   // UPI Ref
-  let upiRef = '';
-  const refMatch = cleanSms.match(/(?:Ref|Txn|ID|txn)[:\s]+([A-Za-z0-9]+)/i);
-  if (refMatch) upiRef = refMatch[1];
+  const upiRef = extractBankRef(cleanSms);
 
   // Detect Merchant / Payee
   let title = 'Recent Transaction';
@@ -1941,10 +1997,50 @@ function describeIngestBody(req: express.Request): Record<string, unknown> {
   return { contentType: req.header('content-type') || null, fields };
 }
 app.use('/api/ingest-sms', resolveHousehold);
+// The same message reaches the server by different routes - a sweep, a
+// per-message automation, a paste into Import SMS - and picks up different
+// whitespace and stray markup on the way. Compare the words, not the spacing.
+function normalizeMessage(text: string): string {
+  return text.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
+}
+
+// What a message looks like once filed, reduced to something that can be
+// remembered cheaply. Hashed so the ledger does not keep a second copy of
+// every deleted message's text.
+function messageFingerprint(maskedText: string): string {
+  return crypto.createHash('sha256').update(normalizeMessage(maskedText)).digest('hex').slice(0, 16);
+}
+
+const MAX_IGNORED_MESSAGES = 1000;
+
+// A sweep resends recent messages every night. Without a memory of what was
+// deleted on purpose, a transaction someone removed - a genuine duplicate, or
+// a payment they did not want tracked - would come straight back the next
+// time the same message was scanned. Remembered by exact text, and by bank
+// reference where there is one, in case the same payment arrives reworded.
+// Deleting by hand still works as before; this only stops automatic import
+// from undoing it.
+function rememberDeletedMessage(state: LedgerState, tx: Transaction): void {
+  const keys: string[] = [];
+  if (tx.rawSms) keys.push(messageFingerprint(tx.rawSms));
+  if (isRealRef(tx.upiRef)) keys.push('ref:' + tx.upiRef);
+  if (keys.length === 0) return;
+  const known = new Set(state.ignoredMessages ?? []);
+  for (const k of keys) known.add(k);
+  state.ignoredMessages = Array.from(known).slice(-MAX_IGNORED_MESSAGES);
+}
+
+function isDeletedMessage(state: LedgerState, fingerprint: string, ref: string): boolean {
+  const known = state.ignoredMessages;
+  if (!known || known.length === 0) return false;
+  return known.includes(fingerprint) || (!!ref && known.includes('ref:' + ref));
+}
+
+
 type IngestResult =
   | { kind: 'saved'; tx: Transaction }
   | { kind: 'duplicate'; transactionId: string }
-  | { kind: 'ignored'; reason: 'otp' | 'not-a-transaction' | 'no-amount' | 'empty' };
+  | { kind: 'ignored'; reason: 'otp' | 'not-a-transaction' | 'no-amount' | 'empty' | 'previously-deleted' };
 
 // Files one bank message into a household's state. Mutates state but does not
 // persist, so a batch can file many messages and write once.
@@ -1974,6 +2070,12 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
 
   const masked = maskSensitiveFinancialData(sanitizeString(smsText, 2000));
   const parsed = parseSmsHeuristic(masked, spender, state.husbandName, state.wifeName);
+  // Read the reference from the text as received. The masker above treats any
+  // run of 10-16 digits as an account number and replaces it with asterisks,
+  // and a UPI reference is exactly that - so after masking, the one thing that
+  // identifies a payment is gone and every UPI alert looks reference-less.
+  const receivedRef = extractBankRef(smsText);
+  if (receivedRef) parsed.upiRef = receivedRef;
 
   // parseSmsHeuristic substitutes 500 when it finds no amount at all. That is
   // a reasonable placeholder for someone reviewing a form; it is a fabricated
@@ -1981,17 +2083,26 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
   const amountFound = /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i.exec(masked);
   if (!amountFound && !parsed.amount) return { kind: 'ignored', reason: 'no-amount' };
 
-  // Deduplicate. A real bank reference is the reliable key; the parser
-  // invents "UPI-<timestamp>" when the message carries none, so those fall
-  // back to amount, title and a five minute window. Exact message text is
-  // checked too: some alerts carry neither a reference nor a date, so the
-  // parser stamps them with the time they were filed, and a second sweep
-  // would otherwise file the same message again hours later.
-  const ref = parsed.upiRef && !/^UPI-\d+$/.test(parsed.upiRef) ? parsed.upiRef : '';
+  // Deduplicate. The same message can arrive many times: a sweep resends the
+  // day on purpose, an automation retries, a bank sends an alert twice.
+  const ref = isRealRef(parsed.upiRef) ? parsed.upiRef : '';
+  const fingerprint = messageFingerprint(masked);
+
+  // Deleted on purpose - see rememberDeletedMessage.
+  if (isDeletedMessage(state, fingerprint, ref)) return { kind: 'ignored', reason: 'previously-deleted' };
+
   const when = new Date(parsed.date || Date.now()).getTime();
   const duplicate = state.transactions.find((t) => {
-    if (ref && t.upiRef === ref) return true;
-    if (t.rawSms && t.rawSms === masked) return true;
+    // Same bank reference and same amount. The amount is part of it because a
+    // stored reference can be a stray word from before extraction was fixed,
+    // and a reference on its own must never be enough to call two different
+    // payments the same one.
+    if (ref && isRealRef(t.upiRef) && t.upiRef === ref && t.amount === parsed.amount) return true;
+    // Exact message text, for alerts that carry neither a reference nor a
+    // date: the parser stamps those with the time they were filed, so a
+    // second sweep hours later would otherwise file them again.
+    if (t.rawSms && normalizeMessage(t.rawSms) === normalizeMessage(masked)) return true;
+    // Neither of those: same amount and payee within five minutes.
     return (
       t.amount === parsed.amount &&
       t.title === parsed.title &&
@@ -2022,7 +2133,27 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
     isRecurring: undefined,
   };
 
-  if (review && tx.status === 'verified') {
+  // Same amount, same direction, same person, close in time - but a different
+  // title and no matching reference. Often the same payment reported twice: a
+  // bank alert and a card or wallet alert, or a manual entry made before the
+  // text arrived. Neither the text nor a reference can prove it, and dropping
+  // a real payment on a guess is worse than showing one extra, so it is filed
+  // anyway and held for a look. Two payments that each carry a different real
+  // reference are different payments and are left alone.
+  const similar = state.transactions.find(
+    (t) =>
+      t.amount === tx.amount &&
+      t.type === tx.type &&
+      t.spender === spender &&
+      Math.abs(new Date(t.date).getTime() - new Date(tx.date).getTime()) < 10 * 60 * 1000 &&
+      !(ref && isRealRef(t.upiRef) && t.upiRef !== ref)
+  );
+
+  if (similar) {
+    tx.status = 'grey_area';
+    tx.greyAreaReason = 'Possible duplicate of ' + similar.title + ' - same amount, close in time';
+    tx.contextQuestion = 'Is this the same payment as ' + similar.title + '? If it is, delete this one.';
+  } else if (review && tx.status === 'verified') {
     // Confidently parsed, but a sweep files in bulk and nobody saw it arrive.
     // Park it for a tap rather than letting a whole day go in unchecked. The
     // category stays as the parser's guess, which the queue pre-selects.
@@ -2206,6 +2337,23 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
       notes: sanitizeString(rawTx.notes, 250) || undefined,
       isRecurring: rawTx.isRecurring === true || undefined,
     };
+
+    // A message pasted into Import SMS may already have been filed by a sweep
+    // or an automation. Only transactions that came with their message text
+    // are checked: two hand-typed entries for the same amount are routine
+    // (two coffees) and must never be merged. Answered as a success with the
+    // current ledger rather than an error, because the app treats a failed
+    // save as "keep it locally anyway" and would show a row that is not real.
+    if (tx.rawSms) {
+      const already = state.transactions.find(
+        (t) =>
+          (t.rawSms && normalizeMessage(t.rawSms) === normalizeMessage(tx.rawSms!)) ||
+          (isRealRef(tx.upiRef) && isRealRef(t.upiRef) && t.upiRef === tx.upiRef && t.amount === tx.amount)
+      );
+      if (already) {
+        return res.json({ success: true, duplicate: true, transactionId: already.id, ledger: state });
+      }
+    }
 
     state.transactions.unshift(tx);
     state.lastSyncTime = new Date().toISOString();
@@ -2753,6 +2901,8 @@ app.post('/api/ledger/transaction/delete', rateLimit(60, 60000), async (req, res
       });
     }
 
+    // Remember it, so a later sweep of the same message does not file it again.
+    rememberDeletedMessage(state, tx);
     state.transactions.splice(txIndex, 1);
     state.lastSyncTime = new Date().toISOString();
     await persistHouseholdState(req.householdId!, state);
@@ -3243,7 +3393,7 @@ Determine:
           ? parsedJson.paymentMode
           : 'UPI',
         bankName: sanitizeString(parsedJson.bankName, 50) || 'UPI Bank',
-        upiRef: sanitizeString(parsedJson.upiRef, 60) || `UPI-${Date.now().toString().slice(-6)}`,
+        upiRef: extractBankRef(cleanSms) || sanitizeString(parsedJson.upiRef, 60) || `UPI-${Date.now().toString().slice(-6)}`,
         rawSms: maskedSms,
         status: parsedJson.isGreyArea ? 'grey_area' : 'verified',
         greyAreaReason: sanitizeString(parsedJson.greyAreaReason, 150) || '',
@@ -3269,6 +3419,8 @@ Determine:
     source: 'heuristic',
     transaction: {
       ...heuristicResult,
+      // Same reason as in ingest: the masker eats UPI references.
+      upiRef: extractBankRef(cleanSms) || heuristicResult.upiRef,
       rawSms: maskedSms,
     },
   });

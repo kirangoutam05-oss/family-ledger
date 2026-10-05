@@ -198,6 +198,10 @@ export interface LedgerState {
   // Unset (older households) is treated as on client-side, since that is what
   // they already see.
   trackIncome?: boolean;
+  // Messages whose transactions were deleted on purpose, as short fingerprints
+  // (and bank references). Automatic import skips these so a sweep cannot
+  // quietly bring back something that was removed.
+  ignoredMessages?: string[];
 }
 
 export interface DeviceIdentity {
