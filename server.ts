@@ -2264,10 +2264,11 @@ app.post(
             items.push({ status: 'ignored', reason: r.reason });
           }
         }
-        if (counts.saved > 0) {
-          state.lastSyncTime = new Date().toISOString();
-          await persistHouseholdState(req.householdId!, state);
-        }
+        // Stamped even when nothing was filed: a quiet sweep is still proof
+        // the automation ran.
+        state.lastMessageSyncAt = new Date().toISOString();
+        if (counts.saved > 0) state.lastSyncTime = state.lastMessageSyncAt;
+        await persistHouseholdState(req.householdId!, state);
         return res.status(counts.saved > 0 ? 201 : 200).json({
           total: batch.length,
           saved: counts.saved,
@@ -2287,14 +2288,17 @@ app.post(
       }
 
       const r = ingestOneMessage(state, smsText, spender, req.body?.review === true);
+      state.lastMessageSyncAt = new Date().toISOString();
       if (r.kind === 'duplicate') {
+        await persistHouseholdState(req.householdId!, state);
         return res.json({ saved: false, reason: 'duplicate', transactionId: r.transactionId });
       }
       if (r.kind === 'ignored') {
+        await persistHouseholdState(req.householdId!, state);
         return res.json({ saved: false, reason: r.reason });
       }
 
-      state.lastSyncTime = new Date().toISOString();
+      state.lastSyncTime = state.lastMessageSyncAt;
       await persistHouseholdState(req.householdId!, state);
       res.status(201).json({
         saved: true,

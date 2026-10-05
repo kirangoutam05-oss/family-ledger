@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { MessageSquareText, ChevronRight, ChevronDown, Smartphone } from 'lucide-react';
 import { LedgerState } from '../types';
+import { formatAddedAgo } from '../utils/helpers';
 
 // The name the shortcut must have on the phone. The link below finds it by
 // name, so a different name opens an error in Shortcuts rather than anything
@@ -82,6 +83,12 @@ export const MessageSweepCard: React.FC<MessageSweepCardProps> = ({ ledger, onRe
         </p>
       )}
 
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+        {ledger.lastMessageSyncAt
+          ? 'Last scan ' + formatAddedAgo(new Date(ledger.lastMessageSyncAt).getTime())
+          : 'No scan has reached the app yet.'}
+      </p>
+
       {launched && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           {newFromThisSync > 0
@@ -122,6 +129,10 @@ export const MessageSweepCard: React.FC<MessageSweepCardProps> = ({ ledger, onRe
             It joins them with <code>~~~</code> between each and posts them to this app.
           </li>
           <li>Add a Time of Day trigger at 11:59 PM so it also runs on its own.</li>
+          <li>
+            Add Message triggers (contains &ldquo;debited&rdquo;, &ldquo;Spent&rdquo;) that run it with Run Immediately, so it
+            syncs when a bank text arrives and you never need the button.
+          </li>
         </ol>
       )}
     </div>

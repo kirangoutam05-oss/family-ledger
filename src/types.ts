@@ -206,6 +206,10 @@ export interface LedgerState {
   // (and bank references). Automatic import skips these so a sweep cannot
   // quietly bring back something that was removed.
   ignoredMessages?: string[];
+  // When the phone last reached the server with Messages, even if nothing
+  // new came of it. Shown on the Scan card so a person can tell the
+  // automatic runs are happening without opening Shortcuts.
+  lastMessageSyncAt?: string;
 }
 
 export interface DeviceIdentity {
