@@ -2123,14 +2123,22 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
   });
   if (duplicate) return { kind: 'duplicate', transactionId: duplicate.id };
 
-  // Exact message text, for alerts that carry neither a reference nor a time.
-  // Some banks send "debited with INR 2,000.00 on 05OCT" and nothing else, so
-  // two genuine ₹2,000 transfers on one day produce identical messages. A
-  // sweep resends them all every night, so the question is how many of this
-  // exact message have already been filed, not whether any has: a batch with
-  // two of them files two, and the next sweep, still showing two, files none.
-  // `occurrence` is which copy of this text this is within the batch.
-  if (sameText.length >= occurrence) return { kind: 'duplicate', transactionId: sameText[0].id };
+  // Exact message text. What it proves depends on what the message carries.
+  //
+  // With a clock time or a reference, identical text is the same payment: two
+  // real payments cannot agree to the second, so six copies in one sweep are
+  // one payment arriving six times (a test message sent repeatedly, a bank
+  // resending), and filing six would be exactly the repeat this exists to stop.
+  //
+  // With neither, text cannot tell two payments from one. Some banks send
+  // "debited with INR 2,000.00 on 05OCT" and nothing else, so two genuine
+  // transfers of the same amount on one day look identical. A sweep resends
+  // them all every night, so the question there is how many copies have been
+  // filed, not whether any has: a batch with two files two, and the next sweep,
+  // still showing two, files none. `occurrence` is which copy of this text
+  // this is within the batch.
+  const ambiguous = !ref && !/\b\d{1,2}:\d{2}\b/.test(smsText);
+  if (sameText.length >= (ambiguous ? occurrence : 1)) return { kind: 'duplicate', transactionId: sameText[0].id };
 
   const category: CategoryId = getValidCategoryIds(state).includes(parsed.category as string)
     ? (parsed.category as CategoryId)
