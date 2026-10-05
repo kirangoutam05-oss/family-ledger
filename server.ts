@@ -1277,7 +1277,7 @@ function parseSmsHeuristic(
 
   // Detect payment mode
   let paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'PayLater' | 'Pluxee' = 'UPI';
-  if (/ATM|withdrawn|cash/i.test(cleanSms)) {
+  if (/\bATM\b|\bwithdrawn\b|\bcash\s+(?:withdrawal|deposit)\b/i.test(cleanSms)) {
     paymentMode = 'Cash';
   } else if (/amazon\s*pay\s*later/i.test(cleanSms)) {
     paymentMode = 'AmazonPayLater';
@@ -1289,7 +1289,7 @@ function parseSmsHeuristic(
     paymentMode = 'PayLater';
   } else if (/Card|ending|POS|spent at/i.test(cleanSms)) {
     paymentMode = 'Card';
-  } else if (/netbanking|\bINB\b|internet\s*banking|\bNEFT\b|\bRTGS\b|\bIMPS\b|\bNACH\b|mandate/i.test(cleanSms)) {
+  } else if (/netbanking|\bINB\b|internet\s*banking|\bNEFT\b|\bRTGS\b|\bIMPS\b|\bNACH\b|mandate|as per your request/i.test(cleanSms)) {
     paymentMode = 'NetBanking';
   }
 
@@ -1348,7 +1348,7 @@ function parseSmsHeuristic(
   const NON_MERCHANT = /^(?:report|block|know|view|check|call|dispute|download|log|login|avail|claim|activate|upgrade|redeem|unsubscribe|stop|reply|sms|visit|click|your\b|a\/c\b|acct\b|account\b|any\b)/i;
 
   const stripAggregator = (name: string) =>
-    name.replace(/^(?:RAZ|RZP|PAYU|PYTM|PAYTM|BILLDESK|CCAVENUE|CASHFREE|INSTAMOJO|PHONEPE|GPAY)\s*[*\/-]\s*/i, '');
+    name.replace(/^(?:RAZ|RZP|PAYU|PYTM|PAYTM|BILLDESK|CCAVENUE|CASHFREE|INSTAMOJO|PHONEPE|GPAY)\s*[*\/-]\s*/i, '').replace(/^[A-Za-z]{2,8}\s*\*\s*/, '');
 
   // The old character class was [A-Z0-9s], which excluded the *, &, -, .
   // and ' that real merchant strings routinely contain. "At RAZ*SWIGGY"
@@ -1373,7 +1373,7 @@ function parseSmsHeuristic(
     return name.length > 1 ? ([m[0], name] as unknown as RegExpMatchArray) : null;
   };
 
-  if (paymentMode === 'Cash' || /atm/i.test(lower)) {
+  if (paymentMode === 'Cash' || /\batm\b/i.test(lower)) {
     title = 'ATM Cash Withdrawal';
     category = 'grey_area';
     isGreyArea = true;
@@ -1400,16 +1400,20 @@ function parseSmsHeuristic(
     title = m ? m[1].trim() : 'Travel & Fuel';
     category = 'transport';
   } else if (/cult|pharmacy|apollo|1mg|doctor|clinic|hospital|wellness/i.test(lower)) {
-    title = 'Health & Pharmacy';
+    const m = extractMerchant();
+    title = m ? m[1].trim() : 'Health & Pharmacy';
     category = 'health';
   } else if (/google\s*play|apple\s*media|apple\.com|itunes|app\s*store|subscription|netflix|spotify|prime\s*(video)?|linkedin|icloud/i.test(lower)) {
-    title = 'Subscription';
+    const m = extractMerchant();
+    title = m ? m[1].trim() : 'Subscription';
     category = 'subscription';
   } else if (/hotstar|cinema|pvr|inox/i.test(lower)) {
-    title = 'Entertainment';
+    const m = extractMerchant();
+    title = m ? m[1].trim() : 'Entertainment';
     category = 'entertainment';
   } else if (/groww|zerodha|sip|mutual fund|uti|hdfc mf|etf/i.test(lower)) {
-    title = 'Investment SIP';
+    const m = extractMerchant();
+    title = m ? m[1].trim() : 'Investment SIP';
     category = 'investments';
   } else {
     // Nothing matched a known merchant or category. The old code asserted
@@ -2050,7 +2054,7 @@ type IngestResult =
 // can be delivered more than once - a sweep resends the whole day on purpose.
 // With review on, everything filed waits in the Needs Context queue for a
 // person to confirm, keeping the parser's guessed category as the default.
-function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderId, review: boolean): IngestResult {
+function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderId, review: boolean, occurrence = 1): IngestResult {
   if (!smsText.trim()) return { kind: 'ignored', reason: 'empty' };
 
   // An OTP names an amount and a merchant and looks exactly like a purchase
@@ -2058,6 +2062,14 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
   // transaction that never happened.
   if (/\bOTP\b|one[\s-]?time[\s-]?password|verification code|do not share/i.test(smsText)) {
     return { kind: 'ignored', reason: 'otp' };
+  }
+
+  // A retailer's cashback or loyalty wallet credit is advertising, not money
+  // in: it names an amount and says "credited", but carries a link, which a
+  // bank alert does not. "CREDIT ALERT: Rs. 300 credited to your ... Cash Wallet
+  // https://..." was being filed as an ATM withdrawal.
+  if (/credit alert/i.test(smsText) && /wallet/i.test(smsText) && /https?:\/\//i.test(smsText)) {
+    return { kind: 'ignored', reason: 'not-a-transaction' };
   }
 
   // A transaction says money moved. A balance alert, a due-date reminder and
@@ -2092,16 +2104,16 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
   if (isDeletedMessage(state, fingerprint, ref)) return { kind: 'ignored', reason: 'previously-deleted' };
 
   const when = new Date(parsed.date || Date.now()).getTime();
+  const maskedNorm = normalizeMessage(masked);
+  const sameText = state.transactions.filter((t) => t.rawSms && normalizeMessage(t.rawSms) === maskedNorm);
   const duplicate = state.transactions.find((t) => {
     // Same bank reference and same amount. The amount is part of it because a
     // stored reference can be a stray word from before extraction was fixed,
     // and a reference on its own must never be enough to call two different
     // payments the same one.
     if (ref && isRealRef(t.upiRef) && t.upiRef === ref && t.amount === parsed.amount) return true;
-    // Exact message text, for alerts that carry neither a reference nor a
-    // date: the parser stamps those with the time they were filed, so a
-    // second sweep hours later would otherwise file them again.
-    if (t.rawSms && normalizeMessage(t.rawSms) === normalizeMessage(masked)) return true;
+    // Identical text is judged by count, below, not here.
+    if (t.rawSms && normalizeMessage(t.rawSms) === maskedNorm) return false;
     // Neither of those: same amount and payee within five minutes.
     return (
       t.amount === parsed.amount &&
@@ -2110,6 +2122,15 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
     );
   });
   if (duplicate) return { kind: 'duplicate', transactionId: duplicate.id };
+
+  // Exact message text, for alerts that carry neither a reference nor a time.
+  // Some banks send "debited with INR 2,000.00 on 05OCT" and nothing else, so
+  // two genuine ₹2,000 transfers on one day produce identical messages. A
+  // sweep resends them all every night, so the question is how many of this
+  // exact message have already been filed, not whether any has: a batch with
+  // two of them files two, and the next sweep, still showing two, files none.
+  // `occurrence` is which copy of this text this is within the batch.
+  if (sameText.length >= occurrence) return { kind: 'duplicate', transactionId: sameText[0].id };
 
   const category: CategoryId = getValidCategoryIds(state).includes(parsed.category as string)
     ? (parsed.category as CategoryId)
@@ -2212,13 +2233,17 @@ app.post(
         const review = req.body?.review !== false;
         const counts = { saved: 0, duplicates: 0, ignored: 0 };
         const items: { status: string; title?: string; amount?: number; reason?: string }[] = [];
+        const seenInBatch = new Map<string, number>();
         for (const text of batch.slice(0, MAX_BATCH_MESSAGES)) {
           if (text.length > 2000) {
             counts.ignored++;
             items.push({ status: 'ignored', reason: 'too-long' });
             continue;
           }
-          const r = ingestOneMessage(state, text, spender, review);
+          const textKey = normalizeMessage(text);
+          const occurrence = (seenInBatch.get(textKey) ?? 0) + 1;
+          seenInBatch.set(textKey, occurrence);
+          const r = ingestOneMessage(state, text, spender, review, occurrence);
           if (r.kind === 'saved') {
             counts.saved++;
             items.push({ status: 'saved', title: r.tx.title, amount: r.tx.amount });
