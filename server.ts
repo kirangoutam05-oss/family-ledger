@@ -2284,6 +2284,11 @@ app.post(
       if (!smsText.trim() || smsText.length > 2000) {
         const received = describeIngestBody(req);
         console.warn('Ingest rejected, empty or oversized text:', JSON.stringify(received));
+        // The phone did reach us with the right secret, so the automation ran
+        // even though it sent nothing usable. Record that, so "the trigger did
+        // not fire" and "it fired but sent an empty body" can be told apart.
+        state.lastMessageSyncAt = new Date().toISOString();
+        await persistHouseholdState(req.householdId!, state);
         return res.status(400).json({ error: 'smsText must be 1-2000 characters', received });
       }
 
