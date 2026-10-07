@@ -2865,6 +2865,17 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), async (req, res
       }
     }
 
+    // Correcting an entry that was waiting for context is the answer. Without
+    // this the edit sheet saved the fix but left the entry flagged, and the
+    // same entry had to be opened again from Needs Context to clear it.
+    if (tx.status === 'grey_area' && tx.category !== 'grey_area') {
+      tx.status = 'resolved';
+      tx.contextResolution = { note: '', resolvedAt: new Date().toISOString() };
+      state.alerts = state.alerts.filter(
+        (a) => !(a.actionType === 'resolve_grey' && a.targetId === transactionId)
+      );
+    }
+
     state.lastSyncTime = new Date().toISOString();
     await persistHouseholdState(req.householdId!, state);
     res.json({ success: true, transaction: tx, ledger: state });

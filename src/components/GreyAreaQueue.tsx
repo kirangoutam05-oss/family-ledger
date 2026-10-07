@@ -156,7 +156,9 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
           </div>
 
           {/* Right Column: Resolution Panel */}
-          <div className="lg:col-span-7">
+          {/* On a phone the form comes first: below a long list it sat out of
+              sight after tapping Answer. */}
+          <div className="lg:col-span-7 order-first lg:order-none">
             {activeTx && (
               <div className="p-6 rounded-2xl bg-white dark:bg-neutral-900 border border-black/[0.04] dark:border-white/[0.06] shadow-xs space-y-5">
                 {/* Spouse Ownership Banner */}

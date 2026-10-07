@@ -788,6 +788,13 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                   });
                   return;
                 }
+                // A row waiting for context opens the same form as its Answer
+                // link. Opening the edit sheet instead left the entry flagged
+                // and made a person correct it twice.
+                if (isGrey && isMine) {
+                  onResolveGreyArea(tx.id);
+                  return;
+                }
                 onEditTransaction(tx);
               };
 
