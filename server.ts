@@ -1379,6 +1379,12 @@ function parseSmsHeuristic(
     isGreyArea = true;
     greyAreaReason = 'Cash withdrawal intent (groceries, maid salary, or personal cash)';
     contextQuestion = `Hey ${defaultSpender === 'husband' ? husbandName : wifeName}, was this cash withdrawal for household expenses (cook/maid salary) or personal pocket cash?`;
+  } else if (/low\s*balance|minimum\s*(?:average\s*)?balance|\bmab\b|(?:annual|amc|sms|service|maintenance)\s*(?:fee|charge)s?|\bcharged\s+for\b/i.test(lower) && type === 'debit') {
+    // "Rs.656.33 +GST charged for low balance ... Maintain Rs.10000 to avoid
+    // charges": the bank is the payee. Left to the generic branch, the tail
+    // of the warning ("avoid charges") was read as a merchant name.
+    title = `${bankName !== 'UPI Bank' ? bankName + ' ' : ''}Bank Charges`;
+    category = 'bills';
   } else if (/swiggy|zomato|starbucks|mcdonald|restaurant|cafe|bistro|dining|eatclub|pizza/i.test(lower)) {
     const m = extractMerchant();
     title = m ? m[1].trim() : 'Food & Dining Order';
