@@ -2060,7 +2060,14 @@ type IngestResult =
 // can be delivered more than once - a sweep resends the whole day on purpose.
 // With review on, everything filed waits in the Needs Context queue for a
 // person to confirm, keeping the parser's guessed category as the default.
-function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderId, review: boolean, occurrence = 1): IngestResult {
+function ingestOneMessage(
+  state: LedgerState,
+  smsText: string,
+  spender: SpenderId,
+  review: boolean,
+  occurrence = 1,
+  receivedAt: string | null = null
+): IngestResult {
   if (!smsText.trim()) return { kind: 'ignored', reason: 'empty' };
 
   // An OTP names an amount and a merchant and looks exactly like a purchase
@@ -2108,6 +2115,17 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
 
   // Deleted on purpose - see rememberDeletedMessage.
   if (isDeletedMessage(state, fingerprint, ref)) return { kind: 'ignored', reason: 'previously-deleted' };
+
+  // Most UPI alerts carry a date and no clock time, which the parser fills in as
+  // midday. When the phone said when the message arrived, that is the real time
+  // of the payment to within a minute or two. A time written in the message
+  // always wins, and so does a message dated on a different day than it arrived
+  // (a late alert about yesterday), where the arrival time would be wrong.
+  if (receivedAt && !/\b\d{1,2}:\d{2}\b/.test(smsText)) {
+    const stated = extractDateTimeFromSms(masked);
+    const istDay = (iso: string) => new Date(new Date(iso).getTime() + SMS_UTC_OFFSET_MINUTES * 60000).toISOString().slice(0, 10);
+    if (!stated || istDay(stated) === istDay(receivedAt)) parsed.date = receivedAt;
+  }
 
   const when = new Date(parsed.date || Date.now()).getTime();
   const maskedNorm = normalizeMessage(masked);
@@ -2208,6 +2226,26 @@ function ingestOneMessage(state: LedgerState, smsText: string, spender: SpenderI
 // messages joined by a separator line; a real list is accepted as well.
 const SMS_BATCH_SEPARATOR = '~~~';
 const MAX_BATCH_MESSAGES = 100;
+
+// The shortcut can put the time a message arrived in front of it as
+// "[sent 2026-10-07 21:17]", in the phone's own clock, which is India time for
+// this app. It is taken off before the text is compared with anything, so the
+// same message with and without it is still the same message.
+const RECEIVED_PREFIX = /^\s*\[(?:sent|received)\s+(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*\]\s*/i;
+function splitReceivedTime(raw: string): { text: string; receivedAt: string | null } {
+  const m = raw.match(RECEIVED_PREFIX);
+  if (!m) return { text: raw, receivedAt: null };
+  const text = raw.slice(m[0].length);
+  const utc =
+    Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], m[6] ? +m[6] : 0) - SMS_UTC_OFFSET_MINUTES * 60000;
+  const d = new Date(utc);
+  // Not in the future (beyond clock drift) and a real recent date, or it is
+  // not trusted and the message is read as if it had no prefix of its own.
+  if (isNaN(d.getTime()) || d.getTime() > Date.now() + 10 * 60000 || !isPlausibleTransactionDate(d)) {
+    return { text, receivedAt: null };
+  }
+  return { text, receivedAt: d.toISOString() };
+}
 function extractSmsBatch(body: unknown): string[] | null {
   if (!body || typeof body !== 'object') return null;
   const b = body as Record<string, unknown>;
@@ -2249,7 +2287,11 @@ app.post(
         const counts = { saved: 0, duplicates: 0, ignored: 0 };
         const items: { status: string; title?: string; amount?: number; reason?: string }[] = [];
         const seenInBatch = new Map<string, number>();
-        for (const text of batch.slice(0, MAX_BATCH_MESSAGES)) {
+        for (const item of batch.slice(0, MAX_BATCH_MESSAGES)) {
+          // The arrival time is split off first: counting identical texts by
+          // occurrence must not see it, or two real payments of the same
+          // amount on one day would stop looking identical and be counted wrong.
+          const { text, receivedAt } = splitReceivedTime(item);
           if (text.length > 2000) {
             counts.ignored++;
             items.push({ status: 'ignored', reason: 'too-long' });
@@ -2258,7 +2300,7 @@ app.post(
           const textKey = normalizeMessage(text);
           const occurrence = (seenInBatch.get(textKey) ?? 0) + 1;
           seenInBatch.set(textKey, occurrence);
-          const r = ingestOneMessage(state, text, spender, review, occurrence);
+          const r = ingestOneMessage(state, text, spender, review, occurrence, receivedAt);
           if (r.kind === 'saved') {
             counts.saved++;
             items.push({ status: 'saved', title: r.tx.title, amount: r.tx.amount });
@@ -2286,7 +2328,7 @@ app.post(
         });
       }
 
-      const smsText = extractSmsText(req.body);
+      const { text: smsText, receivedAt: singleReceivedAt } = splitReceivedTime(extractSmsText(req.body));
       if (!smsText.trim() || smsText.length > 2000) {
         const received = describeIngestBody(req);
         console.warn('Ingest rejected, empty or oversized text:', JSON.stringify(received));
@@ -2298,7 +2340,7 @@ app.post(
         return res.status(400).json({ error: 'smsText must be 1-2000 characters', received });
       }
 
-      const r = ingestOneMessage(state, smsText, spender, req.body?.review === true);
+      const r = ingestOneMessage(state, smsText, spender, req.body?.review === true, 1, singleReceivedAt);
       state.lastMessageSyncAt = new Date().toISOString();
       if (r.kind === 'duplicate') {
         await persistHouseholdState(req.householdId!, state);

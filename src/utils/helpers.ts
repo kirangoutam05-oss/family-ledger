@@ -49,6 +49,15 @@ export function formatDate(dateString: string): string {
   try {
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return dateString;
+    // A date with no time is stored as midday India time (what the SMS parser
+    // fills in when a message gives only a date) or as local midnight (a date
+    // picker, a goal). Showing "12:00 pm" for those reports a time nobody
+    // knew, so only the date is shown.
+    const noonIst = d.getTime() % 86400000 === 6.5 * 3600000;
+    const localMidnight = d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
+    if (noonIst || localMidnight) {
+      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    }
     return d.toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
