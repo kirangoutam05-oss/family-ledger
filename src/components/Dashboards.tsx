@@ -84,6 +84,35 @@ export const Dashboards: React.FC<DashboardsProps> = ({
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // Replays the total's ticker and the wave's draw-in. Opening the installed app
+  // from the home screen usually resumes the page that is already running
+  // rather than loading it afresh, so nothing remounts and the intro would only
+  // ever play on a cold start. Coming back to the foreground after a moment
+  // away counts as opening it: bumping the key remounts both, which restarts
+  // them. A glance away shorter than a second (a notification peek) does not.
+  const [introRun, setIntroRun] = useState(0);
+  useEffect(() => {
+    let hiddenAt: number | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (hiddenAt !== null) {
+        if (Date.now() - hiddenAt > 1000) setIntroRun((n) => n + 1);
+        hiddenAt = null;
+      }
+    };
+    // A page restored from the back-forward cache never fires the above.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setIntroRun((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, []);
+
   const { transactions, categories, husbandName, wifeName, currency } = ledger;
 
   // Filter transactions based on activeSpender
@@ -440,6 +469,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         <div className="flex items-start gap-1 mt-4">
           <span className="text-2xl sm:text-3xl font-medium text-white/80 mt-1 sm:mt-1.5">{currency}</span>
           <TickerNumber
+            key={`ticker-${introRun}`}
             className="text-5xl sm:text-6xl font-semibold tracking-tight"
             value={Number(currentCycleDebits || 0).toLocaleString('en-IN')}
           />
@@ -453,6 +483,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             4 months, right above the buttons that add to it. */}
         <div className="mt-6">
           <MonthlyWaveChart
+            key={`wave-${introRun}`}
             transactions={relevantTransactions}
             husbandName={husbandName}
             wifeName={wifeName}
