@@ -11,6 +11,11 @@ interface MonthlyWaveChartProps {
   // hero) regardless of the app's own light/dark theme — fixed light
   // labels/gridlines instead of the usual theme-conditional classes.
   variant?: 'auto' | 'dark';
+  // The legend normally shows each person's latest week, the chart's own last
+  // point. On the Overview hero that sat beside a billing-cycle total and the
+  // figures did not add up, so the hero passes the cycle totals and says so.
+  legendTotals?: { husband: number; wife: number };
+  legendLabel?: string;
 }
 
 const HUSBAND_COLOR = '#007AFF';
@@ -74,6 +79,8 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
   wifeName,
   currency,
   variant = 'auto',
+  legendTotals,
+  legendLabel = 'This week',
 }) => {
   const isDark = variant === 'dark';
   const legendText = isDark ? 'text-white/60' : 'text-neutral-500 dark:text-neutral-400';
@@ -207,19 +214,20 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
 
   return (
     <div className="pt-1">
-      <div className={`flex items-center gap-4 text-[10.5px] mb-1.5 px-0.5 ${legendText}`}>
+      <div className={`flex items-center gap-x-4 gap-y-1 flex-wrap text-[10.5px] mb-1.5 px-0.5 ${legendText}`}>
+        <span className="opacity-80">{legendLabel}</span>
         <span className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: HUSBAND_COLOR }} />
           <span>{husbandName}</span>
           <span className="font-bold" style={{ color: HUSBAND_COLOR }}>
-            {formatCurrency(lastHusband.amount, currency)}
+            {formatCurrency(legendTotals ? legendTotals.husband : lastHusband.amount, currency)}
           </span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: WIFE_COLOR }} />
           <span>{wifeName}</span>
           <span className="font-bold" style={{ color: WIFE_COLOR }}>
-            {formatCurrency(lastWife.amount, currency)}
+            {formatCurrency(legendTotals ? legendTotals.wife : lastWife.amount, currency)}
           </span>
         </span>
       </div>
@@ -342,6 +350,7 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
           />
         </svg>
       </div>
+      <p className={`text-[10.5px] mt-1.5 px-0.5 ${emptyText}`}>Weekly spend, last {RANGE_MONTHS_BACK} months. Drag to scrub.</p>
     </div>
   );
 };

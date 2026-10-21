@@ -1323,7 +1323,12 @@ export default function App() {
         />
 
         {/* Main Body Content */}
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 pb-28 overflow-x-hidden">
+        <main
+          className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-6 overflow-x-hidden"
+          // Room for the floating tab bar: its height, the raised centre button, and
+          // the home-bar inset on an iPhone, which the old fixed 7rem fell short of.
+          style={{ paddingBottom: 'calc(8rem + env(safe-area-inset-bottom))' }}
+        >
           <AnimatePresence mode="wait" custom={{ mode: transitionMode, direction: slideDirection }} initial={false}>
             <motion.div
               key={`${activeTab}-${activeSpender}-${reopenKey}`}
@@ -1427,7 +1432,7 @@ export default function App() {
         {/* Floating Liquid-Glass tab bar — inset from the edges rather than flush,
             so it reads as a distinct navigation layer hovering over content. */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 flex justify-center px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
-          <div className="glass-nav w-full max-w-md rounded-full border border-black/[0.06] dark:border-white/[0.1] shadow-xl shadow-black/10 dark:shadow-black/40 py-1 px-4 flex items-end justify-around transition-all">
+          <div className="glass-nav nav-solid w-full max-w-md rounded-full border border-black/[0.06] dark:border-white/[0.1] shadow-xl shadow-black/10 dark:shadow-black/40 py-1 px-4 flex items-end justify-around transition-all">
             <button
               onClick={() => handleTabChange('dashboards')}
               className={`flex-1 pt-0.5 flex flex-col items-center gap-0.5 transition-all active:scale-90 ${

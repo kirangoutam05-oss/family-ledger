@@ -78,6 +78,17 @@ body {
   }
 }
 
+/* The bottom tab bar: same frosted look, but opaque enough that the text of a
+   card scrolling underneath no longer shows through the labels. */
+.glass-nav.nav-solid {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+@media (prefers-color-scheme: dark) {
+  .glass-nav.nav-solid {
+    background-color: rgba(28, 28, 30, 0.95);
+  }
+}
+
 .glass-sheet {
   background-color: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(28px) saturate(1.6);

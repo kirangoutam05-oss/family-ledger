@@ -69,17 +69,31 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
       className={`sticky top-0 z-30 transition-colors ${
         isHero ? 'backdrop-blur-2xl backdrop-saturate-150' : 'glass-nav border-b border-black/[0.05] dark:border-white/[0.08]'
       }`}
-      style={{ paddingTop: 'env(safe-area-inset-top)', background: isHero ? 'rgba(5,3,8,0.72)' : undefined }}
+      style={{ paddingTop: 'env(safe-area-inset-top)', background: isHero ? '#050308' : undefined }}
     >
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Brand mark + household name/spender picker */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <img
-            src="/knku-icon.png?v=1"
-            alt=""
-            className="w-8 h-8 sm:w-9 sm:h-9 object-contain shrink-0 -my-1"
-            referrerPolicy="no-referrer"
-          />
+          {/* The sync status lives on the logo as a small dot, not a pill of its
+              own beside the name - one less thing crowding a phone-width header.
+              Tapping the logo still opens the paired devices. */}
+          <button
+            type="button"
+            onClick={onOpenSyncModal}
+            className="relative shrink-0 -my-1 active:scale-95 transition-transform"
+            aria-label="Sync status and paired devices"
+            title="Family sync status. Tap to see paired devices or switch who's using this phone."
+          >
+            <img
+              src="/knku-icon.png?v=1"
+              alt=""
+              className="w-8 h-8 sm:w-9 sm:h-9 object-contain"
+              referrerPolicy="no-referrer"
+            />
+            <span
+              className={`absolute -right-0.5 -bottom-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ${isHero ? 'ring-[#050308]' : 'ring-white dark:ring-neutral-900'} ${isSyncing ? 'animate-pulse' : ''}`}
+            />
+          </button>
           <div className="flex flex-col justify-center min-w-0">
             <div className="flex items-center gap-0.5 min-w-0">
               <button
@@ -94,6 +108,8 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
                 onClick={() => setSpenderMenuOpen((v) => !v)}
                 className={`p-1.5 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0 ml-1 ${chevronBg}`}
                 title="Switch between Overall, Kiran, and Mageswari"
+                aria-label={`Switch between Overall, ${husbandName}, and ${wifeName}`}
+                aria-expanded={spenderMenuOpen}
               >
                 <ChevronDown
                   strokeWidth={3}
@@ -101,18 +117,6 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
                 />
               </button>
 
-              <button
-                onClick={onOpenSyncModal}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors shrink-0 ml-0.5 ${
-                  isHero
-                    ? 'bg-white/15 hover:bg-white/25 text-white'
-                    : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                }`}
-                title="Family sync status. Tap to see paired devices or switch who's using this phone."
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${isHero ? 'bg-white' : 'bg-emerald-500'} ${isSyncing ? 'animate-ping' : ''}`} />
-                <span className="hidden sm:inline">Synced</span>
-              </button>
             </div>
             <p className={`text-[11px] hidden sm:block leading-normal mt-0.5 ${secondaryText}`}>
               Signed in as {authenticatedUser === 'husband' ? husbandName : wifeName}
@@ -204,6 +208,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
             onClick={onOpenNotifications}
             className={`relative p-2 rounded-xl transition-all active:scale-90 ${iconBtn}`}
             title="Budget Alerts & Notifications"
+            aria-label={unreadAlertsCount > 0 ? `Alerts and notifications, ${unreadAlertsCount} unread` : 'Alerts and notifications'}
           >
             <Bell className="w-4 h-4" />
             {unreadAlertsCount > 0 && (
@@ -216,6 +221,7 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
               onClick={onLockNow}
               className={`p-2 rounded-xl transition-all active:scale-90 ${iconBtn}`}
               title="Lock the app now"
+              aria-label="Lock the app now"
             >
               <Lock className="w-4 h-4" />
             </button>
@@ -247,9 +253,10 @@ export const AppleHeader: React.FC<AppleHeaderProps> = ({
           {!isHero && (
             <button
               onClick={onOpenAddModal}
-              className="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-all active:scale-90 shadow-xs shrink-0"
+              aria-label="Add expense"
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-[#9333EA] hover:bg-[#9333EA]/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-90 shrink-0"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-[18px] h-[18px] sm:w-3.5 sm:h-3.5" strokeWidth={2.4} />
               <span className="hidden sm:inline">Add</span>
             </button>
           )}

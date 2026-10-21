@@ -6,7 +6,7 @@ import {
   LedgerState,
   CategoryId,
 } from '../types';
-import { formatCurrency, getAddedAtMs, formatAddedAgo, formatDate, getPaymentModeLabel, localDateKey } from '../utils/helpers';
+import { formatCurrency, formatCompactCurrency, getAddedAtMs, formatAddedAgo, formatDate, getPaymentModeLabel, localDateKey } from '../utils/helpers';
 import { detectRecurringGroups } from '../utils/recurringDetector';
 import { SwipeToDelete } from './SwipeToDelete';
 import { billingCycleStart, billingCycleEnd, billingCycleLabel } from '../utils/billingCycle';
@@ -108,6 +108,10 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   });
   const currentCycleDebits = currentCycleDebitTxs.reduce((sum, t) => sum + t.amount, 0);
   const currentCycleLabel = billingCycleLabel(currentCycleStart);
+  // Each person's share of the same cycle total, so the two names under the
+  // headline add up to it.
+  const cycleDebitsBy = (who: 'husband' | 'wife') =>
+    currentCycleDebitTxs.filter((t) => t.spender === who).reduce((sum, t) => sum + t.amount, 0);
 
   // Households that only want a spend tracker turn money in off entirely.
   // Unset means on, which is what existing households already see.
@@ -414,7 +418,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <p className="text-[11px] text-white/50">{currentCycleLabel}</p>
+          <p className="text-[11px] text-white/50">Cycle {currentCycleLabel}</p>
           {/* Small in/out readout beside the period label — in green, out red,
               at a glance rather than netted into the headline figure below
               (which stays pure spending; see the commit removing "overspent
@@ -452,6 +456,8 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             wifeName={wifeName}
             currency={currency}
             variant="dark"
+            legendTotals={{ husband: cycleDebitsBy('husband'), wife: cycleDebitsBy('wife') }}
+            legendLabel="This cycle"
           />
         </div>
 
@@ -619,7 +625,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                 )}
                 <div
                   ref={trendScrollRef}
-                  className="flex items-end gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth snap-x snap-mandatory no-scrollbar"
+                  className="flex items-end gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-1 pl-1 pr-3 scroll-smooth snap-x snap-mandatory no-scrollbar"
                 >
                   {/* Bars only ever grow to BAR_MAX_PCT of the container's
                       height — the rest is reserved headroom so every amount
@@ -645,19 +651,25 @@ export const Dashboards: React.FC<DashboardsProps> = ({
                             animate={{ height: `${barHeightPct}%` }}
                             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
                           />
-                          {b.amount > 0 && (
+                          {b.amount > 0 && (b.key === trendPeak.key || index === trendBuckets.length - 1) && (
                             <motion.span
-                              className="absolute left-0 w-full text-center text-[9px] sm:text-[10px] font-semibold text-neutral-600 dark:text-neutral-300 truncate px-0.5"
+                              className="absolute left-0 w-full text-center text-[10px] sm:text-[11px] font-semibold text-neutral-700 dark:text-neutral-200 whitespace-nowrap"
                               initial={{ bottom: '4px', opacity: 0 }}
                               animate={{ bottom: `calc(${barHeightPct}% + 8px)`, opacity: 1 }}
                               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: index * 0.03 }}
                             >
-                              {formatCurrency(b.amount, currency)}
+                              {formatCompactCurrency(b.amount, currency)}
                             </motion.span>
                           )}
                         </div>
-                        <span className="text-[9px] sm:text-[10px] text-neutral-400 mt-1 text-center leading-tight whitespace-nowrap">
-                          {b.label}
+                        {/* Day bars sit 40px apart, so every date shown ran into the
+                            next. Every third one, and "Today" for the latest. */}
+                        <span className="text-[9px] sm:text-[10px] text-neutral-400 mt-1 text-center leading-tight whitespace-nowrap h-3">
+                          {trendGranularity !== 'day' || index === trendBuckets.length - 1 || (trendBuckets.length - 1 - index) % 3 === 0
+                            ? trendGranularity === 'day' && index === trendBuckets.length - 1
+                              ? 'Today'
+                              : b.label
+                            : ''}
                         </span>
                       </div>
                     );

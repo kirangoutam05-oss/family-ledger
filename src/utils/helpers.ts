@@ -45,6 +45,18 @@ export function formatCurrency(amount: number, currency: string = '₹'): string
   return `${currency}${Number(amount || 0).toLocaleString('en-IN')}`;
 }
 
+// Short money for places that are tight, like the label above a chart bar:
+// 215, 2.5k, 1.2L. Indian grouping, so a lakh rather than a hundred thousand.
+// The exact figure stays available in the bar's tooltip.
+export function formatCompactCurrency(amount: number, currency: string = '₹'): string {
+  const n = Number(amount || 0);
+  const trim = (v: number) => String(Math.round(v * 10) / 10);
+  if (n >= 10000000) return `${currency}${trim(n / 10000000)}Cr`;
+  if (n >= 100000) return `${currency}${trim(n / 100000)}L`;
+  if (n >= 1000) return `${currency}${trim(n / 1000)}k`;
+  return `${currency}${Math.round(n)}`;
+}
+
 export function formatDate(dateString: string): string {
   try {
     const d = new Date(dateString);
