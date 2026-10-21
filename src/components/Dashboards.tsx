@@ -13,6 +13,7 @@ import { billingCycleStart, billingCycleEnd, billingCycleLabel } from '../utils/
 import { ExportSection } from './ExportSection';
 import { BulkEditSheet } from './BulkEditSheet';
 import { MonthlyWaveChart } from './MonthlyWaveChart';
+import { TickerNumber } from './TickerNumber';
 import { TransactionIcon } from './TransactionIcon';
 import { TransactionFilterSheet, TransactionFilters, EMPTY_FILTERS, countActiveFilters } from './TransactionFilterSheet';
 import {
@@ -438,9 +439,10 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             lighter baseline-aligned span instead. */}
         <div className="flex items-start gap-1 mt-4">
           <span className="text-2xl sm:text-3xl font-medium text-white/80 mt-1 sm:mt-1.5">{currency}</span>
-          <span className="text-5xl sm:text-6xl font-semibold tracking-tight">
-            {Number(currentCycleDebits || 0).toLocaleString('en-IN')}
-          </span>
+          <TickerNumber
+            className="text-5xl sm:text-6xl font-semibold tracking-tight"
+            value={Number(currentCycleDebits || 0).toLocaleString('en-IN')}
+          />
         </div>
         <div className="text-xs text-white/60 mt-2">
           Today: {formatCurrency(todayDebits, currency)} · {todayDebitTxs.length} txn{todayDebitTxs.length === 1 ? '' : 's'}
@@ -458,6 +460,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
             variant="dark"
             legendTotals={{ husband: cycleDebitsBy('husband'), wife: cycleDebitsBy('wife') }}
             legendLabel="This cycle"
+            animateIn
           />
         </div>
 

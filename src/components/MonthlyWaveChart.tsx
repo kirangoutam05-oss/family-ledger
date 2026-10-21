@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { animate, useReducedMotion } from 'motion/react';
 import { Transaction, SpenderId } from '../types';
 import { formatCurrency } from '../utils/helpers';
 
@@ -16,6 +17,32 @@ interface MonthlyWaveChartProps {
   // figures did not add up, so the hero passes the cycle totals and says so.
   legendTotals?: { husband: number; wife: number };
   legendLabel?: string;
+  // Draw the wave in on arrival: the lines and their fill are revealed from
+  // the left edge, with a dot for each series riding the curve at the leading
+  // edge. Off by default so the chart inside a category stays still.
+  animateIn?: boolean;
+}
+
+// The chart's own coordinate width (its viewBox), needed by the intro before
+// the layout constants further down are in scope.
+const CHART_WIDTH = 520;
+const INTRO_DELAY_S = 0.5;
+const INTRO_DURATION_S = 2;
+
+// The point on a path at a given x. The curve only ever moves rightwards, so x
+// grows with distance along it and a binary search over length finds it.
+function pointAtX(path: SVGPathElement, total: number, x: number): { x: number; y: number } {
+  const start = path.getPointAtLength(0);
+  if (x <= start.x) return { x: start.x, y: start.y };
+  let lo = 0;
+  let hi = total;
+  for (let i = 0; i < 22; i++) {
+    const mid = (lo + hi) / 2;
+    if (path.getPointAtLength(mid).x < x) lo = mid;
+    else hi = mid;
+  }
+  const p = path.getPointAtLength(hi);
+  return { x: p.x, y: p.y };
 }
 
 const HUSBAND_COLOR = '#007AFF';
@@ -81,6 +108,7 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
   variant = 'auto',
   legendTotals,
   legendLabel = 'This week',
+  animateIn = false,
 }) => {
   const isDark = variant === 'dark';
   const legendText = isDark ? 'text-white/60' : 'text-neutral-500 dark:text-neutral-400';
@@ -99,6 +127,12 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+
+  const reduceMotion = useReducedMotion();
+  const shouldAnimate = animateIn && !reduceMotion;
+  const clipId = `wave-reveal-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const clipRectRef = useRef<SVGRectElement>(null);
+  const [introDone, setIntroDone] = useState(!shouldAnimate);
 
   // Weekly (Monday-start) buckets spanning the last RANGE_MONTHS_BACK months —
   // same overall window as the old monthly view, just finer-grained so a
@@ -146,6 +180,53 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
   const husbandTotals = totals('husband');
   const wifeTotals = totals('wife');
   const hasAnyData = husbandTotals.some((v) => v > 0) || wifeTotals.some((v) => v > 0);
+
+  // The intro. A clip rectangle grows from the left edge across the chart,
+  // revealing the lines and their fill as it goes, while one dot per series is
+  // placed on its own curve at the rectangle's edge so it appears to ride the
+  // wave. Driven straight at the DOM rather than through React state: it runs
+  // every frame for two seconds and nothing else needs to know about it.
+  useEffect(() => {
+    if (!shouldAnimate || !hasAnyData) return;
+    const svg = svgRef.current;
+    const clipRect = clipRectRef.current;
+    if (!svg || !clipRect) return;
+
+    const lines = new Map<string, SVGPathElement>();
+    svg.querySelectorAll<SVGPathElement>('path[data-wave-line]').forEach((el) => {
+      lines.set(el.dataset.waveLine || '', el);
+    });
+    const travelers: SVGCircleElement[] = [];
+    svg.querySelectorAll<SVGCircleElement>('circle[data-wave-traveler]').forEach((el) => travelers.push(el));
+    const markers: SVGCircleElement[] = [];
+    svg.querySelectorAll<SVGCircleElement>('circle[data-wave-point]').forEach((el) => markers.push(el));
+    const lengths = new Map<string, number>();
+    lines.forEach((el, key) => lengths.set(key, el.getTotalLength()));
+
+    const controls = animate(0, 1, {
+      duration: INTRO_DURATION_S,
+      delay: INTRO_DELAY_S,
+      ease: [0.45, 0, 0.2, 1],
+      onUpdate: (progress) => {
+        const x = progress * CHART_WIDTH;
+        clipRect.setAttribute('width', String(x));
+        travelers.forEach((dot) => {
+          const key = dot.dataset.waveTraveler || '';
+          const path = lines.get(key);
+          if (!path) return;
+          const pt = pointAtX(path, lengths.get(key) || 0, x);
+          dot.setAttribute('cx', String(pt.x));
+          dot.setAttribute('cy', String(pt.y));
+          dot.style.opacity = '1';
+        });
+        markers.forEach((m) => {
+          if (Number(m.dataset.px) <= x) m.style.opacity = '1';
+        });
+      },
+      onComplete: () => setIntroDone(true),
+    });
+    return () => controls.stop();
+  }, [shouldAnimate, hasAnyData]);
 
   if (!hasAnyData) {
     return (
@@ -274,12 +355,22 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
             />
           ))}
 
-          <path d={smoothAreaPath(wifePoints, baselineY)} fill={WIFE_COLOR} opacity={0.14} />
-          <path d={smoothAreaPath(husbandPoints, baselineY)} fill={HUSBAND_COLOR} opacity={0.14} />
+          {/* While the intro runs, everything that draws the wave sits inside a
+              clip rectangle that grows from the left edge (see the effect above). */}
+          {!introDone && (
+            <defs>
+              <clipPath id={clipId}>
+                <rect ref={clipRectRef} x={0} y={0} width={0} height={height} />
+              </clipPath>
+            </defs>
+          )}
+          <g clipPath={introDone ? undefined : `url(#${clipId})`}>
+            <path d={smoothAreaPath(wifePoints, baselineY)} fill={WIFE_COLOR} opacity={0.14} />
+            <path d={smoothAreaPath(husbandPoints, baselineY)} fill={HUSBAND_COLOR} opacity={0.14} />
 
-          <path d={smoothLinePath(wifePoints)} fill="none" stroke={WIFE_COLOR} strokeWidth={2} strokeLinecap="round" />
-          <path d={smoothLinePath(husbandPoints)} fill="none" stroke={HUSBAND_COLOR} strokeWidth={2} strokeLinecap="round" />
-
+            <path data-wave-line="wife" d={smoothLinePath(wifePoints)} fill="none" stroke={WIFE_COLOR} strokeWidth={2} strokeLinecap="round" />
+            <path data-wave-line="husband" d={smoothLinePath(husbandPoints)} fill="none" stroke={HUSBAND_COLOR} strokeWidth={2} strokeLinecap="round" />
+          </g>
           {activeIndex !== null && (
             <line
               x1={padX + activeIndex * stepX}
@@ -295,6 +386,9 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
           {[...wifePoints].map((p, i) => (
             <circle
               key={`w-${i}`}
+              data-wave-point
+              data-px={p.x}
+              style={introDone ? undefined : { opacity: 0 }}
               cx={p.x}
               cy={p.y}
               r={activeIndex === i ? 4 : 2}
@@ -307,6 +401,9 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
           {[...husbandPoints].map((p, i) => (
             <circle
               key={`h-${i}`}
+              data-wave-point
+              data-px={p.x}
+              style={introDone ? undefined : { opacity: 0 }}
               cx={p.x}
               cy={p.y}
               r={activeIndex === i ? 4 : 2}
@@ -316,6 +413,26 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
               className="transition-[r]"
             />
           ))}
+
+          {/* The dots that ride the curves while the intro draws it. Hidden until
+              the first frame places them, and gone once the wave is fully in. */}
+          {!introDone &&
+            ([
+              ['wife', WIFE_COLOR],
+              ['husband', HUSBAND_COLOR],
+            ] as const).map(([key, color]) => (
+              <circle
+                key={`ride-${key}`}
+                data-wave-traveler={key}
+                cx={0}
+                cy={baselineY}
+                r={4.5}
+                fill={color}
+                stroke={isDark ? '#050308' : 'white'}
+                strokeWidth={1.5}
+                style={{ opacity: 0, filter: `drop-shadow(0 0 5px ${color})` }}
+              />
+            ))}
 
           {weeks.map(
             (w, i) =>
