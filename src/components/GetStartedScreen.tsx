@@ -52,7 +52,9 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onHouseholdR
     setIsJoining(true);
     setError(null);
     try {
-      const res = await apiFetch('/api/ledger', {}, id);
+      // The household status answers "does this exist" without handing over the
+      // ledger, which now needs a login to read.
+      const res = await apiFetch('/api/auth/household-status', {}, id);
       if (!res.ok) throw new Error('Invite code not found — check it and try again.');
       onHouseholdReady(id);
     } catch (err) {

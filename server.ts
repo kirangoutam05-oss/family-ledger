@@ -1110,6 +1110,11 @@ function geminiDate(dateTime: unknown): string | null {
 
 const SMS_UTC_OFFSET_MINUTES = 330; // India, UTC+05:30
 
+// Every payment mode the app offers. The edit routes each kept their own copy of
+// this list and one of them had no 'PayLater', so choosing it in the edit sheet
+// was accepted and then silently not saved.
+const VALID_PAYMENT_MODES: string[] = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'PayLater', 'Pluxee'];
+
 function extractDateTimeFromSms(sms: string): string | null {
   // Indian bank/UPI SMS use a surprising variety of date shapes: ISO
   // year-first (some card alerts glue it straight onto the time), the usual
@@ -1383,7 +1388,9 @@ function parseSmsHeuristic(
     // "Rs.656.33 +GST charged for low balance ... Maintain Rs.10000 to avoid
     // charges": the bank is the payee. Left to the generic branch, the tail
     // of the warning ("avoid charges") was read as a merchant name.
-    title = `${bankName !== 'UPI Bank' ? bankName + ' ' : ''}Bank Charges`;
+    // The bank name often already ends in "Bank" ("HDFC Bank").
+    const chargingBank = bankName !== 'UPI Bank' ? bankName : '';
+    title = !chargingBank ? 'Bank Charges' : /\bbank\b/i.test(chargingBank) ? `${chargingBank} Charges` : `${chargingBank} Bank Charges`;
     category = 'bills';
   } else if (/swiggy|zomato|starbucks|mcdonald|restaurant|cafe|bistro|dining|eatclub|pizza/i.test(lower)) {
     const m = extractMerchant();
@@ -1909,13 +1916,64 @@ app.post('/api/auth/verify-email', rateLimit(10, 60000), async (req, res) => {
   }
 });
 
-// Every route below operates on a specific household, resolved from a
-// verified login session if one exists, else the X-Household-Id header
-// (defaulting to the legacy pre-multi-tenancy household).
-app.use('/api/ledger', resolveSession, resolveHousehold);
-app.use('/api/household/setup', resolveSession, resolveHousehold);
-app.use('/api/household/update', resolveSession, resolveHousehold);
-app.use('/api/parse-sms', resolveSession, resolveHousehold);
+// Once a household has a login, everything that reads or changes it needs
+// one. The session decides which household and which person this is; the
+// X-Household-Id header and any "who am I" field in a request body are no
+// longer believed on their own. Before this, a missing session fell back to
+// the header, and the header defaulted to the original household whose id is
+// the word "default" - so anyone who knew the address could read the whole
+// ledger, and write to it as either person, without logging in.
+//
+// A household with no account yet is left open on purpose: that is a new
+// household in the middle of setup, before its first person has signed up, and
+// its id is a random secret only its creator holds. The one thing a visitor
+// without a login may read from a household that has accounts is the family
+// and partner names, which the invite and sign-in screens show.
+async function requireSessionOnceClaimed(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (req.authSession) return next();
+
+  const headerValue = req.header('X-Household-Id');
+  const id = headerValue ? headerValue.trim() : DEFAULT_HOUSEHOLD_ID;
+  if (!isValidHouseholdId(id)) return res.status(400).json({ error: 'Invalid household id' });
+
+  let claimed: boolean;
+  try {
+    const [husband, wife] = await Promise.all([
+      findAccountByHouseholdRole(id, 'husband'),
+      findAccountByHouseholdRole(id, 'wife'),
+    ]);
+    claimed = !!husband || !!wife;
+  } catch (err) {
+    console.error('Could not check whether household %s has accounts:', id, err);
+    // Cannot tell, so do not guess open.
+    return res.status(503).json({ error: 'The database is unavailable right now. Please try again.' });
+  }
+  if (!claimed) return next();
+
+  if (req.method === 'GET' && req.originalUrl.split('?')[0] === '/api/ledger') {
+    try {
+      const state = await loadHouseholdState(id);
+      if (!state) return res.status(404).json({ error: 'Household not found. Check your invite link.' });
+      return res.json({
+        publicView: true,
+        familyName: state.familyName,
+        husbandName: state.husbandName,
+        wifeName: state.wifeName,
+        currency: state.currency,
+        setupComplete: state.setupComplete,
+      });
+    } catch (err) {
+      console.error('Could not load household %s:', id, err);
+      return res.status(503).json({ error: 'The database is unavailable right now. Please try again.' });
+    }
+  }
+  return res.status(401).json({ error: 'Please log in.', code: 'login_required' });
+}
+
+app.use('/api/ledger', resolveSession, requireSessionOnceClaimed, resolveHousehold);
+app.use('/api/household/setup', resolveSession, requireSessionOnceClaimed, resolveHousehold);
+app.use('/api/household/update', resolveSession, requireSessionOnceClaimed, resolveHousehold);
+app.use('/api/parse-sms', resolveSession, requireSessionOnceClaimed, resolveHousehold);
 
 // Get current state
 app.get('/api/ledger', (req, res) => {
@@ -2393,7 +2451,10 @@ app.post('/api/ledger/transaction', rateLimit(60, 60000), async (req, res) => {
     const categoryFellBack = !getValidCategoryIds(state).includes(rawTx.category as string);
     const category: CategoryId = categoryFellBack ? 'grey_area' : (rawTx.category as CategoryId);
 
-    const spender: SpenderId = rawTx.spender === 'wife' ? 'wife' : 'husband';
+    // Whose expense this is comes from the login, not the request body: the
+    // body let one person file entries under the other's name, which are then
+    // protected from being edited by the person they were filed against.
+    const spender: SpenderId = req.authSession?.role ?? (rawTx.spender === 'wife' ? 'wife' : 'husband');
     const type: 'debit' | 'credit' = rawTx.type === 'credit' ? 'credit' : 'debit';
     const paymentMode: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'AmazonPayLater' | 'PayLater' | 'Pluxee' =
       ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'PayLater', 'Pluxee'].includes(rawTx.paymentMode as any)
@@ -2521,6 +2582,16 @@ app.post('/api/ledger/resolve-grey', rateLimit(60, 60000), async (req, res) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
+    // Only the person an expense belongs to answers for it - the screen already
+    // says so, but the server did not check.
+    const resolver = ownerSpender(req, req.body?.authenticatedSpender);
+    if (resolver && tx.spender !== resolver) {
+      const ownerName = tx.spender === 'husband' ? state.husbandName : state.wifeName;
+      return res.status(403).json({
+        error: `Permission Denied: Only ${ownerName} can add context to this entry.`,
+      });
+    }
+
     if (category && getValidCategoryIds(state).includes(category)) {
       tx.category = category;
     }
@@ -2586,7 +2657,7 @@ app.post('/api/ledger/pending-ack', rateLimit(30, 60000), async (req, res) => {
     }
 
     const validCategory: CategoryId = getValidCategoryIds(state).includes(category) ? category : 'grey_area';
-    const validPaymentMode = ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(paymentMode)
+    const validPaymentMode = VALID_PAYMENT_MODES.includes(paymentMode)
       ? paymentMode
       : 'UPI';
 
@@ -2892,7 +2963,7 @@ app.post('/api/ledger/transaction/update', rateLimit(60, 60000), async (req, res
         }
       }
       if (updates.paymentMode) {
-        if (['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(updates.paymentMode)) {
+        if (VALID_PAYMENT_MODES.includes(updates.paymentMode)) {
           tx.paymentMode = updates.paymentMode;
         }
       }
@@ -2950,7 +3021,7 @@ app.post('/api/ledger/transaction/bulk-update', rateLimit(20, 60000), async (req
     const validCategoryIds = getValidCategoryIds(state);
     const hasCategory = updates.category && validCategoryIds.includes(updates.category);
     const hasPaymentMode =
-      updates.paymentMode && ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(updates.paymentMode);
+      updates.paymentMode && VALID_PAYMENT_MODES.includes(updates.paymentMode);
     const hasNotes = updates.notes !== undefined;
 
     if (!hasCategory && !hasPaymentMode && !hasNotes) {
@@ -3493,7 +3564,7 @@ Determine:
         amount: safeAmount,
         type: parsedJson.type === 'credit' ? 'credit' : 'debit',
         category: validCat,
-        paymentMode: ['UPI', 'Card', 'NetBanking', 'Cash', 'AmazonPayLater', 'Pluxee'].includes(parsedJson.paymentMode)
+        paymentMode: VALID_PAYMENT_MODES.includes(parsedJson.paymentMode)
           ? parsedJson.paymentMode
           : 'UPI',
         bankName: sanitizeString(parsedJson.bankName, 50) || 'UPI Bank',
@@ -3574,6 +3645,13 @@ async function startServer() {
   // single state to load eagerly anymore.
   console.log(`Ledger storage: ${pool ? 'Postgres (persistent across deploys)' : 'local files under data/'}`);
   await initSchema();
+
+  // A mistyped or removed API path must answer as an API error. Falling through
+  // to the page fallback below returned the app's HTML with a 200, which a
+  // script or a stale client reads as a successful, empty answer.
+  app.use('/api', (req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

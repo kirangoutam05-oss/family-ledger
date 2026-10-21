@@ -171,6 +171,13 @@ const REOPEN_ANIMATION_GRACE_MS = 45_000;
 export default function App() {
   const [ledger, setLedger] = useState<LedgerState>(EMPTY_LEDGER_STATE);
   const [isLedgerLoaded, setIsLedgerLoaded] = useState(false);
+  // The server only shows the family and partner names to a device that is
+  // not logged in once the household has accounts. Everything past the invite
+  // and sign-in screens waits for a login.
+  const [needsLogin, setNeedsLogin] = useState(false);
+  // Just logged out on this device: go straight to the sign-in screen rather than
+  // asking whose phone this is first.
+  const [signedOut, setSignedOut] = useState(false);
   const [activeTab, setActiveTab] = useState<NavTab>('dashboards');
   const [activeSpender, setActiveSpender] = useState<SpenderId | 'shared'>('shared');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -343,6 +350,9 @@ export default function App() {
   const handleHouseholdReady = (id: string) => {
     setStoredHouseholdId(id);
     setHouseholdId(id);
+    // Creating or joining a household moves on from the sign-in screen. Left
+    // set after a log out, it pinned the app there with "Checking..." forever.
+    setSignedOut(false);
   };
 
   // Bottom-nav tab switches fade; switching Shared/Kiran/Mageswari (from the
@@ -356,6 +366,10 @@ export default function App() {
   const handleTabChange = (tab: NavTab) => {
     setTransitionMode('fade');
     setActiveTab(tab);
+    // The page scrolls as a whole, so a new tab opened wherever the last one
+    // was left: tapping a row far down the list landed at the bottom of Needs
+    // Context with the form above the fold. A tab starts at its top.
+    window.scrollTo({ top: 0 });
   };
 
   const handleSelectSpender = (spender: SpenderId | 'shared') => {
@@ -480,12 +494,17 @@ export default function App() {
     setAuthAccount(account);
     setAuthStatusChecked(true);
     setRoleHasAccount(true);
+    setNeedsLogin(false);
+    setSignedOut(false);
     await registerDevice(account.role);
+    fetchLedger();
   };
 
   const handleSecureAccountComplete = (account: AuthAccount) => {
     setAuthAccount(account);
     setRoleHasAccount(true);
+    setNeedsLogin(false);
+    fetchLedger();
   };
 
   // Swapping "who's using this phone" — a device-identity change, not
@@ -499,6 +518,7 @@ export default function App() {
   // handleSwitchUser above — see AccountSettings' "Log Out" vs "Switch".
   const handleLogout = async () => {
     await authLogout();
+    setSignedOut(true);
     setAuthAccount(null);
     setAuthStatusChecked(false);
     clearLocalIdentity();
@@ -706,7 +726,27 @@ export default function App() {
       const res = await apiFetch('/api/ledger');
       if (res.ok) {
         const data = await res.json();
-        setLedger(data);
+        if (data.publicView) {
+          // The server no longer recognises this login (expired, revoked, or the
+          // other device logged out). Forget it here too, or the app keeps
+          // showing an empty ledger as if the data were gone.
+          setNeedsLogin(true);
+          setAuthAccount(null);
+          setLedger({
+            ...EMPTY_LEDGER_STATE,
+            familyName: data.familyName,
+            husbandName: data.husbandName,
+            wifeName: data.wifeName,
+            currency: data.currency,
+            setupComplete: data.setupComplete,
+          });
+        } else {
+          setNeedsLogin(false);
+          setLedger(data);
+        }
+      } else if (res.status === 401) {
+        setNeedsLogin(true);
+        setAuthAccount(null);
       }
     } catch (err) {
       console.warn('Could not fetch server ledger, using local state:', err);
@@ -1177,6 +1217,10 @@ export default function App() {
     return <StartupScreen />;
   }
 
+  if (signedOut) {
+    return <GetStartedScreen onHouseholdReady={handleHouseholdReady} onLoginSuccess={handleLoginSuccess} />;
+  }
+
   if (!ledger.setupComplete) {
     return <HouseholdSetupScreen onComplete={handleHouseholdSetup} />;
   }
@@ -1215,9 +1259,18 @@ export default function App() {
         householdId={householdId}
         knownRole={identity.role}
         onComplete={handleSecureAccountComplete}
-        onSkip={() => setSecureAccountDismissed(true)}
+        // Skipping used to leave the device running without a login. Once the
+        // household has accounts the server will not serve it anything without
+        // one, so there is nothing to skip to.
+        onSkip={needsLogin ? undefined : () => setSecureAccountDismissed(true)}
       />
     );
+  }
+
+  // Signed out of a household that has logins - a lost or expired session, or
+  // a log out. The sign-in screen is the only way forward.
+  if (needsLogin && !authAccount) {
+    return <GetStartedScreen onHouseholdReady={handleHouseholdReady} onLoginSuccess={handleLoginSuccess} />;
   }
 
   if (!lockConfig && !hasSkippedLock) {
