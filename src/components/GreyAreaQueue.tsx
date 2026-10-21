@@ -33,7 +33,10 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
     focusedTransactionId || (greyAreaTransactions[0]?.id ?? null)
   );
 
-  const [selectedCategory, setSelectedCategory] = useState<CategoryId>('bills');
+  // Nothing is pre-selected for an entry the parser could not place. The old default
+  // was Utilities & Rent, so one tap on Save quietly filed the entry there -
+  // including money coming in.
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [contextNote, setContextNote] = useState('');
   const [editedTitle, setEditedTitle] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,7 +49,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
   // otherwise left the category/note/receiver fields at their empty defaults.
   useEffect(() => {
     if (!activeTx) return;
-    setSelectedCategory(activeTx.category !== 'grey_area' ? activeTx.category : 'bills');
+    setSelectedCategory(activeTx.category !== 'grey_area' ? activeTx.category : null);
     setContextNote(activeTx.notes || '');
     setEditedTitle(activeTx.title);
   }, [activeTx?.id]);
@@ -56,7 +59,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
   };
 
   const handleConfirmResolve = async () => {
-    if (!activeTx) return;
+    if (!activeTx || !selectedCategory) return;
 
     setIsSubmitting(true);
     try {
@@ -83,7 +86,7 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
           </p>
         </div>
         {greyAreaTransactions.length > 0 && (
-          <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-semibold">
+          <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-semibold whitespace-nowrap shrink-0">
             {greyAreaTransactions.length} Pending
           </span>
         )}
@@ -196,13 +199,13 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                     correctable right here alongside the category. */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300 block">
-                    Receiver of Payment
+                    {activeTx.type === 'credit' ? 'Received from' : 'Receiver of Payment'}
                   </label>
                   <input
                     type="text"
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
-                    placeholder="Who was this paid to?"
+                    placeholder={activeTx.type === 'credit' ? 'Who sent this?' : 'Who was this paid to?'}
                     className="w-full px-3 py-2 rounded-xl bg-black/[0.02] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#9333EA]"
                   />
                 </div>
@@ -211,6 +214,9 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300 block">
                     Assign Category
+                    {!selectedCategory && activeTx.spender === authenticatedUser && (
+                      <span className="ml-1.5 font-normal text-amber-600 dark:text-amber-400">- pick one to save</span>
+                    )}
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {categories
@@ -262,7 +268,8 @@ export const GreyAreaQueue: React.FC<GreyAreaQueueProps> = ({
                   {activeTx.spender === authenticatedUser ? (
                     <button
                       onClick={handleConfirmResolve}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !selectedCategory}
+                      title={selectedCategory ? undefined : 'Choose a category first'}
                       className="px-4 py-2 rounded-lg bg-[#9333EA] hover:bg-[#7E22CE] disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 shadow-xs"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
