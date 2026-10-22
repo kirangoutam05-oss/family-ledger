@@ -427,9 +427,9 @@ export const Dashboards: React.FC<DashboardsProps> = ({
   return (
     <div className={`space-y-6 ${isSelectMode && selectedIds.size > 0 ? 'pb-20' : ''}`}>
       {/* Household Outflow — full-bleed black banner continuing straight down
-          from the header above (same solid black, no seam), with just a
-          soft purple glow behind the numbers rather than a bright gradient
-          sweep. Roughly half the screen together with the header.
+          from the header above (same solid black, no seam). The glow that used
+          to wash the background now lives on the wave's own dots, so the card
+          itself stays flat. Roughly half the screen together with the header.
           Each top-level section below fades/slides in with a small stagger
           on mount (see SECTION_STAGGER) — quick enough not to feel sluggish
           on a return visit, slow enough that the page doesn't just pop in
@@ -439,7 +439,7 @@ export const Dashboards: React.FC<DashboardsProps> = ({
         animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="-mx-4 sm:-mx-6 -mt-6 px-4 sm:px-6 pt-3 sm:pt-4 pb-6 rounded-b-[2.5rem] text-white"
-        style={{ background: 'radial-gradient(70% 85% at 50% 100%, rgba(147,51,234,0.28) 0%, rgba(147,51,234,0) 72%), #050308' }}
+        style={{ background: '#050308' }}
       >
         <div className="flex items-center justify-between text-xs font-semibold text-white/70">
           <span>{outflowCardLabel}</span>

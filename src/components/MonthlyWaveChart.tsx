@@ -257,6 +257,13 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
   const wifePoints = toPoints(wifeTotals);
   const baselineY = padTop + plotHeight;
 
+  // On the dark hero only the latest dot of each line glows: a bloom in that
+  // series' colour that marks where the wave ends, "now", without lighting up
+  // every point along the way.
+  const lastDotGlow = (color: string): React.CSSProperties | undefined =>
+    isDark
+      ? { filter: `drop-shadow(0 0 3px ${color}) drop-shadow(0 0 9px ${color}) drop-shadow(0 0 18px ${color})` }
+      : undefined;
   // Current (rightmost) week's total for each spender — the headline
   // numbers, shown next to their name in the legend instead of on the chart
   // itself, where a floating label over the line was hard to read at a
@@ -388,10 +395,10 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
               key={`w-${i}`}
               data-wave-point
               data-px={p.x}
-              style={introDone ? undefined : { opacity: 0 }}
+              style={{ ...(introDone ? {} : { opacity: 0 }), ...(i === wifePoints.length - 1 ? lastDotGlow(WIFE_COLOR) : {}) }}
               cx={p.x}
               cy={p.y}
-              r={activeIndex === i ? 4 : 2}
+              r={activeIndex === i ? 4 : i === wifePoints.length - 1 ? 3.4 : 2}
               fill={WIFE_COLOR}
               stroke={isDark ? '#050308' : 'white'}
               strokeWidth={activeIndex === i ? 1.5 : 0}
@@ -403,10 +410,10 @@ export const MonthlyWaveChart: React.FC<MonthlyWaveChartProps> = ({
               key={`h-${i}`}
               data-wave-point
               data-px={p.x}
-              style={introDone ? undefined : { opacity: 0 }}
+              style={{ ...(introDone ? {} : { opacity: 0 }), ...(i === husbandPoints.length - 1 ? lastDotGlow(HUSBAND_COLOR) : {}) }}
               cx={p.x}
               cy={p.y}
-              r={activeIndex === i ? 4 : 2}
+              r={activeIndex === i ? 4 : i === husbandPoints.length - 1 ? 3.4 : 2}
               fill={HUSBAND_COLOR}
               stroke={isDark ? '#050308' : 'white'}
               strokeWidth={activeIndex === i ? 1.5 : 0}
